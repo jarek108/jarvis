@@ -142,7 +142,7 @@ async def lifespan(app: FastAPI):
     llm_port = cfg['ports']['llm']
 
     # 3. Executables
-    python_exe = os.path.join(project_root, "jarvis-venv", "Scripts", "python.exe")
+    python_exe = sys.executable
     stt_script = os.path.join(project_root, "servers", "stt_server.py")
     tts_script = os.path.join(project_root, "servers", "tts_server.py")
 
@@ -260,13 +260,14 @@ async def process_stream(
                 llm_payload = {
                     "model": active_llm,
                     "messages": [{"role": "user", "content": input_text}],
-                    "stream": True
+                    "stream": True,
+                    "options": {}
                 }
                 
                 # Apply deterministic settings if in benchmark mode
                 if args.benchmark_mode:
-                    llm_payload["temperature"] = 0
-                    llm_payload["seed"] = 42
+                    llm_payload["options"]["temperature"] = 0
+                    llm_payload["options"]["seed"] = 42
 
                 async with session.post(llm_url, json=llm_payload) as resp:
                     async for line in resp.content:
@@ -383,12 +384,12 @@ async def process_audio(
             llm_payload = {
                 "model": active_llm,
                 "messages": [{"role": "user", "content": input_text}],
-                "temperature": 0.7
+                "options": {"temperature": 0.7}
             }
             # Override for determinism in benchmark mode
             if args.benchmark_mode:
-                llm_payload["temperature"] = 0
-                llm_payload["seed"] = 42
+                llm_payload["options"]["temperature"] = 0
+                llm_payload["options"]["seed"] = 42
 
             llm_start = time.perf_counter()
             async with session.post(llm_url, json=llm_payload) as resp:

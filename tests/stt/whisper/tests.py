@@ -7,22 +7,14 @@ import difflib
 
 # Allow importing utils and config from parent levels
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
-from utils import load_config, get_system_health, format_status, ensure_utf8_output, GREEN, RED, RESET, BOLD
+from utils import load_config, get_active_env_list, report_scenario_result, ensure_utf8_output, calculate_similarity
 
 # Ensure UTF-8 output
 ensure_utf8_output()
 
-def format_status(status):
-    if status == "PASSED": return f"{GREEN}[PASS]{RESET}"
-    return f"{RED}[FAIL]{RESET}"
-
-def calculate_similarity(a, b):
-    return difflib.SequenceMatcher(None, a.lower(), b.lower()).ratio()
-
 def run_test(model_id="faster-whisper-base", trim_length=80):
     cfg = load_config()
-    health = get_system_health()
-    active_env = [name for name, info in health.items() if info['status'] == "ON"]
+    active_env = get_active_env_list()
 
     port = cfg['stt_loadout'].get(model_id)
     if not port:
@@ -82,30 +74,12 @@ def run_test(model_id="faster-whisper-base", trim_length=80):
                         "env": active_env
                     }
                 else:
-                    res_obj = { 
-                        "name": scenario_name, 
-                        "status": "FAILED", 
-                        "duration": duration, 
-                        "result": f"HTTP {response.status_code}", 
-                        "env": active_env 
-                    }
+                    res_obj = { "name": scenario_name, "status": "FAILED", "duration": duration, "result": f"HTTP {response.status_code}", "env": active_env }
             except Exception as e:
-                res_obj = { 
-                    "name": scenario_name, 
-                    "status": "FAILED", 
-                    "duration": 0, 
-                    "result": str(e), 
-                    "env": active_env 
-                }
+                res_obj = { "name": scenario_name, "status": "FAILED", "duration": 0, "result": str(e), "env": active_env }
             
-            # --- LIVE NICE ROW ---
-            row = f"  - {format_status(res_obj['status'])} | {res_obj['duration']:.2f}s | {res_obj['name']:<25} | {res_obj['result']}\n"
-            sys.stdout.write(row)
-            
-            # --- MACHINE OUTPUT ---
-            # Use sys.stdout.write so the prefix logic in LiveFilter works atomically
-            sys.stdout.write(f"SCENARIO_RESULT: {json.dumps(res_obj)}\n")
-            sys.stdout.flush()
+            # Use unified reporting
+            report_scenario_result(res_obj)
 
 if __name__ == "__main__":
     run_test(model_id="faster-whisper-base")

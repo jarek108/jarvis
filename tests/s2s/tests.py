@@ -4,31 +4,16 @@ import sys
 import time
 import json
 
-# Force UTF-8 for console output on Windows
-if sys.platform == "win32":
-    import io
-    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
-
 # Allow importing utils and config from parent levels
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from utils import load_config, get_system_health
+from utils import load_config, get_active_env_list, report_scenario_result, ensure_utf8_output
 
-# ANSI Colors for live reporting
-GREEN = "\033[92m"
-RED = "\033[91m"
-RESET = "\033[0m"
-BOLD = "\033[1m"
-
-def format_status(status):
-    if status == "PASSED": return f"{GREEN}[PASS]{RESET}"
-    return f"{RED}[FAIL]{RESET}"
+# Ensure UTF-8 output
+ensure_utf8_output()
 
 def run_test(trim_length=80, skip_health=False, loadout_id="default", stream=False):
     cfg = load_config()
-    active_env = []
-    if not skip_health:
-        health = get_system_health()
-        active_env = [name for name, info in health.items() if info['status'] == "ON"]
+    active_env = get_active_env_list() if not skip_health else []
 
     endpoint = "/process_stream" if stream else "/process"
     url = f"http://127.0.0.1:{cfg['ports']['s2s']}{endpoint}"
@@ -52,7 +37,7 @@ def run_test(trim_length=80, skip_health=False, loadout_id="default", stream=Fal
         output_path = os.path.join(results_dir, f"{loadout_id}_{s['name']}{suffix}.wav")
 
         if not os.path.exists(audio_path):
-            res_obj = {"name": s['name'], "status": "FAILED", "duration": 0, "result": f"Input missing: {input_file}.wav", "env": active_env}
+            res_obj = {"name": s['name'], "status": "FAILED", "duration": 0, "result": f"Input missing: {input_file}.wav", "env": active_env, "mode": "STREAM" if stream else "WAV"}
             all_passed = False
         else:
             try:
@@ -88,19 +73,20 @@ def run_test(trim_length=80, skip_health=False, loadout_id="default", stream=Fal
                         tts_model = response.headers.get("X-Model-TTS", "TTS")
 
                         res_obj = {
-                            "name": s['name'] + suffix, 
+                            "name": s['name'], 
                             "status": "PASSED", 
                             "duration": duration, 
                             "result": os.path.relpath(output_path, os.path.join(os.path.dirname(__file__), "..", "..")), 
                             "env": active_env,
                             "stream": True,
+                            "mode": "STREAM",
                             "metrics": metrics,
                             "stt_model": stt_model,
                             "llm_model": llm_model,
                             "tts_model": tts_model
                         }
                     else:
-                        res_obj = {"name": s['name'] + suffix, "status": "FAILED", "duration": duration, "result": f"HTTP {response.status_code}", "env": active_env}
+                        res_obj = {"name": s['name'], "status": "FAILED", "duration": duration, "result": f"HTTP {response.status_code}", "env": active_env, "mode": "STREAM"}
                 else:
                     response = requests.post(url, files=files, data=data)
                     duration = time.perf_counter() - start_time
@@ -129,6 +115,7 @@ def run_test(trim_length=80, skip_health=False, loadout_id="default", stream=Fal
                             "status": "PASSED", 
                             "duration": duration, 
                             "result": display_path, 
+                            "mode": "WAV",
                             "stt_inf": float(stt_inf),
                             "llm_tot": float(llm_tot),
                             "tts_inf": float(tts_inf),
@@ -140,39 +127,14 @@ def run_test(trim_length=80, skip_health=False, loadout_id="default", stream=Fal
                             "env": active_env
                         }
                     else:
-                        res_obj = {"name": s['name'], "status": "FAILED", "duration": duration, "result": f"HTTP {response.status_code}", "env": active_env}
+                        res_obj = {"name": s['name'], "status": "FAILED", "duration": duration, "result": f"HTTP {response.status_code}", "env": active_env, "mode": "WAV"}
                         all_passed = False
             except Exception as e:
-                res_obj = {"name": s['name'], "status": "FAILED", "duration": 0, "result": str(e), "env": active_env}
+                res_obj = {"name": s['name'], "status": "FAILED", "duration": 0, "result": str(e), "env": active_env, "mode": "STREAM" if stream else "WAV"}
                 all_passed = False
 
-        # --- LIVE NICE MULTI-LINE ROW ---
-        if res_obj['status'] == "PASSED":
-            if res_obj.get('stream'):
-                m = res_obj.get('metrics', {})
-                t1 = m.get('tts', [0,0])[0]
-                t2 = m.get('tts', [0,0])[1]
-                main_row = f"  - {format_status(res_obj['status'])} {res_obj['name']} (t1:{t1:.2f}s | t2:{t2:.2f}s)\n"
-                sys.stdout.write(main_row)
-                def fmt_range(key):
-                    r = m.get(key, [0, 0])
-                    return f"{r[0]:.2f} → {r[1]:.2f}s"
-                sys.stdout.write(f"    \t🎙️ {fmt_range('stt')} | [{res_obj['stt_model']}] | Text: \"{m.get('stt_text', 'N/A')}\"\n")
-                sys.stdout.write(f"    \t🧠 {fmt_range('llm')} | [{res_obj['llm_model']}] | Text: \"{m.get('llm_text', 'N/A').strip()}\"\n")
-                sys.stdout.write(f"    \t🔊 {fmt_range('tts')} | [{res_obj['tts_model']}] | Path: {res_obj['result']}\n")
-            else:
-                main_row = f"  - {format_status(res_obj['status'])} {res_obj['name']} (Total: {res_obj['duration']:.2f}s)\n"
-                sys.stdout.write(main_row)
-                sys.stdout.write(f"    \t🎙️ {res_obj['stt_inf']:.2f}s | [{res_obj['stt_model']}] | Text: \"{res_obj['stt_text']}\"\n")       
-                sys.stdout.write(f"    \t🧠 {res_obj['llm_tot']:.2f}s | [{res_obj['llm_model']}] | Text: \"{res_obj['llm_text']}\"\n")       
-                sys.stdout.write(f"    \t🔊 {res_obj['tts_inf']:.2f}s | [{res_obj['tts_model']}] | Path: {res_obj['result']}\n")
-        else:
-            row = f"  - {format_status(res_obj['status'])} | {res_obj['duration']:.2f}s | Scenario: {res_obj['name']:<15} | Result: {res_obj['result']}\n"
-            sys.stdout.write(row)
-        
-        # --- MACHINE OUTPUT ---
-        sys.stdout.write(f"SCENARIO_RESULT: {json.dumps(res_obj)}\n")
-        sys.stdout.flush()
+        # Use unified reporting
+        report_scenario_result(res_obj)
     
     return all_passed
 

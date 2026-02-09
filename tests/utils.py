@@ -119,6 +119,49 @@ def format_status(status):
     if status == "PASSED": return f"{GREEN}[PASS]{RESET}"
     return f"{RED}[FAIL]{RESET}"
 
+def get_active_env_list():
+    """Returns a list of names for all services currently ON."""
+    health = get_system_health()
+    return [name for name, info in health.items() if info['status'] == "ON"]
+
+def report_scenario_result(res_obj):
+    """
+    Unified reporting for Jarvis test scenarios.
+    Handles both live human-readable output and machine JSON.
+    """
+    status_fmt = format_status(res_obj['status'])
+    name = res_obj['name']
+    dur = res_obj.get('duration', 0)
+    result = res_obj.get('result', "")
+    
+    # Check if this is a complex/multi-line result (S2S style)
+    if res_obj.get('mode') in ["WAV", "STREAM"] and "stt_model" in res_obj:
+        if res_obj['mode'] == "STREAM":
+            m = res_obj.get('metrics', {})
+            t1, t2 = m.get('tts', [0,0])
+            main_row = f"  - {status_fmt} {name} (t1:{t1:.2f}s | t2:{t2:.2f}s) | STREAM\n"
+            sys.stdout.write(main_row)
+            def fmt_range(key):
+                r = m.get(key, [0, 0])
+                return f"{r[0]:.2f} → {r[1]:.2f}s"
+            sys.stdout.write(f"    \t🎙️ {fmt_range('stt')} | [{res_obj.get('stt_model','STT')}] | Text: \"{m.get('stt_text', 'N/A')}\"\n")
+            sys.stdout.write(f"    \t🧠 {fmt_range('llm')} | [{res_obj.get('llm_model','LLM')}] | Text: \"{m.get('llm_text', 'N/A').strip()}\"\n")
+            sys.stdout.write(f"    \t🔊 {fmt_range('tts')} | [{res_obj.get('tts_model','TTS')}] | Path: {result}\n")
+        else:
+            main_row = f"  - {status_fmt} {name} (Total: {dur:.2f}s) | WAV\n"
+            sys.stdout.write(main_row)
+            sys.stdout.write(f"    \t🎙️ {res_obj.get('stt_inf',0):.2f}s | [{res_obj.get('stt_model','STT')}] | Text: \"{res_obj.get('stt_text','N/A')}\"\n")       
+            sys.stdout.write(f"    \t🧠 {res_obj.get('llm_tot',0):.2f}s | [{res_obj.get('llm_model','LLM')}] | Text: \"{res_obj.get('llm_text','N/A')}\"\n")       
+            sys.stdout.write(f"    \t🔊 {res_obj.get('tts_inf',0):.2f}s | [{res_obj.get('tts_model','TTS')}] | Path: {result}\n")
+    else:
+        # Standard single-line result (STT/TTS style)
+        row = f"  - {status_fmt} | {dur:.2f}s | {name:<25} | {result}\n"
+        sys.stdout.write(row)
+
+    # Always write machine JSON (silenced in TTY by LiveFilter)
+    sys.stdout.write(f"SCENARIO_RESULT: {json.dumps(res_obj)}\n")
+    sys.stdout.flush()
+
 def run_isolated_lifecycle(name, port, cmd, test_func, cleanup_ports=None):
     """Universal lifecycle manager for isolated tests."""
     ensure_utf8_output()
