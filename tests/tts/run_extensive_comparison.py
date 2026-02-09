@@ -4,59 +4,51 @@ import time
 import subprocess
 import json
 
-# ANSI Colors
-GREEN = "\033[92m"
-RED = "\033[91m"
-RESET = "\033[0m"
-BOLD = "\033[1m"
-CYAN = "\033[96m"
-
-def format_status(status):
-    if status == "PASSED": return f"{GREEN}[PASS]{RESET}"
-    return f"{RED}[FAIL]{RESET}"
+# Allow importing utils from root
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from utils import format_status, CYAN, BOLD, RESET, LINE_LEN
 
 def run_tts_suite():
     base_dir = os.path.dirname(os.path.abspath(__file__))
     chatterbox_dir = os.path.join(base_dir, "chatterbox")
-    # UPDATED SCRIPT MAPPING
     variants = ["eng", "multilingual", "turbo"]
     
     suite_results = []
     total_start = time.perf_counter()
 
-    python_exe = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "jarvis-venv", "Scripts", "python.exe")
+    python_exe = os.path.join(os.path.dirname(os.path.dirname(base_dir)), "jarvis-venv", "Scripts", "python.exe")
+    env = os.environ.copy()
+    env["PYTHONPATH"] = os.path.dirname(base_dir) + os.pathsep + env.get("PYTHONPATH", "")
 
-    LINE_LEN = 140
+    print("#"*LINE_LEN)
+    print(f"{BOLD}{CYAN}{'CHATTERBOX MULTI-VARIANT BENCHMARK RUN':^120}{RESET}")
+    print("#"*LINE_LEN)
 
     for var in variants:
         variant_id = f"chatterbox-{var}"
         print(f"\n>>> Running TTS Suite: {variant_id}")
         isolated_script = os.path.join(chatterbox_dir, f"isolated_{var}.py")
-        if not os.path.exists(isolated_script): 
-            print(f"FAILED: {isolated_script} not found.")
-            continue
-
+        
         try:
-            # Capture output so we can see the individual table
-            process = subprocess.run([python_exe, isolated_script], capture_output=True, text=True)
+            # Capture output to filter machine lines
+            process = subprocess.run([python_exe, isolated_script], env=env, capture_output=True, text=True, encoding='utf-8')
             
-            # Re-print the captured table from the individual test
-            print(process.stdout)
-            if process.stderr: print(process.stderr, file=sys.stderr)
+            for line in process.stdout.splitlines():
+                if not (line.startswith("SCENARIO_RESULT: ") or line.startswith("LIFECYCLE_RECEIPT: ")):
+                    print(line)
 
-            # Check for success
             success = process.returncode == 0
             suite_results.append({
                 "suite": variant_id,
-                "status": "PASSED" if success else "FAILED",
-                "duration": time.perf_counter() - total_start
+                "status": "PASSED" if success else "FAILED"
             })
         except Exception as e:
-            suite_results.append({"suite": variant_id, "status": "FAILED", "duration": 0})
+            print(f"Error running {variant_id}: {e}")
+            suite_results.append({"suite": variant_id, "status": "FAILED"})
 
     # --- MINIMAL FINAL SUMMARY ---
     print("\n" + "="*LINE_LEN)
-    print(f"{BOLD}{'TTS SUITE COMPLETION SUMMARY':^140}{RESET}")
+    print(f"{BOLD}{'TTS SUITE COMPLETION SUMMARY':^120}{RESET}")
     print("="*LINE_LEN)
     for res in suite_results:
         print(f"  {format_status(res['status'])} | {res['suite']:<25} | Completed")

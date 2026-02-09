@@ -3,10 +3,9 @@ import sys
 import time
 import subprocess
 
-# ANSI Colors
-CYAN = "\033[96m"
-BOLD = "\033[1m"
-RESET = "\033[0m"
+# Allow importing utils from root
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+from utils import CYAN, BOLD, RESET, LINE_LEN
 
 def run_master_suite():
     total_start = time.perf_counter()
@@ -19,24 +18,25 @@ def run_master_suite():
         {"name": "S2S (Default)", "path": "s2s/isolated_default.py"}
     ]
 
-    LINE_LEN = 140
-
     print("#"*LINE_LEN)
-    print(f"{BOLD}{CYAN}{'STARTING NORMAL JARVIS TEST SUITE (Representative Subset)':^140}{RESET}")
+    print(f"{BOLD}{CYAN}{'STARTING JARVIS HEALTH CHECK (Representative Subset)':^120}{RESET}")
     print("#"*LINE_LEN)
 
     for suite in suites:
-        print(f"\n\n{BOLD}{'#'*60} Suite: {suite['name']} {'#'*60}{RESET}")
         script_path = os.path.join(base_dir, suite['path'])
+        # Add tests root to PYTHONPATH so isolated scripts can find utils.py
+        env = os.environ.copy()
+        env["PYTHONPATH"] = base_dir + os.pathsep + env.get("PYTHONPATH", "")
+        
         try:
             # Explicitly run in its own directory
-            subprocess.run([python_exe, script_path], cwd=os.path.dirname(script_path))
+            subprocess.run([python_exe, script_path], cwd=os.path.dirname(script_path), env=env)
         except Exception as e:
             print(f"Error running {suite['name']} suite: {e}")
 
     print("\n" + "#"*LINE_LEN)
-    print(f"{BOLD}{'JARVIS NORMAL HEALTH REPORT COMPLETE':^140}{RESET}")
-    print(f"{BOLD}{'Total Execution Time: ' + str(round(time.perf_counter() - total_start, 2)) + 's':^140}{RESET}")
+    print(f"{BOLD}{'JARVIS HEALTH CHECK COMPLETE':^120}{RESET}")
+    print(f"{BOLD}{'Total Execution Time: ' + str(round(time.perf_counter() - total_start, 2)) + 's':^120}{RESET}")
     print("#"*LINE_LEN + "\n")
 
 if __name__ == "__main__":

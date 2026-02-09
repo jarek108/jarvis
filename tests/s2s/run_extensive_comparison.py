@@ -46,8 +46,9 @@ def run_s2s_suite():
                 elif line.startswith("SCENARIO_RESULT: "):
                     scenarios.append(json.loads(line.replace("SCENARIO_RESULT: ", "")))
                 else:
-                    # Print regular progress lines (init logs etc)
-                    print(line)
+                    # Print regular progress lines (only if they aren't empty)
+                    if line.strip():
+                        print(line)
 
             if process.stderr:
                 print(process.stderr, file=sys.stderr)
@@ -82,8 +83,16 @@ def run_s2s_suite():
         for lid in loadouts:
             s_res = pivoted_data[name].get(lid)
             if s_res:
-                metrics = f"STT:{s_res['stt_inf']:.2f}s | LLM:{s_res['llm_tot']:.2f}s | TTS:{s_res['tts_inf']:.2f}s"
-                print(f"  {format_status(s_res['status'])} {lid:<25} | Total:{s_res['duration']:.2f}s | {metrics}")
+                if s_res.get('stream'):
+                    m = s_res.get('metrics', {})
+                    def fmt_range(key):
+                        r = m.get(key, [0, 0])
+                        return f"{r[0]:.2f}→{r[1]:.2f}s"
+                    metrics = f"STT:{fmt_range('stt')} | LLM:{fmt_range('llm')} | TTS:{fmt_range('tts')}"
+                    print(f"  {format_status(s_res['status'])} {lid:<25} | Stream  | {metrics}")
+                else:
+                    metrics = f"STT:{s_res['stt_inf']:.2f}s | LLM:{s_res['llm_tot']:.2f}s | TTS:{s_res['tts_inf']:.2f}s"
+                    print(f"  {format_status(s_res['status'])} {lid:<25} | Total:{s_res['duration']:.2f}s | {metrics}")
             else:
                 print(f"  {RED}[MISSING]{RESET} {lid:<25} | N/A")
 

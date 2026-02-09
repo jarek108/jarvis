@@ -5,10 +5,47 @@ import yaml
 import os
 import requests
 import subprocess
+import json
+import io
+import sys
 from loguru import logger
 
+# --- SHARED UI CONSTANTS ---
+CYAN = "\033[96m"
+GREEN = "\033[92m"
+RED = "\033[91m"
+YELLOW = "\033[93m"
+GRAY = "\033[90m"
+RESET = "\033[0m"
+BOLD = "\033[1m"
+LINE_LEN = 120
+
+def ensure_utf8_output():
+    """Forces UTF-8 for console output on Windows to prevent UnicodeEncodeErrors."""
+    if sys.platform == "win32":
+        if not isinstance(sys.stdout, io.TextIOWrapper) or sys.stdout.encoding.lower() != 'utf-8':
+            sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
+        if not isinstance(sys.stderr, io.TextIOWrapper) or sys.stderr.encoding.lower() != 'utf-8':
+            sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8')
+
+class LiveFilter(io.StringIO):
+    """Captures everything, but only writes non-machine lines to the real stdout in TTY mode."""
+    def __init__(self):
+        super().__init__()
+        ensure_utf8_output()
+        # self.out is already sys.stdout (potentially re-wrapped by ensure_utf8_output)
+        self.out = sys.stdout
+
+    def write(self, s):
+        for line in s.splitlines(keepends=True):
+            is_machine = line.startswith("SCENARIO_RESULT: ") or line.startswith("LIFECYCLE_RECEIPT: ")
+            # Always write human lines. Only write machine lines if captured (not a TTY).
+            if not is_machine or not self.out.isatty():
+                self.out.write(line)
+                self.out.flush()
+        return super().write(s)
+
 def load_config():
-    # Find config.yaml relative to this file
     base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     config_path = os.path.join(base_dir, "config.yaml")
     with open(config_path, "r") as f:
@@ -19,167 +56,197 @@ def is_port_in_use(port: int) -> bool:
         return s.connect_ex(('127.0.0.1', port)) == 0
 
 def get_service_status(port: int):
-    """
-    Returns the state of a service on a given port.
-    States: ON, OFF, UNHEALTHY, BUSY
-    """
-    if not is_port_in_use(port):
-        return "OFF"
-    
+    if not is_port_in_use(port): return "OFF"
     try:
         url = f"http://127.0.0.1:{port}/health"
-        if port == 11434: # Ollama special case
-            url = f"http://127.0.0.1:{port}/api/tags"
-            
+        if port == 11434: url = f"http://127.0.0.1:{port}/api/tags"
         response = requests.get(url, timeout=2)
         if response.status_code == 200:
-            data = response.json()
-            if data.get("status") == "busy":
-                return "BUSY"
-            return "ON"
-        elif response.status_code == 503:
-            data = response.json()
-            if data.get("status") == "STARTUP":
-                return "STARTUP"
-            return "UNHEALTHY"
-        else:
-            return "UNHEALTHY"
+            return "BUSY" if response.json().get("status") == "busy" else "ON"
+        elif response.status_code == 503 and response.json().get("status") == "STARTUP":
+            return "STARTUP"
+        return "UNHEALTHY"
     except:
         return "UNHEALTHY"
 
-def get_ollama_info():
-    """
-    Returns detailed info about Ollama models.
-    - downloaded: List of all available models
-    - resident: List of models currently in VRAM
-    """
-    info = {"downloaded": [], "resident": []}
-    try:
-        # 1. Get all downloaded models
-        resp_tags = requests.get("http://127.0.0.1:11434/api/tags", timeout=2)
-        if resp_tags.status_code == 200:
-            info["downloaded"] = [m['name'] for m in resp_tags.json().get('models', [])]
-        
-        # 2. Get models in VRAM
-        resp_ps = requests.get("http://127.0.0.1:11434/api/ps", timeout=2)
-        if resp_ps.status_code == 200:
-            info["resident"] = [m['name'] for m in resp_ps.json().get('models', [])]
-    except:
-        pass
-    return info
-
-def check_ollama_model(model_name: str):
-    """Checks if a specific model is installed in Ollama."""
-    info = get_ollama_info()
-    models = info["downloaded"]
-    return model_name in models or f"{model_name}:latest" in models
-
 def get_system_health():
-    """Probes all configured ports and returns a status map."""
     cfg = load_config()
     health = {}
-    
-    # 1. System Services
     ollama_status = get_service_status(cfg['ports']['llm'])
-    ollama_info = get_ollama_info() if ollama_status == "ON" else {"downloaded": [], "resident": []}
-    
-    health["Ollama"] = {
-        "status": ollama_status,
-        "port": cfg['ports']['llm'],
-        "model_installed": check_ollama_model("gpt-oss:20b"),
-        "downloaded_models": ollama_info["downloaded"],
-        "resident_models": ollama_info["resident"]
-    }
-    
-    # 2. STT Loadout
+    health["Ollama"] = {"status": ollama_status, "port": cfg['ports']['llm']}
     for name, port in cfg['stt_loadout'].items():
         health[f"STT-{name}"] = {"status": get_service_status(port), "port": port}
-        
-    # 3. TTS Loadout
     for name, port in cfg['tts_loadout'].items():
         health[f"TTS-{name}"] = {"status": get_service_status(port), "port": port}
-        
     return health
 
 def start_server(cmd, loud=False):
-    """
-    Starts a server process.
-    If loud=False (default), it suppresses the console window on Windows.
-    """
-    flags = 0
-    if not loud and os.name == 'nt':
-        # CREATE_NO_WINDOW = 0x08000000
-        flags = 0x08000000
-    else:
-        flags = subprocess.CREATE_NEW_CONSOLE
-
-    # Use shell=True to allow resolving binaries in PATH (like 'ollama')
-    # When shell=True, it is safer/better to pass cmd as a string on Windows
+    flags = subprocess.CREATE_NEW_CONSOLE if loud else (0x08000000 if os.name == 'nt' else 0)
     final_cmd = " ".join([f'"{c}"' if " " in c else c for c in cmd]) if isinstance(cmd, list) else cmd
-    return subprocess.Popen(final_cmd, creationflags=flags, shell=True)
+    
+    # Resolve project root (one level up from tests/utils.py)
+    project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    
+    return subprocess.Popen(final_cmd, creationflags=flags, shell=True, cwd=project_root)
 
 def wait_for_port(port: int, timeout: int = 60, process=None) -> bool:
     start_time = time.time()
     while time.time() - start_time < timeout:
-        if get_service_status(port) == "ON":
-            return True
-        if process and process.poll() is not None:
-            logger.error(f"Process for port {port} died unexpectedly.")
-            return False
+        if get_service_status(port) == "ON": return True
+        if process and process.poll() is not None: return False
         time.sleep(1)
     return False
 
 def kill_process_on_port(port: int):
-    """
-    Aggressively finds and kills ANY process on the given port and its children.
-    Silently handles cases where processes vanish during the cleanup (race conditions).
-    Only logs an error if the port remains busy after the attempt.
-    """
     try:
-        # Special case for Ollama on Windows: it often has a tray app protector
         if port == 11434 and os.name == 'nt':
             os.system("taskkill /F /IM ollama* /T > nul 2>&1")
             time.sleep(0.5)
-
-        # 1. Collect all PIDs currently holding the port
-        pids_to_kill = set()
-        for conn in psutil.net_connections(kind='inet'):
-            if conn.laddr.port == port and conn.pid:
-                pids_to_kill.add(conn.pid)
-
-        if not pids_to_kill:
-            return True
-
-        # 2. Attempt to wipe out each process family
-        for pid in pids_to_kill:
+        pids = {conn.pid for conn in psutil.net_connections(kind='inet') if conn.laddr.port == port and conn.pid}
+        for pid in pids:
             try:
-                parent = psutil.Process(pid)
-                logger.info(f"Cleanup: Terminating process {pid} on port {port}...")
-                
-                # Kill children first (recursive)
-                for child in parent.children(recursive=True):
-                    try:
-                        child.kill()
-                    except (psutil.NoSuchProcess, psutil.AccessDenied):
-                        pass
-                
-                # Kill the parent
-                parent.kill()
-                parent.wait(timeout=2)
-            except (psutil.NoSuchProcess, psutil.AccessDenied):
-                # Process already vanished or we don't have permission (likely system proc)
-                pass
-            except psutil.TimeoutExpired:
-                pass
-
-        # 3. Final Verification: Wait a beat and check the port one last time
-        time.sleep(0.5)
-        if is_port_in_use(port):
-            logger.error(f"🚨 CRITICAL: Failed to clear port {port}. A process is still holding it!")
-            return False
-        
-        return True
-
-    except Exception as e:
-        logger.debug(f"Cleanup trace for port {port}: {e}")
+                proc = psutil.Process(pid)
+                for child in proc.children(recursive=True):
+                    try: child.kill()
+                    except: pass
+                proc.kill()
+                proc.wait(timeout=2)
+            except: pass
         return not is_port_in_use(port)
+    except: return not is_port_in_use(port)
+
+def format_status(status):
+    if status == "PASSED": return f"{GREEN}[PASS]{RESET}"
+    return f"{RED}[FAIL]{RESET}"
+
+def run_isolated_lifecycle(name, port, cmd, test_func, cleanup_ports=None):
+    """Universal lifecycle manager for isolated tests."""
+    ensure_utf8_output()
+    if cleanup_ports is None: cleanup_ports = [port]
+    
+    # 1. Resolve relative paths in cmd if needed
+    tests_root = os.path.dirname(os.path.abspath(__file__))
+    project_root = os.path.dirname(tests_root)
+    
+    print(f"\n--- SMART {name.upper()} LIFECYCLE (Port {port}) ---")
+    
+    status = get_service_status(port)
+    setup_start = time.perf_counter()
+    started_here = False
+    
+    if status == "ON":
+        print(f"INFO: Service already healthy. Skipping setup.")
+        setup_time = 0
+    else:
+        if status != "OFF":
+            print(f"WARN: Port {port} is {status}. Cleaning up...")
+            for p in cleanup_ports: kill_process_on_port(p)
+        
+        print(f"STARTING {name}...")
+        # Use start_server with cwd set to project root
+        process = start_server(cmd, loud=False)
+        started_here = True
+        
+        if not wait_for_port(port, timeout=300, process=process):
+            print(f"FAILED: {name} failed to start.")
+            # Print a hint for debugging
+            print(f"DEBUG: Command used: {' '.join(cmd)}")
+            return
+        setup_time = time.perf_counter() - setup_start
+
+    # 2. Processing
+    print("\n" + "="*LINE_LEN)
+    print(f"{BOLD}{CYAN}{name + ' ISOLATED TEST':^120}{RESET}")
+    print("="*LINE_LEN)
+    
+    from contextlib import redirect_stdout
+    f = LiveFilter()
+    proc_start = time.perf_counter()
+    with redirect_stdout(f):
+        test_func()
+    proc_time = time.perf_counter() - proc_start
+
+    # 3. Cleanup
+    cleanup_start = time.perf_counter()
+    if started_here:
+        print(f"\nCleaning up {name} (Ports: {cleanup_ports})...")
+        for p in cleanup_ports: kill_process_on_port(p)
+    else:
+        print(f"\nINFO: Skipping cleanup (Service was already running).")
+    cleanup_time = time.perf_counter() - cleanup_start
+
+    print("="*LINE_LEN)
+    time_str = f"Setup: {setup_time:.1f}s | Processing: {proc_time:.1f}s | Cleanup: {cleanup_time:.1f}s"
+    print(f"{BOLD}Final Receipt:{RESET} {time_str}")
+    print("="*LINE_LEN + "\n")
+
+    receipt = {"setup": setup_time, "processing": proc_time, "cleanup": cleanup_time}
+    # Only print machine-readable receipt if output is being captured (not a TTY)
+    if not sys.stdout.isatty():
+        print(f"LIFECYCLE_RECEIPT: {json.dumps(receipt)}")
+
+def run_s2s_isolated_lifecycle(loadout_name):
+    """S2S specialized lifecycle helper."""
+    from s2s.tests import run_test
+    cfg = load_config()
+    port = cfg['ports']['s2s']
+    project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    loadout_path = os.path.join(project_root, "tests", "loadouts", f"{loadout_name}.yaml")
+    
+    cleanup_ports = [port]
+    if os.path.exists(loadout_path):
+        with open(loadout_path, "r") as f:
+            l_data = yaml.safe_load(f)
+            stt_m = l_data.get("stt", [None])[0]
+            tts_m = l_data.get("tts", [None])[0]
+            if stt_m: cleanup_ports.append(cfg['stt_loadout'][stt_m])
+            if tts_m: cleanup_ports.append(cfg['tts_loadout'][tts_m])
+
+    python_exe = os.path.join(project_root, "jarvis-venv", "Scripts", "python.exe")
+    server_script = os.path.join(project_root, "servers", "s2s_server.py")
+    cmd = [python_exe, server_script, "--loadout", loadout_name]
+    
+    run_isolated_lifecycle(
+        name=f"S2S {loadout_name.upper()}",
+        port=port,
+        cmd=cmd,
+        test_func=lambda: (
+            run_test(skip_health=True, loadout_id=loadout_name, stream=False),
+            run_test(skip_health=True, loadout_id=loadout_name, stream=True)
+        ),
+        cleanup_ports=cleanup_ports
+    )
+
+def run_stt_isolated_lifecycle(target_id):
+    """STT specialized lifecycle helper."""
+    from stt.whisper.tests import run_test
+    cfg = load_config()
+    port = cfg['stt_loadout'][target_id]
+    project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    python_exe = os.path.join(project_root, "jarvis-venv", "Scripts", "python.exe")
+    server_script = os.path.join(project_root, "servers", "stt_server.py")
+    cmd = [python_exe, server_script, "--port", str(port), "--model", target_id]
+    
+    run_isolated_lifecycle(
+        name=f"STT {target_id.upper()}",
+        port=port,
+        cmd=cmd,
+        test_func=lambda: run_test(model_id=target_id)
+    )
+
+def run_tts_isolated_lifecycle(target_id):
+    """TTS specialized lifecycle helper."""
+    from tts.chatterbox.tests import run_test
+    cfg = load_config()
+    port = cfg['tts_loadout'][target_id]
+    project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    python_exe = os.path.join(project_root, "jarvis-venv", "Scripts", "python.exe")
+    server_script = os.path.join(project_root, "servers", "tts_server.py")
+    cmd = [python_exe, server_script, "--port", str(port), "--variant", target_id]
+    
+    run_isolated_lifecycle(
+        name=f"TTS {target_id.upper()}",
+        port=port,
+        cmd=cmd,
+        test_func=lambda: run_test(variant_id=target_id)
+    )

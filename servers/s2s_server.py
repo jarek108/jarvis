@@ -17,7 +17,7 @@ python servers/s2s_server.py --stt faster-whisper-tiny --tts chatterbox-turbo
 """
 
 from fastapi import FastAPI, UploadFile, File, HTTPException, Form
-from fastapi.responses import Response, JSONResponse
+from fastapi.responses import Response, JSONResponse, StreamingResponse
 from contextlib import asynccontextmanager
 import aiohttp
 import asyncio
@@ -26,6 +26,8 @@ import sys
 import time
 import argparse
 import yaml
+import json
+import re
 from typing import Optional
 from loguru import logger
 
@@ -201,6 +203,125 @@ async def health_check():
     if not app.state.is_ready:
         return JSONResponse(status_code=503, content={"status": "STARTUP"})
     return {"status": "ON", "service": "s2s_server"}
+
+@app.post("/process_stream")
+async def process_stream(
+    file: UploadFile = File(...),
+    language_id: Optional[str] = Form(None)
+):
+    total_start = time.perf_counter()
+    active_stt = app.state.stt_model
+    active_tts = app.state.tts_model
+    active_llm = app.state.llm_model
+    
+    stt_port = cfg['stt_loadout'][active_stt]
+    tts_port = cfg['tts_loadout'][active_tts]
+    llm_port = cfg['ports']['llm']
+
+    try:
+        audio_data = await file.read()
+        
+        # 1. STT (Buffered)
+        async with aiohttp.ClientSession() as session:
+            stt_url = f"http://127.0.0.1:{stt_port}/transcribe"
+            form = aiohttp.FormData()
+            form.add_field('file', audio_data, filename='input.wav', content_type='audio/wav')
+            async with session.post(stt_url, data=form) as resp:
+                stt_result = await resp.json()
+                input_text = stt_result.get("text", "")
+
+        if not input_text:
+            return Response(status_code=400, content="No speech detected")
+
+        async def audio_generator():
+            sentence_buffer = ""
+            # Pipelined metrics (relative to total_start)
+            m = {
+                "stt": [0, 0],
+                "llm": [0, 0],
+                "tts": [0, 0]
+            }
+            
+            # STT is buffered, so first/last output is the same timestamp
+            stt_ready_time = round(time.perf_counter() - total_start, 2)
+            m["stt"] = [stt_ready_time, stt_ready_time]
+            
+            first_token_time = None
+            first_audio_time = None
+            last_audio_time = None
+            
+            async with aiohttp.ClientSession() as session:
+                # 2. LLM Streaming
+                llm_url = f"http://127.0.0.1:{llm_port}/v1/chat/completions"
+                payload = {
+                    "model": active_llm,
+                    "messages": [{"role": "user", "content": input_text}],
+                    "stream": True
+                }
+                
+                async with session.post(llm_url, json=payload) as resp:
+                    async for line in resp.content:
+                        if line:
+                            line_text = line.decode('utf-8').strip()
+                            if line_text.startswith("data: "):
+                                data_str = line_text[6:]
+                                if data_str == "[DONE]": 
+                                    m["llm"][1] = round(time.perf_counter() - total_start, 2)
+                                    break
+                                try:
+                                    if first_token_time is None:
+                                        first_token_time = time.perf_counter()
+                                        m["llm"][0] = round(first_token_time - total_start, 2)
+
+                                    chunk = json.loads(data_str)
+                                    token = chunk['choices'][0]['delta'].get('content', '')
+                                    sentence_buffer += token
+                                    
+                                    # Check for sentence completion (Assume .!? as breakpoints)
+                                    if any(c in sentence_buffer for c in ".!?"):
+                                        parts = re.split(r'(?<=[.!?])\s+', sentence_buffer)
+                                        for i in range(len(parts) - 1):
+                                            sentence = parts[i].strip()
+                                            if sentence:
+                                                # 3. TTS for sentence
+                                                tts_url = f"http://127.0.0.1:{tts_port}/tts"
+                                                tts_payload = {"text": sentence, "voice": "default", "language_id": language_id or "en"}
+                                                async with session.post(tts_url, json=tts_payload) as tts_resp:
+                                                    if tts_resp.status == 200:
+                                                        if first_audio_time is None:
+                                                            first_audio_time = time.perf_counter()
+                                                            m["tts"][0] = round(first_audio_time - total_start, 2)
+                                                        
+                                                        audio_chunk = await tts_resp.read()
+                                                        last_audio_time = time.perf_counter()
+                                                        yield audio_chunk[44:]
+                                        sentence_buffer = parts[-1]
+                                except:
+                                    continue
+
+                # Final flush
+                if sentence_buffer.strip():
+                    tts_url = f"http://127.0.0.1:{tts_port}/tts"
+                    tts_payload = {"text": sentence_buffer.strip(), "voice": "default", "language_id": language_id or "en"}
+                    async with session.post(tts_url, json=tts_payload) as tts_resp:
+                        if tts_resp.status == 200:
+                            if first_audio_time is None:
+                                first_audio_time = time.perf_counter()
+                                m["tts"][0] = round(first_audio_time - total_start, 2)
+                            audio_chunk = await tts_resp.read()
+                            last_audio_time = time.perf_counter()
+                            yield audio_chunk[44:]
+            
+            # End of stream metrics
+            m["tts"][1] = round((last_audio_time or time.perf_counter()) - total_start, 2)
+            # Add a clear boundary and metrics JSON
+            yield b"\nMETRICS_JSON:" + json.dumps(m).encode()
+
+        return StreamingResponse(audio_generator(), media_type="application/octet-stream")
+
+    except Exception as e:
+        logger.error(f"S2S Streaming Error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/process")
 async def process_audio(

@@ -7,13 +7,10 @@ import difflib
 
 # Allow importing utils and config from parent levels
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
-from utils import load_config, get_system_health
+from utils import load_config, get_system_health, format_status, ensure_utf8_output, GREEN, RED, RESET, BOLD
 
-# ANSI Colors for live reporting
-GREEN = "\033[92m"
-RED = "\033[91m"
-RESET = "\033[0m"
-BOLD = "\033[1m"
+# Ensure UTF-8 output
+ensure_utf8_output()
 
 def format_status(status):
     if status == "PASSED": return f"{GREEN}[PASS]{RESET}"

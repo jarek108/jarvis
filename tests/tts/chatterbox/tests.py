@@ -4,26 +4,12 @@ import sys
 import time
 import json
 
-import json
-
-# Force UTF-8 for console output on Windows
-if sys.platform == "win32":
-    import io
-    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
-
 # Allow importing utils and config from parent levels
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
-from utils import load_config, get_system_health
+from utils import load_config, get_system_health, format_status, ensure_utf8_output
 
-# ANSI Colors for live reporting
-GREEN = "\033[92m"
-RED = "\033[91m"
-RESET = "\033[0m"
-BOLD = "\033[1m"
-
-def format_status(status):
-    if status == "PASSED": return f"{GREEN}[PASS]{RESET}"
-    return f"{RED}[FAIL]{RESET}"
+# Ensure UTF-8 output
+ensure_utf8_output()
 
 def run_test(variant_id="chatterbox-eng", trim_length=80, skip_health=False):
     cfg = load_config()
@@ -41,7 +27,7 @@ def run_test(variant_id="chatterbox-eng", trim_length=80, skip_health=False):
     results_dir = os.path.join(os.path.dirname(__file__), "results")
     os.makedirs(results_dir, exist_ok=True)
     
-    # ... (scenarios defined here)
+    # MERGED SCENARIOS
     scenarios = [
         # English / General
         {"name": "standard", "text": "Hello, I am Jarvis. How can I assist you today?", "lang": "en"},
@@ -79,29 +65,24 @@ def run_test(variant_id="chatterbox-eng", trim_length=80, skip_health=False):
                 if len(display_path) > trim_length:
                     display_path = "..." + display_path[-(trim_length-3):]
 
-                # Extract metrics
-                inf_time = float(response.headers.get("X-Inference-Time", 0))
                 res_obj = {
                     "name": s['name'], 
                     "status": "PASSED", 
                     "duration": duration, 
-                    "inference": inf_time,
                     "result": display_path, 
                     "env": active_env
                 }
             else:
-                res_obj = {"name": s['name'], "status": "FAILED", "duration": duration, "inference": 0, "result": f"HTTP {response.status_code}", "env": active_env}
+                res_obj = {"name": s['name'], "status": "FAILED", "duration": duration, "result": f"HTTP {response.status_code}", "env": active_env}
         except Exception as e:
-            res_obj = {"name": s['name'], "status": "FAILED", "duration": 0, "inference": 0, "result": str(e), "env": active_env}
+            res_obj = {"name": s['name'], "status": "FAILED", "duration": 0, "result": str(e), "env": active_env}
 
         # --- LIVE NICE ROW ---
-        inf_str = f"{res_obj['inference']:.2f}s" if res_obj['status'] == "PASSED" else "N/A"
-        row = f"  - {format_status(res_obj['status'])} | Total:{res_obj['duration']:.2f}s | Inf:{inf_str} | Scenario: {res_obj['name']:<15} | Result: {res_obj['result']}\n"
+        row = f"  - {format_status(res_obj['status'])} | Total:{res_obj['duration']:.2f}s | Scenario: {res_obj['name']:<15} | Result: {res_obj['result']}\n"
         sys.stdout.write(row)
         
         # --- MACHINE OUTPUT ---
         sys.stdout.write(f"SCENARIO_RESULT: {json.dumps(res_obj)}\n")
         sys.stdout.flush()
-
 if __name__ == "__main__":
     run_test(variant_id="chatterbox-eng")
