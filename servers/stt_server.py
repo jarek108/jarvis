@@ -18,6 +18,7 @@ from tests.utils import load_config
 parser = argparse.ArgumentParser(description="Faster Whisper STT Server")
 parser.add_argument("--port", type=int, default=8011, help="Port to run on")
 parser.add_argument("--model", type=str, default="faster-whisper-base", help="Model size (faster-whisper-tiny, etc)")
+parser.add_argument("--benchmark-mode", action="store_true", help="Enable deterministic output for benchmarking")
 args, unknown = parser.parse_known_args()
 
 app = FastAPI()
@@ -37,12 +38,14 @@ model = WhisperModel(actual_model, device=device, compute_type="float16" if devi
 # --- WARMUP ---
 print(f"Warming up STT [{model_id}] (First-time kernel spin-up)...")
 warmup_audio = np.zeros(16000, dtype=np.float32) # 1s of silence at 16kHz
-list(model.transcribe(warmup_audio, beam_size=1)) # Force evaluation
-print(f"STT {model_id} loaded and WARM on port {args.port}.")
+# Use deterministic settings for warmup if in benchmark mode
+warmup_beam = 1 if args.benchmark_mode else 5
+list(model.transcribe(warmup_audio, beam_size=warmup_beam)) # Force evaluation
+print(f"STT {model_id} loaded and WARM on port {args.port} (Benchmark Mode: {args.benchmark_mode}).")
 
 @app.get("/health")
 async def health():
-    return {"status": "ready", "model": model_id, "port": args.port}
+    return {"status": "ready", "model": model_id, "port": args.port, "benchmark_mode": args.benchmark_mode}
 
 @app.post("/transcribe")
 async def transcribe(
@@ -54,7 +57,10 @@ async def transcribe(
         audio_file = io.BytesIO(audio_bytes)
         
         start_time = time.perf_counter()
-        segments, info = model.transcribe(audio_file, beam_size=5, language=language if language else None)
+        # Deterministic settings for benchmarking
+        beam_size = 1 if args.benchmark_mode else 5
+        
+        segments, info = model.transcribe(audio_file, beam_size=beam_size, language=language if language else None)
         text = "".join([segment.text for segment in segments]).strip()
         processing_time = time.perf_counter() - start_time
         

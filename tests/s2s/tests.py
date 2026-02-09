@@ -157,8 +157,8 @@ def run_test(trim_length=80, skip_health=False, loadout_id="default", stream=Fal
                 def fmt_range(key):
                     r = m.get(key, [0, 0])
                     return f"{r[0]:.2f} → {r[1]:.2f}s"
-                sys.stdout.write(f"    \t🎙️ {fmt_range('stt')} | [{res_obj['stt_model']}]\n")
-                sys.stdout.write(f"    \t🧠 {fmt_range('llm')} | [{res_obj['llm_model']}]\n")
+                sys.stdout.write(f"    \t🎙️ {fmt_range('stt')} | [{res_obj['stt_model']}] | Text: \"{m.get('stt_text', 'N/A')}\"\n")
+                sys.stdout.write(f"    \t🧠 {fmt_range('llm')} | [{res_obj['llm_model']}] | Text: \"{m.get('llm_text', 'N/A').strip()}\"\n")
                 sys.stdout.write(f"    \t🔊 {fmt_range('tts')} | [{res_obj['tts_model']}] | Path: {res_obj['result']}\n")
             else:
                 main_row = f"  - {format_status(res_obj['status'])} {res_obj['name']} (Total: {res_obj['duration']:.2f}s)\n"

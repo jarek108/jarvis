@@ -21,6 +21,7 @@ if "HF_TOKEN" not in os.environ:
 parser = argparse.ArgumentParser(description="Chatterbox TTS Server")
 parser.add_argument("--port", type=int, default=8020, help="Port to run on")
 parser.add_argument("--variant", type=str, default="chatterbox-eng", help="chatterbox-eng, chatterbox-multilingual, or chatterbox-turbo")
+parser.add_argument("--benchmark-mode", action="store_true", help="Enable deterministic output for benchmarking")
 args, unknown = parser.parse_known_args()
 
 # Allow importing from parent directory
@@ -34,7 +35,7 @@ device = cfg['device'] if torch.cuda.is_available() else "cpu"
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # --- STARTUP ---
-    logger.info(f"🚀 Loading TTS Variant: {VARIANT_ID} on {device}...")
+    logger.info(f"🚀 Loading TTS Variant: {VARIANT_ID} on {device} (Benchmark Mode: {args.benchmark_mode})...")
 
     # Strip prefix and map 'eng' to 'vanilla' internal logic
     internal_variant = VARIANT_ID.replace("chatterbox-", "")
@@ -52,10 +53,15 @@ async def lifespan(app: FastAPI):
         # Store model in app state for request handlers
         app.state.model = model
         app.state.internal_variant = internal_variant
+        app.state.benchmark_mode = args.benchmark_mode
         
         # --- WARMUP ---
         logger.info(f"🔥 Warming up TTS [{VARIANT_ID}] (CUDA spin-up)...")
         start_warm = time.perf_counter()
+        
+        if args.benchmark_mode:
+            torch.manual_seed(42)
+
         if internal_variant == "multilingual":
             model.generate("warm", "en")
         else:
@@ -76,7 +82,7 @@ app.state.is_ready = False
 async def health():
     if not app.state.is_ready:
         return JSONResponse(status_code=503, content={"status": "STARTUP", "variant": VARIANT_ID})
-    return {"status": "ON", "variant": VARIANT_ID, "port": args.port}
+    return {"status": "ON", "variant": VARIANT_ID, "port": args.port, "benchmark_mode": app.state.benchmark_mode}
 
 @app.post("/tts")
 async def tts(request: Request):
@@ -94,6 +100,10 @@ async def tts(request: Request):
         logger.debug(f"Generating [{VARIANT_ID}] TTS for: [{text[:50]}...]")
         
         start_time = time.perf_counter()
+        
+        if app.state.benchmark_mode:
+            torch.manual_seed(42)
+
         if internal_variant == "multilingual":
             wav = model.generate(text, language_id)
         else:
@@ -115,6 +125,4 @@ async def tts(request: Request):
 
 if __name__ == "__main__":
     import uvicorn
-    # Use standard uvicorn logging or Loguru? S2S uses Loguru. 
-    # Let's keep it simple for basic servers.
     uvicorn.run(app, host="127.0.0.1", port=args.port)

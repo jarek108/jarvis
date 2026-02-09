@@ -32,7 +32,8 @@ def run_stt_suite():
         
         try:
             # Capture output so we can parse and filter
-            process = subprocess.run([python_exe, isolated_script], env=env, capture_output=True, text=True, encoding='utf-8')
+            # Add --benchmark-mode to the isolated script call
+            process = subprocess.run([python_exe, isolated_script, "--benchmark-mode"], env=env, capture_output=True, text=True, encoding='utf-8')
             
             scenarios = []
             receipt = {}

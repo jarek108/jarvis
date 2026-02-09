@@ -185,7 +185,7 @@ def run_isolated_lifecycle(name, port, cmd, test_func, cleanup_ports=None):
     if not sys.stdout.isatty():
         print(f"LIFECYCLE_RECEIPT: {json.dumps(receipt)}")
 
-def run_s2s_isolated_lifecycle(loadout_name):
+def run_s2s_isolated_lifecycle(loadout_name, benchmark_mode=False):
     """S2S specialized lifecycle helper."""
     from s2s.tests import run_test
     cfg = load_config()
@@ -202,9 +202,12 @@ def run_s2s_isolated_lifecycle(loadout_name):
             if stt_m: cleanup_ports.append(cfg['stt_loadout'][stt_m])
             if tts_m: cleanup_ports.append(cfg['tts_loadout'][tts_m])
 
-    python_exe = os.path.join(project_root, "jarvis-venv", "Scripts", "python.exe")
+    # Use current interpreter
+    python_exe = sys.executable
     server_script = os.path.join(project_root, "servers", "s2s_server.py")
     cmd = [python_exe, server_script, "--loadout", loadout_name]
+    if benchmark_mode:
+        cmd.append("--benchmark-mode")
     
     run_isolated_lifecycle(
         name=f"S2S {loadout_name.upper()}",
@@ -217,15 +220,18 @@ def run_s2s_isolated_lifecycle(loadout_name):
         cleanup_ports=cleanup_ports
     )
 
-def run_stt_isolated_lifecycle(target_id):
+def run_stt_isolated_lifecycle(target_id, benchmark_mode=False):
     """STT specialized lifecycle helper."""
     from stt.whisper.tests import run_test
     cfg = load_config()
     port = cfg['stt_loadout'][target_id]
     project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    python_exe = os.path.join(project_root, "jarvis-venv", "Scripts", "python.exe")
+    
+    python_exe = sys.executable
     server_script = os.path.join(project_root, "servers", "stt_server.py")
     cmd = [python_exe, server_script, "--port", str(port), "--model", target_id]
+    if benchmark_mode:
+        cmd.append("--benchmark-mode")
     
     run_isolated_lifecycle(
         name=f"STT {target_id.upper()}",
@@ -234,15 +240,18 @@ def run_stt_isolated_lifecycle(target_id):
         test_func=lambda: run_test(model_id=target_id)
     )
 
-def run_tts_isolated_lifecycle(target_id):
+def run_tts_isolated_lifecycle(target_id, benchmark_mode=False):
     """TTS specialized lifecycle helper."""
     from tts.chatterbox.tests import run_test
     cfg = load_config()
     port = cfg['tts_loadout'][target_id]
     project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    python_exe = os.path.join(project_root, "jarvis-venv", "Scripts", "python.exe")
+    
+    python_exe = sys.executable
     server_script = os.path.join(project_root, "servers", "tts_server.py")
     cmd = [python_exe, server_script, "--port", str(port), "--variant", target_id]
+    if benchmark_mode:
+        cmd.append("--benchmark-mode")
     
     run_isolated_lifecycle(
         name=f"TTS {target_id.upper()}",

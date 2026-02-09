@@ -55,6 +55,7 @@ def get_args():
     parser.add_argument("--tts", type=str, help="TTS variant override")
     parser.add_argument("--llm", type=str, help="LLM model override")
     parser.add_argument("--host", type=str, default="127.0.0.1")
+    parser.add_argument("--benchmark-mode", action="store_true", help="Enable deterministic output for benchmarking")
     return parser.parse_known_args()[0]
 
 args = get_args()
@@ -149,13 +150,13 @@ async def lifespan(app: FastAPI):
         {
             "name": "STT Server", 
             "port": stt_port, 
-            "cmd": [python_exe, stt_script, "--port", str(stt_port), "--model", active_stt], 
+            "cmd": [python_exe, stt_script, "--port", str(stt_port), "--model", active_stt] + (["--benchmark-mode"] if args.benchmark_mode else []), 
             "health": f"http://127.0.0.1:{stt_port}/health"
         },
         {
             "name": "TTS Server", 
             "port": tts_port, 
-            "cmd": [python_exe, tts_script, "--port", str(tts_port), "--variant", active_tts], 
+            "cmd": [python_exe, tts_script, "--port", str(tts_port), "--variant", active_tts] + (["--benchmark-mode"] if args.benchmark_mode else []), 
             "health": f"http://127.0.0.1:{tts_port}/health"
         },
         {
@@ -235,11 +236,14 @@ async def process_stream(
 
         async def audio_generator():
             sentence_buffer = ""
+            full_llm_text = ""
             # Pipelined metrics (relative to total_start)
             m = {
                 "stt": [0, 0],
                 "llm": [0, 0],
-                "tts": [0, 0]
+                "tts": [0, 0],
+                "stt_text": input_text,
+                "llm_text": ""
             }
             
             # STT is buffered, so first/last output is the same timestamp
@@ -253,13 +257,18 @@ async def process_stream(
             async with aiohttp.ClientSession() as session:
                 # 2. LLM Streaming
                 llm_url = f"http://127.0.0.1:{llm_port}/v1/chat/completions"
-                payload = {
+                llm_payload = {
                     "model": active_llm,
                     "messages": [{"role": "user", "content": input_text}],
                     "stream": True
                 }
                 
-                async with session.post(llm_url, json=payload) as resp:
+                # Apply deterministic settings if in benchmark mode
+                if args.benchmark_mode:
+                    llm_payload["temperature"] = 0
+                    llm_payload["seed"] = 42
+
+                async with session.post(llm_url, json=llm_payload) as resp:
                     async for line in resp.content:
                         if line:
                             line_text = line.decode('utf-8').strip()
@@ -276,6 +285,7 @@ async def process_stream(
                                     chunk = json.loads(data_str)
                                     token = chunk['choices'][0]['delta'].get('content', '')
                                     sentence_buffer += token
+                                    full_llm_text += token
                                     
                                     # Check for sentence completion (Assume .!? as breakpoints)
                                     if any(c in sentence_buffer for c in ".!?"):
@@ -314,10 +324,20 @@ async def process_stream(
             
             # End of stream metrics
             m["tts"][1] = round((last_audio_time or time.perf_counter()) - total_start, 2)
+            m["llm_text"] = full_llm_text
             # Add a clear boundary and metrics JSON
             yield b"\nMETRICS_JSON:" + json.dumps(m).encode()
 
-        return StreamingResponse(audio_generator(), media_type="application/octet-stream")
+        # Measure STT duration before stream starts
+        stt_dur = time.perf_counter() - total_start
+        
+        custom_headers = {
+            "X-Model-STT": safe_header(active_stt),
+            "X-Model-LLM": safe_header(active_llm),
+            "X-Model-TTS": safe_header(active_tts)
+        }
+        
+        return StreamingResponse(audio_generator(), media_type="application/octet-stream", headers=custom_headers)
 
     except Exception as e:
         logger.error(f"S2S Streaming Error: {e}")
@@ -365,6 +385,11 @@ async def process_audio(
                 "messages": [{"role": "user", "content": input_text}],
                 "temperature": 0.7
             }
+            # Override for determinism in benchmark mode
+            if args.benchmark_mode:
+                llm_payload["temperature"] = 0
+                llm_payload["seed"] = 42
+
             llm_start = time.perf_counter()
             async with session.post(llm_url, json=llm_payload) as resp:
                 if resp.status != 200:

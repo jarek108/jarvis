@@ -34,9 +34,13 @@ def run_s2s_suite():
         print(f"\n>>> Running Loadout: {lid.upper()}")
         isolated_script = os.path.join(base_dir, f"isolated_{lid}.py")
         
+        # Add tests root to PYTHONPATH so isolated scripts can find utils.py
+        env = os.environ.copy()
+        env["PYTHONPATH"] = os.path.dirname(base_dir) + os.pathsep + env.get("PYTHONPATH", "")
+
         try:
             # Capture output
-            process = subprocess.run([python_exe, isolated_script], capture_output=True, text=True, encoding='utf-8')
+            process = subprocess.run([python_exe, isolated_script, "--benchmark-mode"], env=env, capture_output=True, text=True, encoding='utf-8')
             
             receipt = {}
             scenarios = []
@@ -90,9 +94,17 @@ def run_s2s_suite():
                         return f"{r[0]:.2f}→{r[1]:.2f}s"
                     metrics = f"STT:{fmt_range('stt')} | LLM:{fmt_range('llm')} | TTS:{fmt_range('tts')}"
                     print(f"  {format_status(s_res['status'])} {lid:<25} | Stream  | {metrics}")
+                    # Breakdown
+                    print(f"    \t🎙️ {fmt_range('stt')} | [{s_res.get('stt_model', 'STT')}] | Text: \"{m.get('stt_text', 'N/A')}\"")
+                    print(f"    \t🧠 {fmt_range('llm')} | [{s_res.get('llm_model', 'LLM')}] | Text: \"{m.get('llm_text', 'N/A').strip()}\"")
+                    print(f"    \t🔊 {fmt_range('tts')} | [{s_res.get('tts_model', 'TTS')}] | Path: {s_res['result']}")
                 else:
                     metrics = f"STT:{s_res['stt_inf']:.2f}s | LLM:{s_res['llm_tot']:.2f}s | TTS:{s_res['tts_inf']:.2f}s"
                     print(f"  {format_status(s_res['status'])} {lid:<25} | Total:{s_res['duration']:.2f}s | {metrics}")
+                    # Breakdown
+                    print(f"    \t🎙️ {s_res['stt_inf']:.2f}s | [{s_res['stt_model']}] | Text: \"{s_res['stt_text']}\"")
+                    print(f"    \t🧠 {s_res['llm_tot']:.2f}s | [{s_res['llm_model']}] | Text: \"{s_res['llm_text']}\"")
+                    print(f"    \t🔊 {s_res['tts_inf']:.2f}s | [{s_res['tts_model']}] | Path: {s_res['result']}")
             else:
                 print(f"  {RED}[MISSING]{RESET} {lid:<25} | N/A")
 

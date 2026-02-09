@@ -31,7 +31,7 @@ def run_tts_suite():
         
         try:
             # Capture output to filter machine lines
-            process = subprocess.run([python_exe, isolated_script], env=env, capture_output=True, text=True, encoding='utf-8')
+            process = subprocess.run([python_exe, isolated_script, "--benchmark-mode"], env=env, capture_output=True, text=True, encoding='utf-8')
             
             for line in process.stdout.splitlines():
                 if not (line.startswith("SCENARIO_RESULT: ") or line.startswith("LIFECYCLE_RECEIPT: ")):
