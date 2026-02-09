@@ -1,0 +1,6 @@
+{
+    "polish.wav": {"text": "Cześć, nazywam się Jarvis. Jak mogę Ci dzisiaj pomóc?", "lang": "pl"},
+    "french.wav": {"text": "Bonjour, je m'appelle Jarvis. Comment puis-je vous aider?", "lang": "fr"},
+    "chinese.wav": {"text": "你好，我叫贾维斯。我今天能为您做什么？", "lang": "zh"},
+    "input.wav": {"text": "Hello, this is a test of Tatterbox TTS.", "lang": "en"}
+}

@@ -1,0 +1,4 @@
+description: "The fastest possible English interaction"
+stt: ["faster-whisper-tiny"]
+tts: ["chatterbox-turbo"]
+llm: "gpt-oss:20b"
