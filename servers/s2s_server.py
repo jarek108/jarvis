@@ -10,7 +10,7 @@ if they are not already running.
 python servers/s2s_server.py
 
 [Subsection] : Custom Loadout
-python servers/s2s_server.py --loadout turbo_ultra
+python servers/s2s_server.py --loadout eng_turbo
 
 [Subsection] : Manual Overrides
 python servers/s2s_server.py --stt faster-whisper-tiny --tts chatterbox-turbo
@@ -50,7 +50,7 @@ logger.add(sys.stderr, format="<level>{level: <8}</level> | <cyan>{message}</cya
 def get_args():
     parser = argparse.ArgumentParser(description="Jarvis S2S Server")
     parser.add_argument("--port", type=int, default=cfg['ports']['s2s'], help="Port to run the S2S server on")
-    parser.add_argument("--loadout", type=str, help="Name of a loadout preset (e.g., turbo_ultra)")
+    parser.add_argument("--loadout", type=str, help="Name of a loadout preset (e.g., eng_turbo)")
     parser.add_argument("--stt", type=str, help="STT model override")
     parser.add_argument("--tts", type=str, help="TTS variant override")
     parser.add_argument("--llm", type=str, help="LLM model override")

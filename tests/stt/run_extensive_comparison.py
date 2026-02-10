@@ -6,58 +6,49 @@ import json
 
 # Allow importing utils from root
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from utils import format_status, CYAN, BOLD, RESET, LINE_LEN, RED
+from utils import format_status, CYAN, BOLD, RESET, LINE_LEN, RED, list_all_stt_models
 
 def run_stt_suite():
     base_dir = os.path.dirname(os.path.abspath(__file__))
-    whisper_dir = os.path.join(base_dir, "whisper")
-    sizes = ["faster-whisper-tiny", "faster-whisper-base", "faster-whisper-small", "faster-whisper-medium", "faster-whisper-large"]
+    # DYNAMIC DISCOVERY
+    models = list_all_stt_models()
     
     suite_results = []
     total_start = time.perf_counter()
-
-    python_exe = os.path.join(os.path.dirname(os.path.dirname(base_dir)), "jarvis-venv", "Scripts", "python.exe")
+    python_exe = sys.executable
     
     env = os.environ.copy()
     env["PYTHONPATH"] = os.path.dirname(base_dir) + os.pathsep + env.get("PYTHONPATH", "")
 
     print("#"*LINE_LEN)
-    print(f"{BOLD}{CYAN}{'WHISPER MULTI-SIZE BENCHMARK RUN':^120}{RESET}")
+    print(f"{BOLD}{CYAN}{'STT MULTI-MODEL ONE-TO-ONE COMPARISON':^120}{RESET}")
     print("#"*LINE_LEN)
 
-    for size_id in sizes:
-        print(f"\n>>> Loading Model: {size_id.upper()}")
-        short_name = size_id.replace("faster-whisper-", "")
-        isolated_script = os.path.join(whisper_dir, f"isolated_{short_name}.py")
+    for mid in models:
+        print(f"\n>>> Benchmarking Model: {mid.upper()}")
+        script_path = os.path.join(base_dir, "run_isolated.py")
         
         try:
-            # Capture output so we can parse and filter
-            # Add --benchmark-mode to the isolated script call
-            process = subprocess.run([python_exe, isolated_script, "--benchmark-mode"], env=env, capture_output=True, text=True, encoding='utf-8')
+            process = subprocess.run([python_exe, script_path, "--model", mid, "--benchmark-mode"], env=env, capture_output=True, text=True, encoding='utf-8')
             
             scenarios = []
-            receipt = {}
             for line in process.stdout.splitlines():
                 if line.startswith("SCENARIO_RESULT: "):
                     scenarios.append(json.loads(line.replace("SCENARIO_RESULT: ", "")))
-                elif line.startswith("LIFECYCLE_RECEIPT: "):
-                    receipt = json.loads(line.replace("LIFECYCLE_RECEIPT: ", ""))
                 else:
-                    # Print only human-readable progress
-                    print(line)
+                    if line.strip() and not line.startswith("LIFECYCLE_RECEIPT"):
+                        print(f"  {line}")
 
             suite_results.append({
-                "size": size_id,
-                "status": "PASSED" if process.returncode == 0 and scenarios else "FAILED",
-                "scenarios": scenarios,
-                "receipt": receipt
+                "model_id": mid,
+                "status": "PASSED" if scenarios else "FAILED",
+                "scenarios": scenarios
             })
         except Exception as e:
-            print(f"Error running {size_id}: {e}")
-            suite_results.append({"size": size_id, "status": "FAILED", "scenarios": [], "receipt": {}})
+            print(f"Error running {mid}: {e}")
 
-    # --- PIVOT DATA BY SAMPLE ---
-    pivoted_data = {}
+    # --- PIVOT DATA BY SCENARIO ---
+    pivoted_data = {} 
     all_scenario_names = []
     for suite in suite_results:
         for s in suite['scenarios']:
@@ -65,29 +56,26 @@ def run_stt_suite():
             if name not in pivoted_data:
                 pivoted_data[name] = {}
                 all_scenario_names.append(name)
-            pivoted_data[name][suite['size']] = s
+            pivoted_data[name][suite['model_id']] = s
 
+    # --- FINAL CONSOLIDATED REPORT ---
     print("\n" + "="*LINE_LEN)
-    print(f"{BOLD}{'STT MULTI-SIZE CONSOLIDATED HEALTH REPORT':^120}{RESET}")
+    print(f"{BOLD}{'STT MULTI-MODEL CONSOLIDATED PERFORMANCE REPORT':^120}{RESET}")
     print("="*LINE_LEN)
     
     for name in all_scenario_names:
-        print(f"\n{BOLD}Sample: {name}{RESET}")
-        for size_id in sizes:
-            s_res = pivoted_data[name].get(size_id)
+        print(f"\n{BOLD}Scenario: {name}{RESET}")
+        print(f"  {'Model':<30} | {'Status':<8} | {'Time':<8} | {'Details'}")
+        print(f"  {'-'*30} | {'-'*8} | {'-'*8} | {'-'*60}")
+        
+        for mid in models:
+            s_res = pivoted_data[name].get(mid)
             if s_res:
-                print(f"  \t{format_status(s_res['status'])} {size_id:<25} | {s_res['duration']:.2f}s | {s_res['result']}")
+                print(f"  {mid:<30} | {format_status(s_res['status']):<17} | {s_res['duration']:.2f}s | {s_res['result']}")
             else:
-                print(f"  \t{RED}[MISSING]{RESET} {size_id:<25} | N/A")
+                print(f"  {mid:<30} | {RED}{'MISSING':<8}{RESET} | {'-':<8} | N/A")
 
-    print("\n" + "-"*LINE_LEN)
-    print(f"{BOLD}Infrastructure Lifecycle (Setup/Cleanup Time):{RESET}")
-    for res in suite_results:
-        r = res['receipt']
-        time_str = f"Setup: {r.get('setup',0):.1f}s | Cleanup: {r.get('cleanup',0):.1f}s"
-        print(f"  {res['size']:<25}: {time_str}")
-
-    print("="*LINE_LEN)
+    print("\n" + "="*LINE_LEN)
     print(f"Total STT Suite Time: {time.perf_counter() - total_start:.2f}s\n")
 
 if __name__ == "__main__":

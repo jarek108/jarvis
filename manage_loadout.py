@@ -13,7 +13,7 @@ python manage_loadout.py --status
 [Subsection] : Apply a Preset Loadout
 Starts only missing services defined in the preset.
 python manage_loadout.py --apply vanilla_fast
-python manage_loadout.py --apply turbo_ultra
+python manage_loadout.py --apply eng_turbo
 python manage_loadout.py --apply multilingual_accurate
 
 [Subsection] : Kill a Specific Service

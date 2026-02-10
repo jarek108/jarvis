@@ -38,7 +38,7 @@ class LiveFilter(io.StringIO):
 
     def write(self, s):
         for line in s.splitlines(keepends=True):
-            is_machine = line.startswith("SCENARIO_RESULT: ") or line.startswith("LIFECYCLE_RECEIPT: ")
+            is_machine = line.startswith("SCENARIO_RESULT: ") or line.startswith("LIFECYCLE_RECEIPT: ") or line.startswith("VRAM_AUDIT_RESULT: ")
             # Always write human lines. Only write machine lines if captured (not a TTY).
             if not is_machine or not self.out.isatty():
                 self.out.write(line)
@@ -129,13 +129,65 @@ def fmt_with_chunks(text, chunks):
     if not chunks: return text
     out = []
     for c in chunks:
-        out.append(f"{c['text']} ({c['end']:.2f})")
+        out.append(f"{c['text']} ({c['end']:.2f} → {c['end']:.2f}s)")
     return " ".join(out)
+
+def get_gpu_vram_usage():
+    """Returns current VRAM usage in GB via nvidia-smi."""
+    try:
+        cmd = ["nvidia-smi", "--query-gpu=memory.used", "--format=csv,nounits,noheader"]
+        output = subprocess.check_output(cmd, text=True).strip()
+        return float(output) / 1024.0
+    except:
+        return 0.0
+
+def check_ollama_offload(model_name):
+    """
+    Checks if an Ollama model is fully in VRAM or swapped to RAM.
+    Returns: (is_fully_vram, vram_gb, total_gb)
+    """
+    try:
+        resp = requests.get("http://127.0.0.1:11434/api/ps", timeout=2)
+        if resp.status_code == 200:
+            models = resp.json().get('models', [])
+            for m in models:
+                if model_name in m['name']:
+                    size = m.get('size', 0)
+                    vram = m.get('size_vram', 0)
+                    return (vram >= size), vram / (1024**3), size / (1024**3)
+        return True, 0.0, 0.0
+    except:
+        return True, 0.0, 0.0
+
+def report_llm_result(res_obj):
+    """Specialized reporting for pure LLM tests using t1 → t2 notation."""
+    status_fmt = format_status(res_obj['status'])
+    name = res_obj['name']
+    tps = res_obj.get('tps', 0)
+    text = res_obj.get('text', "N/A")
+    thought = res_obj.get('thought', "")
+    
+    # Use timestamps for first and last token
+    t1 = res_obj.get('ttft', 0)
+    t2 = res_obj.get('duration', 0)
+    
+    # Text marker format
+    if res_obj.get('chunks'):
+        # For chunks, we use the end timestamp as both t1 and t2 for that specific chunk
+        text = fmt_with_chunks(res_obj.get('raw_text', ""), res_obj.get('chunks'))
+
+    row = f"  - {status_fmt} | {t1:.3f} → {t2:.3f}s | TPS:{tps:.1f} | Scenario: {name:<15}\n"
+    sys.stdout.write(row)
+    if thought:
+        sys.stdout.write(f"    \t💭 Thought: \"{thought[:100]}...\"\n")
+    sys.stdout.write(f"    \t🧠 Text: \"{text}\"\n")
+    
+    sys.stdout.write(f"SCENARIO_RESULT: {json.dumps(res_obj)}\n")
+    sys.stdout.flush()
 
 def report_scenario_result(res_obj):
     """
-    Unified reporting for Jarvis test scenarios.
-    Handles both live human-readable output and machine JSON.
+    Unified reporting for Jarvis test scenarios using t1 → t2 notation.
     """
     status_fmt = format_status(res_obj['status'])
     name = res_obj['name']
@@ -144,38 +196,45 @@ def report_scenario_result(res_obj):
     
     # Check if this is a complex/multi-line result (S2S style)
     if res_obj.get('mode') in ["WAV", "STREAM"] and "stt_model" in res_obj:
+        m = res_obj.get('metrics', {})
+        
         if res_obj['mode'] == "STREAM":
-            m = res_obj.get('metrics', {})
-            t1, t2 = m.get('tts', [0,0])
-            main_row = f"  - {status_fmt} {name} (t1:{t1:.2f}s | t2:{t2:.2f}s) | STREAM\n"
+            t1_audio, t2_audio = m.get('tts', [0,0])
+            main_row = f"  - {status_fmt} {name} ({t1_audio:.2f} → {t2_audio:.2f}s) | STREAM\n"
             sys.stdout.write(main_row)
             
             def fmt_range(key):
                 r = m.get(key, [0, 0])
                 return f"{r[0]:.2f} → {r[1]:.2f}s"
             
-            stt_text = f"{m.get('stt_text', 'N/A')} ({m.get('stt',[0,0])[1]:.2f})"
+            stt_ready = m.get('stt',[0,0])[1]
+            stt_text = f"{m.get('stt_text', 'N/A')} ({stt_ready:.2f} → {stt_ready:.2f}s)"
             llm_text = fmt_with_chunks(m.get('llm_text', 'N/A').strip(), m.get('llm_chunks', []))
             
             # If fmt_with_chunks didn't add anything (empty chunks), add the total time manually
             if "(" not in llm_text and llm_text != "N/A":
-                llm_text = f"{llm_text} ({m.get('llm',[0,0])[1]:.2f})"
+                llm_end = m.get('llm',[0,0])[1]
+                llm_text = f"{llm_text} ({llm_end:.2f} → {llm_end:.2f}s)"
             
             sys.stdout.write(f"    \t🎙️ {fmt_range('stt')} | [{res_obj.get('stt_model','STT')}] | Text: \"{stt_text}\"\n")
             sys.stdout.write(f"    \t🧠 {fmt_range('llm')} | [{res_obj.get('llm_model','LLM')}] | Text: \"{llm_text}\"\n")
             sys.stdout.write(f"    \t🔊 {fmt_range('tts')} | [{res_obj.get('tts_model','TTS')}] | Path: {result}\n")
         else:
-            main_row = f"  - {status_fmt} {name} (Total: {dur:.2f}s) | WAV\n"
+            # WAV mode - atomic (t1=t2)
+            stt_end = res_obj.get('stt_inf', 0)
+            llm_end = stt_end + res_obj.get('llm_tot', 0)
+            tts_end = dur
+            
+            main_row = f"  - {status_fmt} {name} ({dur:.2f} → {dur:.2f}s) | WAV\n"
             sys.stdout.write(main_row)
             
-            stt_text = f"{res_obj.get('stt_text','N/A')} ({res_obj.get('stt_inf',0):.2f})"
-            # Total time until LLM finished is stt_inf + llm_tot
-            llm_end = res_obj.get('stt_inf',0) + res_obj.get('llm_tot',0)
-            llm_text = f"{res_obj.get('llm_text','N/A')} ({llm_end:.2f})"
+            fmt_stt = f"{stt_end:.2f} → {stt_end:.2f}s"
+            fmt_llm = f"{llm_end:.2f} → {llm_end:.2f}s"
+            fmt_tts = f"{dur:.2f} → {dur:.2f}s"
 
-            sys.stdout.write(f"    \t🎙️ {res_obj.get('stt_inf',0):.2f}s | [{res_obj.get('stt_model','STT')}] | Text: \"{stt_text}\"\n")       
-            sys.stdout.write(f"    \t🧠 {res_obj.get('llm_tot',0):.2f}s | [{res_obj.get('llm_model','LLM')}] | Text: \"{llm_text}\"\n")       
-            sys.stdout.write(f"    \t🔊 {res_obj.get('tts_inf',0):.2f}s | [{res_obj.get('tts_model','TTS')}] | Path: {result}\n")        
+            sys.stdout.write(f"    \t🎙️ {fmt_stt} | [{res_obj.get('stt_model','STT')}] | Text: \"{res_obj.get('stt_text','N/A')} ({fmt_stt})\"\n")       
+            sys.stdout.write(f"    \t🧠 {fmt_llm} | [{res_obj.get('llm_model','LLM')}] | Text: \"{res_obj.get('llm_text','N/A')} ({fmt_llm})\"\n")       
+            sys.stdout.write(f"    \t🔊 {fmt_tts} | [{res_obj.get('tts_model','TTS')}] | Path: {result}\n")        
     else:
         # Standard single-line result (STT/TTS style)
         row = f"  - {status_fmt} | {dur:.2f}s | {name:<25} | {result}\n"
@@ -251,22 +310,113 @@ def run_isolated_lifecycle(name, port, cmd, test_func, cleanup_ports=None):
     if not sys.stdout.isatty():
         print(f"LIFECYCLE_RECEIPT: {json.dumps(receipt)}")
 
+def check_and_pull_model(model_name):
+    """Ensures an Ollama model is available."""
+    try:
+        resp = requests.get("http://127.0.0.1:11434/api/tags")
+        if resp.status_code == 200:
+            models = [m['name'] for m in resp.json().get('models', [])]
+            if any(model_name in m for m in models): return True
+        
+        print(f"Model {model_name} not found. Pulling (this may take a while)...")
+        subprocess.run(["ollama", "pull", model_name], check=True)
+        return True
+    except:
+        return False
+
+def warmup_llm(model_name):
+    """Performs a dummy request to hot-load the model into VRAM."""
+    print(f"🔥 Warming up {model_name} (Hot-loading weights)...")
+    try:
+        requests.post("http://127.0.0.1:11434/api/chat", json={
+            "model": model_name,
+            "messages": [{"role": "user", "content": "hi"}],
+            "stream": False
+        }, timeout=120)
+    except Exception as e:
+        print(f"⚠️ Warmup failed: {e}")
+
+def run_llm_isolated_lifecycle(model_name, test_func):
+    """Pure LLM lifecycle manager with VRAM auditing."""
+    ensure_utf8_output()
+    
+    # 0. Pre-flight check
+    print(f"\n--- LLM AUDIT LIFECYCLE: {model_name.upper()} ---")
+    check_and_pull_model(model_name)
+    
+    # 1. Setup (Ensure Ollama is running)
+    port = 11434
+    if not is_port_in_use(port):
+        print("STARTING Ollama Core...")
+        start_server(["ollama", "serve"])
+        wait_for_port(port)
+    
+    # 2. Warmup & Audit Start
+    warmup_llm(model_name)
+    print(f"AUDITING {model_name}...")
+    vram_baseline = get_gpu_vram_usage()
+    
+    from contextlib import redirect_stdout
+    f = LiveFilter()
+    with redirect_stdout(f):
+        test_func()
+    
+    # 3. Audit End
+    vram_peak = get_gpu_vram_usage()
+    is_ok, vram_used, total_size = check_ollama_offload(model_name)
+    
+    audit_data = {
+        "model": model_name,
+        "baseline_gb": vram_baseline,
+        "peak_gb": vram_peak,
+        "is_ok": is_ok,
+        "vram_used_gb": vram_used,
+        "total_size_gb": total_size
+    }
+
+    print("\n" + "="*LINE_LEN)
+    print(f"{BOLD}{CYAN}{model_name.upper() + ' PURE LLM AUDIT':^120}{RESET}")
+    print("="*LINE_LEN)
+    
+    # Print human results from buffer
+    output = f.getvalue()
+    for line in output.splitlines():
+        if not (line.startswith("SCENARIO_RESULT: ") or line.startswith("LIFECYCLE_RECEIPT: ")):
+            print(line)
+
+    print("\n" + "-"*40)
+    print(f"{BOLD}VRAM FOOTPRINT: {model_name.upper()}{RESET}")
+    print(f"  Baseline: {vram_baseline:.1f} GB")
+    print(f"  Peak:     {vram_peak:.1f} GB")
+    if total_size > 0:
+        status_txt = f"{GREEN}FULL VRAM{RESET}" if is_ok else f"{RED}🚨 RAM SWAP{RESET}"
+        print(f"  Placement: {status_txt} ({vram_used:.1f}GB / {total_size:.1f}GB)")
+    print("-"*40 + "\n")
+
+    # Machine output for orchestrators
+    print(f"VRAM_AUDIT_RESULT: {json.dumps(audit_data)}")
+
 def run_s2s_isolated_lifecycle(loadout_name, benchmark_mode=False):
-    """S2S specialized lifecycle helper."""
+    """S2S specialized lifecycle helper with VRAM auditing."""
     from s2s.tests import run_test
     cfg = load_config()
     port = cfg['ports']['s2s']
     project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     loadout_path = os.path.join(project_root, "tests", "loadouts", f"{loadout_name}.yaml")
     
+    active_llm = "gpt-oss:20b"
     cleanup_ports = [port]
     if os.path.exists(loadout_path):
         with open(loadout_path, "r") as f:
             l_data = yaml.safe_load(f)
             stt_m = l_data.get("stt", [None])[0]
             tts_m = l_data.get("tts", [None])[0]
+            active_llm = l_data.get("llm", active_llm)
             if stt_m: cleanup_ports.append(cfg['stt_loadout'][stt_m])
             if tts_m: cleanup_ports.append(cfg['tts_loadout'][tts_m])
+
+    # 0. Pre-flight model check
+    check_and_pull_model(active_llm)
 
     # Use current interpreter
     python_exe = sys.executable
@@ -274,18 +424,34 @@ def run_s2s_isolated_lifecycle(loadout_name, benchmark_mode=False):
     cmd = [python_exe, server_script, "--loadout", loadout_name]
     if benchmark_mode:
         cmd.append("--benchmark-mode")
-    
+
+    def test_wrapper():
+        # Audit Start
+        vram_start = get_gpu_vram_usage()
+        
+        # Run actual tests
+        run_test(skip_health=True, loadout_id=loadout_name, stream=False)
+        run_test(skip_health=True, loadout_id=loadout_name, stream=True)
+        
+        # Audit End
+        vram_peak = get_gpu_vram_usage()
+        is_ok, vram_used, total_size = check_ollama_offload(active_llm)
+        
+        print("\n" + "-"*40)
+        print(f"{BOLD}VRAM AUDIT: {loadout_name.upper()}{RESET}")
+        print(f"  Peak Total Usage: {vram_peak:.1f} GB")
+        if total_size > 0:
+            status_txt = f"{GREEN}FULL VRAM{RESET}" if is_ok else f"{RED}🚨 RAM SWAP{RESET}"
+            print(f"  Model Placement: {status_txt} ({vram_used:.1f}GB / {total_size:.1f}GB in VRAM)")
+        print("-"*40 + "\n")
+
     run_isolated_lifecycle(
         name=f"S2S {loadout_name.upper()}",
         port=port,
         cmd=cmd,
-        test_func=lambda: (
-            run_test(skip_health=True, loadout_id=loadout_name, stream=False),
-            run_test(skip_health=True, loadout_id=loadout_name, stream=True)
-        ),
+        test_func=test_wrapper,
         cleanup_ports=cleanup_ports
     )
-
 def run_stt_isolated_lifecycle(target_id, benchmark_mode=False):
     """STT specialized lifecycle helper."""
     from stt.whisper.tests import run_test
@@ -325,6 +491,37 @@ def run_tts_isolated_lifecycle(target_id, benchmark_mode=False):
         cmd=cmd,
         test_func=lambda: run_test(variant_id=target_id)
     )
+
+def list_all_loadouts():
+    """Scans the loadouts directory and returns a list of loadout IDs."""
+    project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    loadout_dir = os.path.join(project_root, "tests", "loadouts")
+    if not os.path.exists(loadout_dir): return []
+    return [f.replace(".yaml", "") for f in os.listdir(loadout_dir) if f.endswith(".yaml")]
+
+def list_all_llm_models():
+    """Extracts unique LLM model names from all available loadouts."""
+    loadouts = list_all_loadouts()
+    project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    models = set()
+    for lid in loadouts:
+        path = os.path.join(project_root, "tests", "loadouts", f"{lid}.yaml")
+        try:
+            with open(path, "r") as f:
+                data = yaml.safe_load(f)
+                if data.get("llm"): models.add(data["llm"])
+        except: pass
+    return sorted(list(models))
+
+def list_all_stt_models():
+    """Returns the list of STT models defined in config.yaml."""
+    cfg = load_config()
+    return sorted(list(cfg.get('stt_loadout', {}).keys()))
+
+def list_all_tts_models():
+    """Returns the list of TTS models defined in config.yaml."""
+    cfg = load_config()
+    return sorted(list(cfg.get('tts_loadout', {}).keys()))
 
 def calculate_similarity(a, b):
     import difflib

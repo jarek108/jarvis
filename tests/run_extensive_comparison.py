@@ -10,9 +10,10 @@ from utils import CYAN, BOLD, RESET, LINE_LEN
 def run_master_suite():
     total_start = time.perf_counter()
     base_dir = os.path.dirname(os.path.abspath(__file__))
-    python_exe = os.path.join(os.path.dirname(base_dir), "jarvis-venv", "Scripts", "python.exe")
+    python_exe = sys.executable
 
     suites = [
+        {"name": "LLM Comparison", "path": "llm/run_extensive_comparison.py"},
         {"name": "TTS Extensive", "path": "tts/run_extensive_comparison.py"},
         {"name": "STT Extensive", "path": "stt/run_extensive_comparison.py"},
         {"name": "S2S Extensive", "path": "s2s/run_extensive_comparison.py"}

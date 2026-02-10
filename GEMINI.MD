@@ -2,7 +2,7 @@
 
 ## [Section] : Infrastructure Management
 - **Check Cluster Health**: `python manage_loadout.py --status` (Shows ON, OFF, STARTUP, BUSY)
-- **Activate Preset**: `python manage_loadout.py --apply [preset_name]` (e.g., `default`, `turbo_ultra`)
+- **Activate Preset**: `python manage_loadout.py --apply [preset_name]` (e.g., `default`, `eng_turbo`)
 - **Kill All Services**: `python manage_loadout.py --kill all`
 - **Debug Startup**: Add `--loud` to any `manage_loadout.py` command to show server windows.
 

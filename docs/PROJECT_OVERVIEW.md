@@ -21,7 +21,7 @@ C:\Users\chojn\jarvis
 │   ├── tts_server.py       # Chatterbox wrapper with internal warmup
 │   └── s2s_server.py       # Pipeline orchestrator with dynamic loadout support
 ├── tests/                  # Benchmarking and lifecycle tests
-│   ├── loadouts/           # YAML presets (default.yaml, turbo_ultra.yaml, etc.)
+│   ├── loadouts/           # YAML presets (default.yaml, eng_turbo.yaml, etc.)
 │   ├── stt/                # Whisper multi-size test suites
 │   ├── tts/                # Chatterbox variant test suites
 │   ├── s2s/                # End-to-end pipeline verification (isolated_*.py)
@@ -44,7 +44,7 @@ The system uses a **Discovery-Based Loadout** approach. Models are kept resident
 
 ### Key Tools
 - **`manage_loadout.py --status`**: A color-coded dashboard showing the 4-state health of all components.
-- **`manage_loadout.py --apply [preset]`**: Restores the infrastructure to a specific state (e.g., `default`, `turbo_ultra`) by starting only missing services.
+- **`manage_loadout.py --apply [preset]`**: Restores the infrastructure to a specific state (e.g., `default`, `eng_turbo`) by starting only missing services.
 - **Smart Tests**: Functional tests probe the cluster first. If a model is already `ON`, the test executes in sub-seconds. If `OFF/STARTUP`, it handles the full lifecycle (Start ➔ Warmup ➔ Test ➔ Kill).
 
 ## [Section] : Testing Philosophy & Structure
@@ -73,4 +73,4 @@ Running on an RTX 5090 requires specific **PyTorch Nightly** builds with CUDA 12
 - **Torch Index**: `https://download.pytorch.org/whl/nightly/cu128`
 
 ---
-*Last Updated: February 8, 2026*
+*Last Updated: February 9, 2026*

@@ -1,4 +1,0 @@
-description: "High-accuracy English loadout"
-stt: ["faster-whisper-large"]
-tts: ["chatterbox-eng"]
-llm: "gpt-oss:20b"

@@ -27,6 +27,7 @@ TEXT_COLOR = "#E0E0E0"
 GRAY_COLOR = "#2A2F3E"
 SUCCESS_COLOR = "#00FF94"
 ERROR_COLOR = "#FF4B4B"
+YELLOW_COLOR = "#FFD700"
 
 ctk.set_appearance_mode("dark")
 
@@ -35,7 +36,7 @@ class JarvisClient(ctk.CTk):
         super().__init__()
 
         self.title("JARVIS SYSTEM CONSOLE")
-        self.geometry("900x700")
+        self.geometry("1000(800")
         self.configure(fg_color=BG_COLOR)
 
         # State
@@ -47,6 +48,9 @@ class JarvisClient(ctk.CTk):
         self.cfg = load_config()
         self.s2s_port = self.cfg['ports']['s2s']
         self.s2s_url = f"http://127.0.0.1:{self.s2s_port}"
+        
+        # Configuration
+        self.streaming_mode = ctk.BooleanVar(value=True)
 
         self.setup_ui()
         self.update_status_loop()
@@ -66,18 +70,35 @@ class JarvisClient(ctk.CTk):
         self.sub_label = ctk.CTkLabel(self.sidebar, text="BLACKWELL CORE V1", font=ctk.CTkFont(size=10), text_color=GRAY_COLOR)
         self.sub_label.pack(pady=(0, 20))
 
-        self.init_btn = ctk.CTkButton(self.sidebar, text="INITIALIZE SYSTEM", command=self.toggle_server, 
-                                     fg_color=GRAY_COLOR, hover_color=ACCENT_COLOR, text_color=TEXT_COLOR)
-        self.init_btn.pack(pady=10, padx=20, fill="x")
-
-        # Status Panel
-        self.status_frame = ctk.CTkFrame(self.sidebar, fg_color="transparent")
-        self.status_frame.pack(pady=20, padx=20, fill="x")
+        # Tabs for Sidebar
+        self.sidebar_tabs = ctk.CTkTabview(self.sidebar, fg_color="transparent", text_color=TEXT_COLOR, segmented_button_selected_color=ACCENT_COLOR)
+        self.sidebar_tabs.pack(fill="both", expand=True, padx=10)
         
-        self.stt_status = self.create_status_row("🎙️ STT ENGINE")
-        self.tts_status = self.create_status_row("🔊 TTS ENGINE")
-        self.llm_status = self.create_status_row("🧠 OLLAMA CORE")
-        self.s2s_status = self.create_status_row("✨ S2S PIPELINE")
+        self.tab_status = self.sidebar_tabs.add("STATUS")
+        self.tab_config = self.sidebar_tabs.add("CONFIG")
+
+        # --- STATUS TAB ---
+        self.init_btn = ctk.CTkButton(self.tab_status, text="INITIALIZE SYSTEM", command=self.toggle_server, 
+                                     fg_color=GRAY_COLOR, hover_color=ACCENT_COLOR, text_color=TEXT_COLOR)
+        self.init_btn.pack(pady=10, fill="x")
+
+        self.status_frame = ctk.CTkFrame(self.tab_status, fg_color="transparent")
+        self.status_frame.pack(pady=10, fill="x")
+        
+        self.stt_status = self.create_status_row(self.status_frame, "🎙️ STT ENGINE")
+        self.tts_status = self.create_status_row(self.status_frame, "🔊 TTS ENGINE")
+        self.llm_status = self.create_status_row(self.status_frame, "🧠 OLLAMA CORE")
+        self.s2s_status = self.create_status_row(self.status_frame, "✨ S2S PIPELINE")
+
+        # --- CONFIG TAB ---
+        self.stream_switch = ctk.CTkSwitch(self.tab_config, text="Streaming Mode", variable=self.streaming_mode, 
+                                          progress_color=SUCCESS_COLOR, text_color=TEXT_COLOR)
+        self.stream_switch.pack(pady=20, padx=20, anchor="w")
+        
+        self.benchmark_mode = ctk.BooleanVar(value=False)
+        self.bench_switch = ctk.CTkSwitch(self.tab_config, text="Benchmark Mode", variable=self.benchmark_mode, 
+                                         progress_color=YELLOW_COLOR, text_color=TEXT_COLOR)
+        self.bench_switch.pack(pady=10, padx=20, anchor="w")
 
         # --- Main Area ---
         # Top Telemetry
@@ -111,8 +132,8 @@ class JarvisClient(ctk.CTk):
         self.bind("<KeyPress-space>", self.start_recording)
         self.bind("<KeyRelease-space>", self.stop_recording)
 
-    def create_status_row(self, label):
-        row = ctk.CTkFrame(self.status_frame, fg_color="transparent")
+    def create_status_row(self, parent, label):
+        row = ctk.CTkFrame(parent, fg_color="transparent")
         row.pack(fill="x", pady=5)
         lbl = ctk.CTkLabel(row, text=label, font=ctk.CTkFont(size=11), text_color=TEXT_COLOR)
         lbl.pack(side="left")
@@ -148,10 +169,12 @@ class JarvisClient(ctk.CTk):
 
     def run_server(self):
         project_root = os.path.dirname(os.path.abspath(__file__))
-        python_exe = os.path.join(project_root, "jarvis-venv", "Scripts", "python.exe")
+        python_exe = sys.executable
         server_script = os.path.join(project_root, "servers", "s2s_server.py")
         
         cmd = [python_exe, server_script, "--loadout", "default"]
+        if self.benchmark_mode.get(): cmd.append("--benchmark-mode")
+
         self.server_process = subprocess.Popen(
             cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, 
             text=True, encoding='utf-8', bufsize=1,
@@ -171,13 +194,12 @@ class JarvisClient(ctk.CTk):
         self.server_process.stdout.close()
 
     def update_status_loop(self):
-        health = {}
         try:
             # Quick check of ports from config
             status_map = {
                 self.s2s_port: self.s2s_status,
-                8011: self.stt_status, # base
-                8021: self.tts_status, # mtl
+                8011: self.stt_status,
+                8021: self.tts_status,
                 11434: self.llm_status
             }
             
@@ -208,8 +230,11 @@ class JarvisClient(ctk.CTk):
 
     def record_loop(self):
         while self.is_recording:
-            data = self.stream.read(1024)
-            self.audio_frames.append(data)
+            try:
+                data = self.stream.read(1024)
+                self.audio_frames.append(data)
+            except:
+                break
 
     def stop_recording(self, event=None):
         if not self.is_recording: return
@@ -225,8 +250,11 @@ class JarvisClient(ctk.CTk):
             wf.setframerate(16000)
             wf.writeframes(b''.join(self.audio_frames))
         
-        self.log("Sending to Jarvis...", "system")
-        threading.Thread(target=self.send_request, args=(buf.getvalue(),), daemon=True).start()
+        self.log("Thinking...", "system")
+        if self.streaming_mode.get():
+            threading.Thread(target=self.send_stream_request, args=(buf.getvalue(),), daemon=True).start()
+        else:
+            threading.Thread(target=self.send_request, args=(buf.getvalue(),), daemon=True).start()
 
     def send_request(self, audio_data):
         try:
@@ -236,32 +264,81 @@ class JarvisClient(ctk.CTk):
             duration = time.perf_counter() - start_time
             
             if resp.status_code == 200:
-                # Metrics
                 self.tel_stt.configure(text=f"{resp.headers.get('X-Metric-STT-Inference', '0.00')}s")
                 self.tel_llm.configure(text=f"{resp.headers.get('X-Metric-LLM-Total', '0.00')}s")
                 self.tel_tts.configure(text=f"{resp.headers.get('X-Metric-TTS-Inference', '0.00')}s")
                 self.tel_tot.configure(text=f"{duration:.2f}s")
                 
-                # Transcripts
                 self.log(resp.headers.get('X-Result-STT', '...'), "user")
                 self.log(resp.headers.get('X-Result-LLM', '...'), "jarvis")
                 
                 # Play audio
-                threading.Thread(target=self.play_audio, args=(resp.content,), daemon=True).start()
+                threading.Thread(target=self.play_audio_wav, args=(resp.content,), daemon=True).start()
             else:
                 self.log(f"Error: {resp.status_code}", "system")
         except Exception as e:
             self.log(f"Pipeline Error: {e}", "system")
 
-    def play_audio(self, data):
+    def send_stream_request(self, audio_data):
+        try:
+            files = {'file': ('input.wav', audio_data, 'audio/wav')}
+            start_time = time.perf_counter()
+            
+            # Use requests stream=True
+            with requests.post(f"{self.s2s_url}/process_stream", files=files, stream=True) as resp:
+                if resp.status_code != 200:
+                    self.log(f"Stream Error: {resp.status_code}", "system")
+                    return
+
+                # Setup sounddevice stream for live playback
+                # PCM 16-bit Mono 24kHz (Chatterbox default)
+                # Note: We should ideally get sample rate from headers, but 24k is standard for Chatterbox
+                sample_rate = 24000
+                audio_stream = sd.RawOutputStream(samplerate=sample_rate, blocksize=1024, channels=1, dtype='int16')
+                audio_stream.start()
+
+                raw_buffer = b""
+                metrics_found = False
+                
+                for chunk in resp.iter_content(chunk_size=4096):
+                    if b"\nMETRICS_JSON:" in chunk:
+                        parts = chunk.split(b"\nMETRICS_JSON:")
+                        # Play the final audio part
+                        audio_stream.write(parts[0])
+                        # Parse metrics
+                        try:
+                            m_json = json.loads(parts[1].decode())
+                            self.update_telemetry_from_stream(m_json, time.perf_counter() - start_time)
+                            self.log(m_json.get("stt_text", "..."), "user")
+                            self.log(m_json.get("llm_text", "..."), "jarvis")
+                        except: pass
+                        metrics_found = True
+                        break
+                    else:
+                        audio_stream.write(chunk)
+                
+                audio_stream.stop()
+                audio_stream.close()
+
+        except Exception as e:
+            self.log(f"Streaming Pipeline Error: {e}", "system")
+
+    def update_telemetry_from_stream(self, m, total_dur):
+        stt_dur = m.get("stt", [0,0])[1]
+        llm_dur = m.get("llm", [0,0])[1] - m.get("llm", [0,0])[0]
+        tts_dur = m.get("tts", [0,0])[1] - m.get("tts", [0,0])[0]
+        
+        self.tel_stt.configure(text=f"{stt_dur:.2f}s")
+        self.tel_llm.configure(text=f"{llm_dur:.2f}s")
+        self.tel_tts.configure(text=f"{tts_dur:.2f}s")
+        self.tel_tot.configure(text=f"{total_dur:.2f}s")
+
+    def play_audio_wav(self, data):
         with io.BytesIO(data) as f:
             with wave.open(f, 'rb') as wf:
-                # Use sounddevice for high quality playback
                 samples = np.frombuffer(wf.readframes(wf.getnframes()), dtype=np.int16)
                 sd.play(samples, wf.getframerate())
                 sd.wait()
-
-YELLOW_COLOR = "#FFD700"
 
 if __name__ == "__main__":
     app = JarvisClient()
