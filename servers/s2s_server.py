@@ -235,99 +235,114 @@ async def process_stream(
             return Response(status_code=400, content="No speech detected")
 
         async def audio_generator():
-            sentence_buffer = ""
-            full_llm_text = ""
             # Pipelined metrics (relative to total_start)
             m = {
                 "stt": [0, 0],
                 "llm": [0, 0],
                 "tts": [0, 0],
                 "stt_text": input_text,
-                "llm_text": ""
+                "llm_text": "",
+                "llm_chunks": [], # [{text, end}]
+                "tts_chunks": []  # [{text, end}]
             }
             
             # STT is buffered, so first/last output is the same timestamp
             stt_ready_time = round(time.perf_counter() - total_start, 2)
             m["stt"] = [stt_ready_time, stt_ready_time]
             
-            first_token_time = None
+            queue = asyncio.Queue()
+            
+            async def llm_producer():
+                """Reads tokens from LLM as fast as possible and pushes sentences to queue."""
+                sentence_buffer = ""
+                full_llm_text = ""
+                first_token_time = None
+                
+                try:
+                    async with aiohttp.ClientSession() as session:
+                        llm_url = f"http://127.0.0.1:{llm_port}/v1/chat/completions"
+                        llm_payload = {
+                            "model": active_llm,
+                            "messages": [{"role": "user", "content": input_text}],
+                            "stream": True,
+                            "options": {}
+                        }
+                        if args.benchmark_mode:
+                            llm_payload["options"]["temperature"] = 0
+                            llm_payload["options"]["seed"] = 42
+
+                        async with session.post(llm_url, json=llm_payload) as resp:
+                            async for line in resp.content:
+                                if line:
+                                    line_text = line.decode('utf-8').strip()
+                                    if line_text.startswith("data: "):
+                                        data_str = line_text[6:]
+                                        if data_str == "[DONE]": 
+                                            m["llm"][1] = round(time.perf_counter() - total_start, 2)
+                                            break
+                                        try:
+                                            if first_token_time is None:
+                                                first_token_time = time.perf_counter()
+                                                m["llm"][0] = round(first_token_time - total_start, 2)
+
+                                            chunk = json.loads(data_str)
+                                            token = chunk['choices'][0]['delta'].get('content', '')
+                                            sentence_buffer += token
+                                            full_llm_text += token
+                                            
+                                            if any(c in sentence_buffer for c in ".!?"):
+                                                parts = re.split(r'(?<=[.!?])\s+', sentence_buffer)
+                                                for i in range(len(parts) - 1):
+                                                    sentence = parts[i].strip()
+                                                    if sentence:
+                                                        # TRUTHFUL TIMESTAMP: Mark LLM chunk end the moment it's generated
+                                                        m["llm_chunks"].append({"text": sentence, "end": round(time.perf_counter() - total_start, 2)})
+                                                        await queue.put(sentence)
+                                                sentence_buffer = parts[-1]
+                                        except:
+                                            continue
+                    
+                    if sentence_buffer.strip():
+                        sentence = sentence_buffer.strip()
+                        m["llm_chunks"].append({"text": sentence, "end": round(time.perf_counter() - total_start, 2)})
+                        await queue.put(sentence)
+                
+                finally:
+                    m["llm_text"] = full_llm_text
+                    await queue.put(None) # Sentinel
+
+            # Start producer in background
+            producer_task = asyncio.create_task(llm_producer())
+            
             first_audio_time = None
             last_audio_time = None
             
-            async with aiohttp.ClientSession() as session:
-                # 2. LLM Streaming
-                llm_url = f"http://127.0.0.1:{llm_port}/v1/chat/completions"
-                llm_payload = {
-                    "model": active_llm,
-                    "messages": [{"role": "user", "content": input_text}],
-                    "stream": True,
-                    "options": {}
-                }
-                
-                # Apply deterministic settings if in benchmark mode
-                if args.benchmark_mode:
-                    llm_payload["options"]["temperature"] = 0
-                    llm_payload["options"]["seed"] = 42
-
-                async with session.post(llm_url, json=llm_payload) as resp:
-                    async for line in resp.content:
-                        if line:
-                            line_text = line.decode('utf-8').strip()
-                            if line_text.startswith("data: "):
-                                data_str = line_text[6:]
-                                if data_str == "[DONE]": 
-                                    m["llm"][1] = round(time.perf_counter() - total_start, 2)
-                                    break
-                                try:
-                                    if first_token_time is None:
-                                        first_token_time = time.perf_counter()
-                                        m["llm"][0] = round(first_token_time - total_start, 2)
-
-                                    chunk = json.loads(data_str)
-                                    token = chunk['choices'][0]['delta'].get('content', '')
-                                    sentence_buffer += token
-                                    full_llm_text += token
-                                    
-                                    # Check for sentence completion (Assume .!? as breakpoints)
-                                    if any(c in sentence_buffer for c in ".!?"):
-                                        parts = re.split(r'(?<=[.!?])\s+', sentence_buffer)
-                                        for i in range(len(parts) - 1):
-                                            sentence = parts[i].strip()
-                                            if sentence:
-                                                # 3. TTS for sentence
-                                                tts_url = f"http://127.0.0.1:{tts_port}/tts"
-                                                tts_payload = {"text": sentence, "voice": "default", "language_id": language_id or "en"}
-                                                async with session.post(tts_url, json=tts_payload) as tts_resp:
-                                                    if tts_resp.status == 200:
-                                                        if first_audio_time is None:
-                                                            first_audio_time = time.perf_counter()
-                                                            m["tts"][0] = round(first_audio_time - total_start, 2)
-                                                        
-                                                        audio_chunk = await tts_resp.read()
-                                                        last_audio_time = time.perf_counter()
-                                                        yield audio_chunk[44:]
-                                        sentence_buffer = parts[-1]
-                                except:
-                                    continue
-
-                # Final flush
-                if sentence_buffer.strip():
-                    tts_url = f"http://127.0.0.1:{tts_port}/tts"
-                    tts_payload = {"text": sentence_buffer.strip(), "voice": "default", "language_id": language_id or "en"}
-                    async with session.post(tts_url, json=tts_payload) as tts_resp:
-                        if tts_resp.status == 200:
-                            if first_audio_time is None:
-                                first_audio_time = time.perf_counter()
-                                m["tts"][0] = round(first_audio_time - total_start, 2)
-                            audio_chunk = await tts_resp.read()
-                            last_audio_time = time.perf_counter()
-                            yield audio_chunk[44:]
-            
-            # End of stream metrics
-            m["tts"][1] = round((last_audio_time or time.perf_counter()) - total_start, 2)
-            m["llm_text"] = full_llm_text
-            # Add a clear boundary and metrics JSON
-            yield b"\nMETRICS_JSON:" + json.dumps(m).encode()
+            try:
+                async with aiohttp.ClientSession() as session:
+                    while True:
+                        sentence = await queue.get()
+                        if sentence is None: break
+                        
+                        # 3. TTS for sentence
+                        tts_url = f"http://127.0.0.1:{tts_port}/tts"
+                        tts_payload = {"text": sentence, "voice": "default", "language_id": language_id or "en"}
+                        async with session.post(tts_url, json=tts_payload) as tts_resp:
+                            if tts_resp.status == 200:
+                                if first_audio_time is None:
+                                    first_audio_time = time.perf_counter()
+                                    m["tts"][0] = round(first_audio_time - total_start, 2)
+                                
+                                audio_chunk = await tts_resp.read()
+                                last_audio_time = time.perf_counter()
+                                # Mark TTS chunk delivery
+                                m["tts_chunks"].append({"text": sentence, "end": round(last_audio_time - total_start, 2)})
+                                yield audio_chunk[44:]
+            finally:
+                # End of stream metrics
+                m["tts"][1] = round((last_audio_time or time.perf_counter()) - total_start, 2)
+                await producer_task
+                # Add a clear boundary and metrics JSON
+                yield b"\nMETRICS_JSON:" + json.dumps(m).encode()
 
         # Measure STT duration before stream starts
         stt_dur = time.perf_counter() - total_start

@@ -124,6 +124,14 @@ def get_active_env_list():
     health = get_system_health()
     return [name for name, info in health.items() if info['status'] == "ON"]
 
+def fmt_with_chunks(text, chunks):
+    """Adds (timestamp) markers to text based on chunk data."""
+    if not chunks: return text
+    out = []
+    for c in chunks:
+        out.append(f"{c['text']} ({c['end']:.2f})")
+    return " ".join(out)
+
 def report_scenario_result(res_obj):
     """
     Unified reporting for Jarvis test scenarios.
@@ -141,18 +149,33 @@ def report_scenario_result(res_obj):
             t1, t2 = m.get('tts', [0,0])
             main_row = f"  - {status_fmt} {name} (t1:{t1:.2f}s | t2:{t2:.2f}s) | STREAM\n"
             sys.stdout.write(main_row)
+            
             def fmt_range(key):
                 r = m.get(key, [0, 0])
                 return f"{r[0]:.2f} → {r[1]:.2f}s"
-            sys.stdout.write(f"    \t🎙️ {fmt_range('stt')} | [{res_obj.get('stt_model','STT')}] | Text: \"{m.get('stt_text', 'N/A')}\"\n")
-            sys.stdout.write(f"    \t🧠 {fmt_range('llm')} | [{res_obj.get('llm_model','LLM')}] | Text: \"{m.get('llm_text', 'N/A').strip()}\"\n")
+            
+            stt_text = f"{m.get('stt_text', 'N/A')} ({m.get('stt',[0,0])[1]:.2f})"
+            llm_text = fmt_with_chunks(m.get('llm_text', 'N/A').strip(), m.get('llm_chunks', []))
+            
+            # If fmt_with_chunks didn't add anything (empty chunks), add the total time manually
+            if "(" not in llm_text and llm_text != "N/A":
+                llm_text = f"{llm_text} ({m.get('llm',[0,0])[1]:.2f})"
+            
+            sys.stdout.write(f"    \t🎙️ {fmt_range('stt')} | [{res_obj.get('stt_model','STT')}] | Text: \"{stt_text}\"\n")
+            sys.stdout.write(f"    \t🧠 {fmt_range('llm')} | [{res_obj.get('llm_model','LLM')}] | Text: \"{llm_text}\"\n")
             sys.stdout.write(f"    \t🔊 {fmt_range('tts')} | [{res_obj.get('tts_model','TTS')}] | Path: {result}\n")
         else:
             main_row = f"  - {status_fmt} {name} (Total: {dur:.2f}s) | WAV\n"
             sys.stdout.write(main_row)
-            sys.stdout.write(f"    \t🎙️ {res_obj.get('stt_inf',0):.2f}s | [{res_obj.get('stt_model','STT')}] | Text: \"{res_obj.get('stt_text','N/A')}\"\n")       
-            sys.stdout.write(f"    \t🧠 {res_obj.get('llm_tot',0):.2f}s | [{res_obj.get('llm_model','LLM')}] | Text: \"{res_obj.get('llm_text','N/A')}\"\n")       
-            sys.stdout.write(f"    \t🔊 {res_obj.get('tts_inf',0):.2f}s | [{res_obj.get('tts_model','TTS')}] | Path: {result}\n")
+            
+            stt_text = f"{res_obj.get('stt_text','N/A')} ({res_obj.get('stt_inf',0):.2f})"
+            # Total time until LLM finished is stt_inf + llm_tot
+            llm_end = res_obj.get('stt_inf',0) + res_obj.get('llm_tot',0)
+            llm_text = f"{res_obj.get('llm_text','N/A')} ({llm_end:.2f})"
+
+            sys.stdout.write(f"    \t🎙️ {res_obj.get('stt_inf',0):.2f}s | [{res_obj.get('stt_model','STT')}] | Text: \"{stt_text}\"\n")       
+            sys.stdout.write(f"    \t🧠 {res_obj.get('llm_tot',0):.2f}s | [{res_obj.get('llm_model','LLM')}] | Text: \"{llm_text}\"\n")       
+            sys.stdout.write(f"    \t🔊 {res_obj.get('tts_inf',0):.2f}s | [{res_obj.get('tts_model','TTS')}] | Path: {result}\n")        
     else:
         # Standard single-line result (STT/TTS style)
         row = f"  - {status_fmt} | {dur:.2f}s | {name:<25} | {result}\n"
@@ -302,3 +325,7 @@ def run_tts_isolated_lifecycle(target_id, benchmark_mode=False):
         cmd=cmd,
         test_func=lambda: run_test(variant_id=target_id)
     )
+
+def calculate_similarity(a, b):
+    import difflib
+    return difflib.SequenceMatcher(None, a.lower(), b.lower()).ratio()

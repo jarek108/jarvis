@@ -4,16 +4,9 @@ import time
 import subprocess
 import json
 
-# ANSI Colors
-GREEN = "\033[92m"
-RED = "\033[91m"
-RESET = "\033[0m"
-BOLD = "\033[1m"
-CYAN = "\033[96m"
-
-def format_status(status):
-    if status == "PASSED": return f"{GREEN}[PASS]{RESET}"
-    return f"{RED}[FAIL]{RESET}"
+# Allow importing utils from root
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from utils import format_status, CYAN, BOLD, RESET, LINE_LEN, RED, fmt_with_chunks
 
 def run_s2s_suite():
     base_dir = os.path.dirname(os.path.abspath(__file__))
@@ -97,34 +90,50 @@ def run_s2s_suite():
         print(f"\n{BOLD}Scenario: {name}{RESET}")
         for lid in loadouts:
             modes_data = pivoted_data[name].get(lid, {})
-            
+
             # Print WAV if exists
             if "WAV" in modes_data:
                 s_res = modes_data["WAV"]
-                metrics = f"STT:{s_res['stt_inf']:.2f}s | LLM:{s_res['llm_tot']:.2f}s | TTS:{s_res['tts_inf']:.2f}s"
-                print(f"  {format_status(s_res['status'])} {lid:<25} | WAV     | Total:{s_res['duration']:.2f}s | {metrics}")
-                # Breakdown
-                print(f"    \t🎙️ {s_res['stt_inf']:.2f}s | [{s_res['stt_model']}] | Text: \"{s_res['stt_text']}\"")
-                print(f"    \t🧠 {s_res['llm_tot']:.2f}s | [{s_res['llm_model']}] | Text: \"{s_res['llm_text']}\"")
-                print(f"    \t🔊 {s_res['tts_inf']:.2f}s | [{s_res['tts_model']}] | Path: {s_res['result']}")
+                if s_res['status'] == "PASSED":
+                    metrics = f"STT:{s_res['stt_inf']:.2f}s | LLM:{s_res['llm_tot']:.2f}s | TTS:{s_res['tts_inf']:.2f}s"
+                    print(f"  {format_status(s_res['status'])} {lid:<25} | WAV     | Total:{s_res['duration']:.2f}s | {metrics}")
+                    
+                    # Breakdown with markers
+                    stt_text = f"{s_res.get('stt_text','N/A')} ({s_res.get('stt_inf',0):.2f})"
+                    llm_end = s_res.get('stt_inf',0) + s_res.get('llm_tot',0)
+                    llm_text = f"{s_res.get('llm_text','N/A')} ({llm_end:.2f})"
+                    
+                    print(f"    \t🎙️ {s_res['stt_inf']:.2f}s | [{s_res['stt_model']}] | Text: \"{stt_text}\"")
+                    print(f"    \t🧠 {s_res['llm_tot']:.2f}s | [{s_res['llm_model']}] | Text: \"{llm_text}\"")
+                    print(f"    \t🔊 {s_res['tts_inf']:.2f}s | [{s_res['tts_model']}] | Path: {s_res['result']}")
+                else:
+                    print(f"  {format_status(s_res['status'])} {lid:<25} | WAV     | Total:{s_res['duration']:.2f}s | Result: {s_res['result']}")
 
             # Print STREAM if exists
             if "STREAM" in modes_data:
                 s_res = modes_data["STREAM"]
-                m = s_res.get('metrics', {})
-                def fmt_range(key):
-                    r = m.get(key, [0, 0])
-                    return f"{r[0]:.2f}→{r[1]:.2f}s"
-                metrics = f"STT:{fmt_range('stt')} | LLM:{fmt_range('llm')} | TTS:{fmt_range('tts')}"
-                print(f"  {format_status(s_res['status'])} {lid:<25} | STREAM  | {metrics}")
-                # Breakdown
-                print(f"    \t🎙️ {fmt_range('stt')} | [{s_res.get('stt_model', 'STT')}] | Text: \"{m.get('stt_text', 'N/A')}\"")     
-                print(f"    \t🧠 {fmt_range('llm')} | [{s_res.get('llm_model', 'LLM')}] | Text: \"{m.get('llm_text', 'N/A').strip()}\"")
-                print(f"    \t🔊 {fmt_range('tts')} | [{s_res.get('tts_model', 'TTS')}] | Path: {s_res['result']}")
+                if s_res['status'] == "PASSED":
+                    m = s_res.get('metrics', {})
+                    def fmt_range(key):
+                        r = m.get(key, [0, 0])
+                        return f"{r[0]:.2f}→{r[1]:.2f}s"
+                    metrics = f"STT:{fmt_range('stt')} | LLM:{fmt_range('llm')} | TTS:{fmt_range('tts')}"
+                    print(f"  {format_status(s_res['status'])} {lid:<25} | STREAM  | {metrics}")
+                    
+                    # Breakdown with markers
+                    stt_text = f"{m.get('stt_text', 'N/A')} ({m.get('stt',[0,0])[1]:.2f})"
+                    llm_text = fmt_with_chunks(m.get('llm_text', 'N/A').strip(), m.get('llm_chunks', []))
+                    if "(" not in llm_text and llm_text != "N/A":
+                        llm_text = f"{llm_text} ({m.get('llm',[0,0])[1]:.2f})"
+
+                    print(f"    \t🎙️ {fmt_range('stt')} | [{s_res.get('stt_model', 'STT')}] | Text: \"{stt_text}\"")     
+                    print(f"    \t🧠 {fmt_range('llm')} | [{s_res.get('llm_model', 'LLM')}] | Text: \"{llm_text}\"") 
+                    print(f"    \t🔊 {fmt_range('tts')} | [{s_res.get('tts_model', 'TTS')}] | Path: {s_res['result']}")
+                else:
+                    print(f"  {format_status(s_res['status'])} {lid:<25} | STREAM  | Total:{s_res['duration']:.2f}s | Result: {s_res['result']}")
             
             if not modes_data:
                 print(f"  {RED}[MISSING]{RESET} {lid:<25} | N/A")
-
     print("\n" + "-"*LINE_LEN)
     print(f"{BOLD}Infrastructure Lifecycle (Setup/Cleanup Time):{RESET}")
     for res in suite_results:

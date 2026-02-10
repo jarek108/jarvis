@@ -25,7 +25,9 @@ def run_test(trim_length=80, skip_health=False, loadout_id="default", stream=Fal
 
     scenarios = [
         {"name": "english_std", "lang": "en"},
-        {"name": "polish_explicit", "lang": "pl", "input": "polish_std"}
+        {"name": "polish_explicit", "lang": "pl", "input": "polish_std"},
+        {"name": "short2long", "lang": "en", "input": "short_dog_story"},
+        {"name": "long2short", "lang": "en", "input": "long_book_quote"}
     ]
 
     all_passed = True
