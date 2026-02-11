@@ -218,9 +218,9 @@ class LifecycleManager:
         """
         required = []
         
-        # 1. LLM
+        # 1. LLM / VLM (both use Ollama)
         llm_model = self.loadout.get('llm')
-        if llm_model and (domain == "llm" or self.full or domain == "s2s"):
+        if llm_model and (domain in ["llm", "vlm"] or self.full or domain == "s2s"):
             required.append({
                 "type": "llm",
                 "id": llm_model,
@@ -352,7 +352,11 @@ def run_test_lifecycle(domain, loadout_name, purge, full, test_func, benchmark_m
     
     # Validation
     required = manager.loadout.get(domain)
-    if not required and domain != "s2s": # S2S always has a loadout name
+    # VLM uses the 'llm' key, so check that if domain is vlm
+    if not required and domain == "vlm":
+        required = manager.loadout.get("llm")
+
+    if not required and domain != "s2s":
         print(f"❌ ERROR: Loadout '{loadout_name}' does not define a component for domain '{domain}'.")
         sys.exit(1)
 

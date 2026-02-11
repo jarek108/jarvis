@@ -440,8 +440,17 @@ class JarvisApp(ctk.CTk):
                 
                 color = YELLOW_COLOR if is_rogue else (SUCCESS_COLOR if status == "ON" else YELLOW_COLOR if status == "STARTUP" else ERROR_COLOR if status == "UNHEALTHY" else GRAY_COLOR)
                 
-                # The 'info['info']' now contains Name + VRAM from utils.py
-                text = (info['info'] or "READY")
+                # Use actual info if available, otherwise use the expected name from config/loadout
+                if info['info']:
+                    text = info['info']
+                else:
+                    if info['label'] == "LLM":
+                        text = active_llm or "Ollama"
+                    elif info['label'] == "S2S":
+                        text = self.controller.current_loadout
+                    else:
+                        text = info['label'] # For STT/TTS label is the model ID
+                
                 if is_rogue:
                     if info['label'] == "LLM":
                         text = f"WRONG MODEL: {loaded_ollama[0] if loaded_ollama else 'EMPTY'}"
