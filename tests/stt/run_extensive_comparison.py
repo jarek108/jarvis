@@ -6,7 +6,7 @@ import json
 
 # Allow importing utils from root
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from utils import format_status, CYAN, BOLD, RESET, LINE_LEN, RED, list_all_loadouts
+from utils import format_status, CYAN, BOLD, RESET, LINE_LEN, RED, list_all_loadouts, save_artifact
 
 def run_stt_comparison():
     base_dir = os.path.dirname(os.path.abspath(__file__))
@@ -77,6 +77,8 @@ def run_stt_comparison():
 
     print("\n" + "="*LINE_LEN)
     print(f"Total STT Suite Time: {time.perf_counter() - total_start:.2f}s\n")
+    
+    save_artifact("stt", suite_results)
 
 if __name__ == "__main__":
     run_stt_comparison()

@@ -7,7 +7,7 @@ import yaml
 
 # Allow importing utils from parent
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from utils import format_status, CYAN, GREEN, RED, BOLD, RESET, LINE_LEN, list_all_loadouts
+from utils import format_status, CYAN, GREEN, RED, BOLD, RESET, LINE_LEN, list_all_loadouts, save_artifact
 
 def run_vlm_comparison():
     base_dir = os.path.dirname(os.path.abspath(__file__))
@@ -100,6 +100,8 @@ def run_vlm_comparison():
 
     print("\n" + "="*LINE_LEN)
     print(f"Total VLM Comparison Time: {time.perf_counter() - total_start:.2f}s\n")
+    
+    save_artifact("vlm", suite_results)
 
 if __name__ == "__main__":
     run_vlm_comparison()

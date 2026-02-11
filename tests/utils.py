@@ -535,3 +535,14 @@ def list_all_stt_models():
 def list_all_tts_models():
     cfg = load_config()
     return sorted(list(cfg.get('tts_loadout', {}).keys()))
+
+def save_artifact(domain, data):
+    """Saves benchmark data to the tests/artifacts directory."""
+    project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    artifacts_dir = os.path.join(project_root, "tests", "artifacts")
+    os.makedirs(artifacts_dir, exist_ok=True)
+    
+    file_path = os.path.join(artifacts_dir, f"latest_{domain}.json")
+    with open(file_path, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=4)
+    print(f"✅ Artifact saved: {os.path.relpath(file_path, project_root)}")

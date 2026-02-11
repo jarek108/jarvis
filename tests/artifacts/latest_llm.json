@@ -1,0 +1,226 @@
+[
+    {
+        "loadout": "base-qwen30-multi",
+        "scenarios": [
+            {
+                "name": "english_std",
+                "status": "PASSED",
+                "ttft": 0.0992236000020057,
+                "tps": 131.06012663994986,
+                "raw_text": "Hello! Thank you for testing Tatterbox TTS. I'm here to assist you with any questions or tasks you might have. How can I help you today?",
+                "thought": "",
+                "chunks": [
+                    {
+                        "text": "Hello!",
+                        "end": 0.10711820000142325
+                    },
+                    {
+                        "text": "Thank you for testing Tatterbox TTS.",
+                        "end": 0.1552434000041103
+                    },
+                    {
+                        "text": "I'm here to assist you with any questions or tasks you might have.",
+                        "end": 0.22749040000053355
+                    },
+                    {
+                        "text": "How can I help you today?",
+                        "end": 0.2621778000029735
+                    }
+                ],
+                "duration": 0.26705300000321586
+            },
+            {
+                "name": "polish_explicit",
+                "status": "PASSED",
+                "ttft": 0.08361000000149943,
+                "tps": 156.6549065564661,
+                "raw_text": "Cze\u015b\u0107, Jarbis! \ud83d\ude0a Dzi\u0119ki za przywitanie \u2013 mi\u0142o mi, \u017ce mo\u017cesz mi pom\u00f3c! Co dzi\u015b potrzebujesz? Czy to pytanie, pomoc w czym\u015b, czy mo\u017ce chcesz po prostu pogada\u0107? \ud83d\ude0a",
+                "thought": "",
+                "chunks": [
+                    {
+                        "text": "Cze\u015b\u0107, Jarbis!",
+                        "end": 0.1147320000018226
+                    },
+                    {
+                        "text": "\ud83d\ude0a Dzi\u0119ki za przywitanie \u2013 mi\u0142o mi, \u017ce mo\u017cesz mi pom\u00f3c!",
+                        "end": 0.2013361999997869
+                    },
+                    {
+                        "text": "Co dzi\u015b potrzebujesz?",
+                        "end": 0.23475589999725344
+                    },
+                    {
+                        "text": "Czy to pytanie, pomoc w czym\u015b, czy mo\u017ce chcesz po prostu pogada\u0107?",
+                        "end": 0.34913529999903403
+                    },
+                    {
+                        "text": "\ud83d\ude0a",
+                        "end": 0.36385359999985667
+                    }
+                ],
+                "duration": 0.36385709999740357
+            },
+            {
+                "name": "short2long",
+                "status": "PASSED",
+                "ttft": 0.0814475000006496,
+                "tps": 182.63929883821342,
+                "raw_text": "Buddy, a scruffy golden retriever with one floppy ear, loved chasing squirrels in the park every afternoon. One day, he spotted a tiny, trembling kitten stuck in a tree and barked loudly to get help. A kind neighbor heard him and climbed up to rescue the kitten, who was too scared to move. Buddy stayed by their side, wagging his tail gently, as if saying, \"It\u2019s okay, I\u2019m here.\" From that day on, the kitten and Buddy became inseparable friends, sharing sunbeams and snacks under the old oak tree.",
+                "thought": "",
+                "chunks": [
+                    {
+                        "text": "Buddy, a scruffy golden retriever with one floppy ear, loved chasing squirrels in the park every afternoon.",
+                        "end": 0.1940868000019691
+                    },
+                    {
+                        "text": "One day, he spotted a tiny, trembling kitten stuck in a tree and barked loudly to get help.",
+                        "end": 0.3006470000036643
+                    },
+                    {
+                        "text": "A kind neighbor heard him and climbed up to rescue the kitten, who was too scared to move.",
+                        "end": 0.3962394999980461
+                    },
+                    {
+                        "text": "Buddy stayed by their side, wagging his tail gently, as if saying, \"It\u2019s okay, I\u2019m here.\"",
+                        "end": 0.5166086000026553
+                    },
+                    {
+                        "text": "From that day on, the kitten and Buddy became inseparable friends, sharing sunbeams and snacks under the old oak tree.",
+                        "end": 0.6411975000009988
+                    }
+                ],
+                "duration": 0.6460822000008193
+            },
+            {
+                "name": "long2short",
+                "status": "PASSED",
+                "ttft": 0.09351850000530249,
+                "tps": 56.088080720113204,
+                "raw_text": "Pride and Prejudice",
+                "thought": "",
+                "chunks": [
+                    {
+                        "text": "Pride and Prejudice",
+                        "end": 0.12479890000395244
+                    }
+                ],
+                "duration": 0.12480370000412222
+            }
+        ],
+        "vram": {
+            "model": "qwen3-vl:30b-a3b-instruct",
+            "baseline_gb": 23.3818359375,
+            "peak_gb": 23.3837890625,
+            "is_ok": true,
+            "vram_used_gb": 22.01561689376831,
+            "total_size_gb": 22.01561689376831
+        },
+        "status": "PASSED"
+    },
+    {
+        "loadout": "tiny-gpt20-turbo",
+        "scenarios": [
+            {
+                "name": "english_std",
+                "status": "PASSED",
+                "ttft": 0.14976809999643592,
+                "tps": 171.70723807524618,
+                "raw_text": "Hello! I\u2019m here and ready to help. If you\u2019d like to test Tatterbox TTS further, just let me know what you\u2019d like to try next!",
+                "thought": "",
+                "chunks": [
+                    {
+                        "text": "Hello!",
+                        "end": 0.4156626999974833
+                    },
+                    {
+                        "text": "I\u2019m here and ready to help.",
+                        "end": 0.44801709999592276
+                    },
+                    {
+                        "text": "If you\u2019d like to test Tatterbox TTS further, just let me know what you\u2019d like to try next!",
+                        "end": 0.5490963999982341
+                    }
+                ],
+                "duration": 0.5532672999979695
+            },
+            {
+                "name": "polish_explicit",
+                "status": "PASSED",
+                "ttft": 0.1294698999990942,
+                "tps": 203.02789144480272,
+                "raw_text": "Cze\u015b\u0107 Jarbis! Mi\u0142o mi Ci\u0119 pozna\u0107. W czym mog\u0119 Ci dzisiaj pom\u00f3c?",
+                "thought": "",
+                "chunks": [
+                    {
+                        "text": "Cze\u015b\u0107 Jarbis!",
+                        "end": 0.7843697999996948
+                    },
+                    {
+                        "text": "Mi\u0142o mi Ci\u0119 pozna\u0107.",
+                        "end": 0.8220983999999589
+                    },
+                    {
+                        "text": "W czym mog\u0119 Ci dzisiaj pom\u00f3c?",
+                        "end": 0.8676159999959054
+                    }
+                ],
+                "duration": 0.8718013999969116
+            },
+            {
+                "name": "short2long",
+                "status": "PASSED",
+                "ttft": 0.13741750000190223,
+                "tps": 197.35047124731904,
+                "raw_text": "Milo, a scruffy terrier with a nose that could sniff out trouble, lived on the edge of a sleepy coastal town. One stormy night, he heard a faint whimper coming from the abandoned lighthouse, and his curiosity pulled him toward the crumbling beams. Inside, he found a tiny, shivering kitten that had slipped from a passing boat. Milo wrapped his warm fur around the kitten, and together they made a pact to protect each other. By dawn, the lighthouse was no longer a lonely ruin but a beacon of friendship, and Milo\u2019s heroic tail wagged louder than any siren.",
+                "thought": "",
+                "chunks": [
+                    {
+                        "text": "Milo, a scruffy terrier with a nose that could sniff out trouble, lived on the edge of a sleepy coastal town.",
+                        "end": 0.41499040000053355
+                    },
+                    {
+                        "text": "One stormy night, he heard a faint whimper coming from the abandoned lighthouse, and his curiosity pulled him toward the crumbling beams.",
+                        "end": 0.530240899999626
+                    },
+                    {
+                        "text": "Inside, he found a tiny, shivering kitten that had slipped from a passing boat.",
+                        "end": 0.6028738000022713
+                    },
+                    {
+                        "text": "Milo wrapped his warm fur around the kitten, and together they made a pact to protect each other.",
+                        "end": 0.6834215999988373
+                    },
+                    {
+                        "text": "By dawn, the lighthouse was no longer a lonely ruin but a beacon of friendship, and Milo\u2019s heroic tail wagged louder than any siren.",
+                        "end": 0.8065859999987879
+                    }
+                ],
+                "duration": 0.8107404000038514
+            },
+            {
+                "name": "long2short",
+                "status": "PASSED",
+                "ttft": 0.1357034999964526,
+                "tps": 172.16853539714828,
+                "raw_text": "Pride and Prejudice",
+                "thought": "",
+                "chunks": [
+                    {
+                        "text": "Pride and Prejudice",
+                        "end": 0.5227387999984785
+                    }
+                ],
+                "duration": 0.5227435999986483
+            }
+        ],
+        "vram": {
+            "model": "gpt-oss:20b",
+            "baseline_gb": 14.3994140625,
+            "peak_gb": 14.3994140625,
+            "is_ok": true,
+            "vram_used_gb": 13.891766905784607,
+            "total_size_gb": 13.891766905784607
+        },
+        "status": "PASSED"
+    }
+]
