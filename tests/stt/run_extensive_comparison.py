@@ -3,6 +3,7 @@ import sys
 import time
 import subprocess
 import json
+import argparse
 
 # Allow importing utils from root
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))

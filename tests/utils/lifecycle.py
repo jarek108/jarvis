@@ -6,7 +6,7 @@ import json
 from contextlib import redirect_stdout
 from .config import load_config
 from .ui import ensure_utf8_output, LiveFilter, BOLD, CYAN, RESET, LINE_LEN
-from .infra import is_port_in_use, start_server, wait_for_port, kill_process_on_port, get_jarvis_ports
+from .infra import is_port_in_use, start_server, wait_for_port, kill_process_on_port, get_jarvis_ports, kill_all_jarvis_services
 from .vram import get_service_status, get_loaded_ollama_models, get_system_health
 from .ollama import check_and_pull_model, warmup_llm
 
@@ -98,9 +98,16 @@ class LifecycleManager:
         return time.perf_counter() - setup_start
 
     def cleanup(self):
+        if self.purge:
+            print("\n🧹 PURGE ENABLED: Performing final global cleanup...")
+            start_c = time.perf_counter()
+            kill_all_jarvis_services()
+            return time.perf_counter() - start_c
+            
         if not self.owned_processes:
             print("\nINFO: Skipping cleanup (No services were spawned by this test).")
             return 0
+            
         print(f"\nCleaning up {len(self.owned_processes)} spawned services...")
         start_c = time.perf_counter()
         for port, _ in self.owned_processes: kill_process_on_port(port)

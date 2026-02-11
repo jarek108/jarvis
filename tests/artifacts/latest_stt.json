@@ -1,0 +1,146 @@
+[
+    {
+        "loadout": "base-qwen30-multi",
+        "status": "PASSED",
+        "scenarios": [
+            {
+                "name": "Polish, implicit",
+                "status": "PASSED",
+                "duration": 0.1319457999925362,
+                "result": "Match: 90.6% | [Cze??, nazywam si? Jarbis, jed mog? ci dzisiaj pom?c.]"
+            },
+            {
+                "name": "Polish, explicit",
+                "status": "PASSED",
+                "duration": 0.10618129999784287,
+                "result": "Match: 90.6% | [Cze??, nazywam si? Jarbis, jed mog? ci dzisiaj pom?c.]"
+            },
+            {
+                "name": "Polish, misleading",
+                "status": "PASSED",
+                "duration": 0.09557800000766292,
+                "result": "Match: 26.4% | [Hi, I'm Rbys and I can help you today.]"
+            },
+            {
+                "name": "French, implicit",
+                "status": "PASSED",
+                "duration": 0.643681799992919,
+                "result": "Match: 80.0% | [Bonjour, je m'appelle Jarvis, come up here je vous ai dit.]"
+            },
+            {
+                "name": "French, explicit",
+                "status": "PASSED",
+                "duration": 0.18996570000308566,
+                "result": "Match: 74.3% | [Bonjour, je m'appelle Jarvis. Come on, p?che-vous, Zid?.]"
+            },
+            {
+                "name": "French, misleading",
+                "status": "PASSED",
+                "duration": 0.5671869999932824,
+                "result": "Match: 79.3% | [Bonjour, je m'appelle Jarvis, come up here, je vous ai dit.]"
+            },
+            {
+                "name": "Chinese, implicit",
+                "status": "PASSED",
+                "duration": 0.10859289999643806,
+                "result": "Match: 73.7% | [??,?????,??????????]"
+            },
+            {
+                "name": "Chinese, explicit",
+                "status": "PASSED",
+                "duration": 0.0979584999877261,
+                "result": "Match: 73.7% | [??,?????,??????????]"
+            },
+            {
+                "name": "Chinese, misleading",
+                "status": "PASSED",
+                "duration": 0.10125779999361839,
+                "result": "Match: 0.0% | [Hello, my name is Jia Wei Si, what can I do for you today?]"
+            },
+            {
+                "name": "English, implicit",
+                "status": "PASSED",
+                "duration": 0.09690959998988546,
+                "result": "Match: 100.0% | [Hello, this is a test of Tatterbox TTS.]"
+            },
+            {
+                "name": "English, explicit",
+                "status": "PASSED",
+                "duration": 0.08875220001209527,
+                "result": "Match: 100.0% | [Hello, this is a test of Tatterbox TTS.]"
+            }
+        ]
+    },
+    {
+        "loadout": "tiny-gpt20-turbo",
+        "status": "PASSED",
+        "scenarios": [
+            {
+                "name": "Polish, implicit",
+                "status": "PASSED",
+                "duration": 0.12806080000882503,
+                "result": "Match: 83.8% | [Cze??, nazywam si? Jarbyz, jedmog? ci dzisiaj pom?d.]"
+            },
+            {
+                "name": "Polish, explicit",
+                "status": "PASSED",
+                "duration": 0.10534429999825079,
+                "result": "Match: 83.8% | [Cze??, nazywam si? Jarbyz, jedmog? ci dzisiaj pom?d.]"
+            },
+            {
+                "name": "Polish, misleading",
+                "status": "PASSED",
+                "duration": 0.33167390000016894,
+                "result": "Match: 17.2% | [Bye, see you soon and I'll see you soon.]"
+            },
+            {
+                "name": "French, implicit",
+                "status": "PASSED",
+                "duration": 0.23031520000949968,
+                "result": "Match: 37.8% | [No jewelry, so my best star beast, come up with a day.]"
+            },
+            {
+                "name": "French, explicit",
+                "status": "PASSED",
+                "duration": 0.09509080000862014,
+                "result": "Match: 86.0% | [Bonjour, je m'appelle Jarvis, comme un pujouz-vous aider.]"
+            },
+            {
+                "name": "French, misleading",
+                "status": "PASSED",
+                "duration": 0.16135530000610743,
+                "result": "Match: 41.0% | [Don't you worry, so my best job is, come up with a good day.]"
+            },
+            {
+                "name": "Chinese, implicit",
+                "status": "PASSED",
+                "duration": 0.10715450000134297,
+                "result": "Match: 81.1% | [??,?????,?????????]"
+            },
+            {
+                "name": "Chinese, explicit",
+                "status": "PASSED",
+                "duration": 0.09347380000690464,
+                "result": "Match: 81.1% | [??,?????,?????????]"
+            },
+            {
+                "name": "Chinese, misleading",
+                "status": "PASSED",
+                "duration": 0.09543649999250192,
+                "result": "Match: 0.0% | [Hello, I'm Jjavay Si, I can do what you do today.]"
+            },
+            {
+                "name": "English, implicit",
+                "status": "PASSED",
+                "duration": 0.09075899999879766,
+                "result": "Match: 96.1% | [Hello, this is a test of Tatarbox TTS.]"
+            },
+            {
+                "name": "English, explicit",
+                "status": "PASSED",
+                "duration": 0.08831689998623915,
+                "result": "Match: 96.1% | [Hello, this is a test of Tatarbox TTS.]"
+            }
+        ]
+    }
+]

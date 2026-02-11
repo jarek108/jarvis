@@ -1,0 +1,122 @@
+[
+    {
+        "loadout": "base-qwen30-multi",
+        "status": "PASSED",
+        "scenarios": [
+            {
+                "name": "standard",
+                "status": "PASSED",
+                "duration": 2.4121646999992663,
+                "result": "tts\\chatterbox\\results\\chatterbox-multilingual_standard.wav"
+            },
+            {
+                "name": "polish",
+                "status": "PASSED",
+                "duration": 1.8129938000056427,
+                "result": "tts\\chatterbox\\results\\chatterbox-multilingual_polish.wav"
+            },
+            {
+                "name": "french",
+                "status": "PASSED",
+                "duration": 2.4278694999957224,
+                "result": "tts\\chatterbox\\results\\chatterbox-multilingual_french.wav"
+            },
+            {
+                "name": "chinese",
+                "status": "PASSED",
+                "duration": 1.6676357999967877,
+                "result": "tts\\chatterbox\\results\\chatterbox-multilingual_chinese.wav"
+            },
+            {
+                "name": "implicit_excited",
+                "status": "PASSED",
+                "duration": 3.040368000001763,
+                "result": "tts\\chatterbox\\results\\chatterbox-multilingual_implicit_excited.wav"
+            },
+            {
+                "name": "implicit_serious",
+                "status": "PASSED",
+                "duration": 2.1197927000030177,
+                "result": "tts\\chatterbox\\results\\chatterbox-multilingual_implicit_serious.wav"
+            },
+            {
+                "name": "implicit_hesitant",
+                "status": "PASSED",
+                "duration": 1.8813085000001593,
+                "result": "tts\\chatterbox\\results\\chatterbox-multilingual_implicit_hesitant.wav"
+            },
+            {
+                "name": "explicit_laugh",
+                "status": "PASSED",
+                "duration": 2.4844869999942603,
+                "result": "tts\\chatterbox\\results\\chatterbox-multilingual_explicit_laugh.wav"
+            },
+            {
+                "name": "explicit_cough",
+                "status": "PASSED",
+                "duration": 4.381154200003948,
+                "result": "tts\\chatterbox\\results\\chatterbox-multilingual_explicit_cough.wav"
+            }
+        ]
+    },
+    {
+        "loadout": "tiny-gpt20-turbo",
+        "status": "PASSED",
+        "scenarios": [
+            {
+                "name": "standard",
+                "status": "PASSED",
+                "duration": 0.8209425999957602,
+                "result": "tts\\chatterbox\\results\\chatterbox-turbo_standard.wav"
+            },
+            {
+                "name": "polish",
+                "status": "PASSED",
+                "duration": 1.6925691000069492,
+                "result": "tts\\chatterbox\\results\\chatterbox-turbo_polish.wav"
+            },
+            {
+                "name": "french",
+                "status": "PASSED",
+                "duration": 1.0065948999981629,
+                "result": "tts\\chatterbox\\results\\chatterbox-turbo_french.wav"
+            },
+            {
+                "name": "chinese",
+                "status": "PASSED",
+                "duration": 3.4203762999968603,
+                "result": "tts\\chatterbox\\results\\chatterbox-turbo_chinese.wav"
+            },
+            {
+                "name": "implicit_excited",
+                "status": "PASSED",
+                "duration": 1.0170271999959368,
+                "result": "tts\\chatterbox\\results\\chatterbox-turbo_implicit_excited.wav"
+            },
+            {
+                "name": "implicit_serious",
+                "status": "PASSED",
+                "duration": 0.8841077999968547,
+                "result": "tts\\chatterbox\\results\\chatterbox-turbo_implicit_serious.wav"
+            },
+            {
+                "name": "implicit_hesitant",
+                "status": "PASSED",
+                "duration": 1.153406500001438,
+                "result": "tts\\chatterbox\\results\\chatterbox-turbo_implicit_hesitant.wav"
+            },
+            {
+                "name": "explicit_laugh",
+                "status": "PASSED",
+                "duration": 1.083149300000514,
+                "result": "tts\\chatterbox\\results\\chatterbox-turbo_explicit_laugh.wav"
+            },
+            {
+                "name": "explicit_cough",
+                "status": "PASSED",
+                "duration": 1.3162969999975758,
+                "result": "tts\\chatterbox\\results\\chatterbox-turbo_explicit_cough.wav"
+            }
+        ]
+    }
+]

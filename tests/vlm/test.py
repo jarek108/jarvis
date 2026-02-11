@@ -105,7 +105,6 @@ def run_test_suite(model_name):
             with open(file_path, "rb") as bf:
                 b64_frames = [base64.b64encode(bf.read()).decode('utf-8')]
         else:
-            print(f"🎬 Processing video '{s['file']}' (Sampling {s['max_frames']} frames)...")
             b64_frames = extract_frames(file_path, max_frames=s['max_frames'])
 
         if not b64_frames:
