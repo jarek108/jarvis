@@ -401,16 +401,24 @@ class JarvisApp(ctk.CTk):
         
         if self.controller.current_loadout != "None":
             path = os.path.join(self.controller.project_root, "tests", "loadouts", f"{self.controller.current_loadout}.yaml")
-            if os.path.exists(path):
-                with open(path, "r") as f:
-                    l = yaml.safe_load(f)
-                    active_llm = l.get('llm')
-                    active_ports.add(self.controller.cfg['ports']['s2s'])
-                    active_ports.add(self.controller.cfg['ports']['llm'])
-                    if l.get('stt'): active_ports.add(self.controller.cfg['stt_loadout'][l['stt'][0]])
-                    if l.get('tts'): active_ports.add(self.controller.cfg['tts_loadout'][l['tts'][0]])
-
-        # Create a sorted list of ports to maintain consistent UI order
+                    if os.path.exists(path):
+                        with open(path, "r") as f:
+                            l = yaml.safe_load(f)
+                            active_llm = l.get('llm')
+                            active_ports.add(self.controller.cfg['ports']['s2s'])
+                            active_ports.add(self.controller.cfg['ports']['llm'])
+                            
+                            # Handle both list and single string
+                            stt_val = l.get('stt')
+                            if stt_val:
+                                stt_id = stt_val[0] if isinstance(stt_val, list) else stt_val
+                                active_ports.add(self.controller.cfg['stt_loadout'][stt_id])
+                            
+                            tts_val = l.get('tts')
+                            if tts_val:
+                                tts_id = tts_val[0] if isinstance(tts_val, list) else tts_val
+                                active_ports.add(self.controller.cfg['tts_loadout'][tts_id])
+                    # Create a sorted list of ports to maintain consistent UI order
         sorted_ports = sorted(health.keys())
 
         for port in sorted_ports:

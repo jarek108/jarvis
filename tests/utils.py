@@ -186,7 +186,7 @@ class LifecycleManager:
         # 2. STT
         stt_list = self.loadout.get('stt', [])
         if stt_list and (domain == "stt" or self.full or domain == "s2s"):
-            stt_id = stt_list[0]
+            stt_id = stt_list[0] if isinstance(stt_list, list) else stt_list
             stt_port = self.cfg['stt_loadout'][stt_id]
             stt_script = os.path.join(self.project_root, "servers", "stt_server.py")
             cmd = [self.python_exe, stt_script, "--port", str(stt_port), "--model", stt_id]
@@ -203,7 +203,7 @@ class LifecycleManager:
         # 3. TTS
         tts_list = self.loadout.get('tts', [])
         if tts_list and (domain == "tts" or self.full or domain == "s2s"):
-            tts_id = tts_list[0]
+            tts_id = tts_list[0] if isinstance(tts_list, list) else tts_list
             tts_port = self.cfg['tts_loadout'][tts_id]
             tts_script = os.path.join(self.project_root, "servers", "tts_server.py")
             cmd = [self.python_exe, tts_script, "--port", str(tts_port), "--variant", tts_id]

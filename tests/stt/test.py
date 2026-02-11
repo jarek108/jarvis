@@ -100,11 +100,11 @@ if __name__ == "__main__":
         
     with open(loadout_path, "r") as f:
         l_data = yaml.safe_load(f)
-        stt_list = l_data.get('stt', [])
-        if not stt_list:
+        stt_val = l_data.get('stt', [])
+        if not stt_val:
             print(f"❌ ERROR: Loadout '{args.loadout}' defines no STT component.")
             sys.exit(1)
-        target_model = stt_list[0]
+        target_model = stt_val[0] if isinstance(stt_val, list) else stt_val
 
     run_test_lifecycle(
         domain="stt",

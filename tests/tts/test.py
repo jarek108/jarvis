@@ -88,11 +88,11 @@ if __name__ == "__main__":
         
     with open(loadout_path, "r") as f:
         l_data = yaml.safe_load(f)
-        tts_list = l_data.get('tts', [])
-        if not tts_list:
+        tts_val = l_data.get('tts', [])
+        if not tts_val:
             print(f"❌ ERROR: Loadout '{args.loadout}' defines no TTS component.")
             sys.exit(1)
-        target_variant = tts_list[0]
+        target_variant = tts_val[0] if isinstance(tts_val, list) else tts_val
 
     run_test_lifecycle(
         domain="tts",
