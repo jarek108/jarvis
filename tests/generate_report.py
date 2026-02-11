@@ -26,8 +26,8 @@ def generate_excel():
     project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     artifacts_dir = os.path.join(project_root, "tests", "artifacts")
     
-    # Add date to filename
-    date_str = time.strftime("%Y-%m-%d")
+    # Add date and time to filename
+    date_str = time.strftime("%Y-%m-%d_%H-%M-%S")
     file_name = f"Jarvis_Benchmark_Report_{date_str}.xlsx"
     output_path = os.path.join(artifacts_dir, file_name)
     

@@ -44,7 +44,7 @@ def run_test_suite(model_id, trim_length=80):
         test_modes = [
             {"mode": "implicit", "hint": None},
             {"mode": "explicit", "hint": target_lang},
-            {"mode": "misleading", "hint": "en"} if target_lang != "en" else None
+            {"mode": "misleading", "hint": "fr" if target_lang == "en" else "en"}
         ]
 
         for mode in test_modes:
