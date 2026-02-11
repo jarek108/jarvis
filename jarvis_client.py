@@ -262,7 +262,8 @@ class JarvisApp(ctk.CTk):
         
         ctk.CTkLabel(self.config_container, text="LOADOUT", font=ctk.CTkFont(size=11, weight="bold"), text_color=GRAY_COLOR).pack(anchor="w")
         self.loadout_var = ctk.StringVar(value=self.controller.current_loadout)
-        self.loadout_drop = ctk.CTkOptionMenu(self.config_container, values=list_all_loadouts(), variable=self.loadout_var, command=self.on_loadout_change, fg_color=GRAY_COLOR, button_color=GRAY_COLOR)
+        loadouts = ["None"] + list_all_loadouts()
+        self.loadout_drop = ctk.CTkOptionMenu(self.config_container, values=loadouts, variable=self.loadout_var, command=self.on_loadout_change, fg_color=GRAY_COLOR, button_color=GRAY_COLOR)
         self.loadout_drop.pack(pady=5, fill="x")
         self.edit_btn = ctk.CTkButton(self.config_container, text="EDIT YAML", width=80, height=24, fg_color=GRAY_COLOR, command=self.on_edit_yaml)
         self.edit_btn.pack(pady=2, anchor="e")
@@ -352,26 +353,40 @@ class JarvisApp(ctk.CTk):
         
         active_ports = set()
         active_llm = None
-        path = os.path.join(self.controller.project_root, "tests", "loadouts", f"{self.controller.current_loadout}.yaml")
-        if os.path.exists(path):
-            with open(path, "r") as f:
-                l = yaml.safe_load(f)
-                active_llm = l.get('llm')
-                active_ports.add(self.controller.cfg['ports']['s2s'])
-                active_ports.add(self.controller.cfg['ports']['llm'])
-                if l.get('stt'): active_ports.add(self.controller.cfg['stt_loadout'][l['stt'][0]])
-                if l.get('tts'): active_ports.add(self.controller.cfg['tts_loadout'][l['tts'][0]])
+        
+        if self.controller.current_loadout != "None":
+            path = os.path.join(self.controller.project_root, "tests", "loadouts", f"{self.controller.current_loadout}.yaml")
+            if os.path.exists(path):
+                with open(path, "r") as f:
+                    l = yaml.safe_load(f)
+                    active_llm = l.get('llm')
+                    active_ports.add(self.controller.cfg['ports']['s2s'])
+                    active_ports.add(self.controller.cfg['ports']['llm'])
+                    if l.get('stt'): active_ports.add(self.controller.cfg['stt_loadout'][l['stt'][0]])
+                    if l.get('tts'): active_ports.add(self.controller.cfg['tts_loadout'][l['tts'][0]])
 
-        for port, info in health.items():
+        # Create a sorted list of ports to maintain consistent UI order
+        sorted_ports = sorted(health.keys())
+
+        for port in sorted_ports:
+            info = health[port]
             status = info['status']
             is_active = port in active_ports
+            
+            # Logic:
+            # 1. If status is ON/STARTUP/BUSY, always show it.
+            # 2. If status is OFF, only show it if it's in the active loadout.
+            
             is_rogue = not is_active and status != "OFF"
             
+            # Special Ollama Check: Model mismatch is always rogue (Yellow)
             if info['label'] == "LLM" and status == "ON":
                 if active_llm and not any(active_llm in m for m in loaded_ollama):
                     is_rogue = True
 
-            if is_active or is_rogue:
+            should_show = (status != "OFF") or is_active
+
+            if should_show:
                 if port not in self.status_rows:
                     row = ctk.CTkFrame(self.status_frame, fg_color="transparent"); row.pack(fill="x", pady=1)
                     lbl = ctk.CTkLabel(row, text=info['label'][:15], font=ctk.CTkFont(size=10, weight="bold"), text_color=TEXT_COLOR); lbl.pack(side="left")
@@ -381,7 +396,9 @@ class JarvisApp(ctk.CTk):
                 
                 color = YELLOW_COLOR if is_rogue else (SUCCESS_COLOR if status == "ON" else YELLOW_COLOR if status == "STARTUP" else ERROR_COLOR if status == "UNHEALTHY" else GRAY_COLOR)
                 text = (info['info'] or "READY") if not is_rogue else f"ROGUE: {info['info'] or 'BUSY'}"
-                if info['label'] == "LLM" and is_rogue: text = f"WRONG MODEL: {loaded_ollama[0] if loaded_ollama else 'EMPTY'}"
+                if info['label'] == "LLM" and is_rogue: 
+                    model_name = loaded_ollama[0] if loaded_ollama else "EMPTY"
+                    text = f"WRONG MODEL: {model_name}"
                 
                 self.status_rows[port]["dot"].configure(text_color=color)
                 self.status_rows[port]["val"].configure(text=text, text_color=color if status != "OFF" else GRAY_COLOR)
