@@ -228,6 +228,8 @@ async def process_stream(
             stt_url = f"http://127.0.0.1:{stt_port}/transcribe"
             form = aiohttp.FormData()
             form.add_field('file', audio_data, filename='input.wav', content_type='audio/wav')
+            if language_id:
+                form.add_field('language', language_id)
             async with session.post(stt_url, data=form) as resp:
                 stt_result = await resp.json()
                 input_text = stt_result.get("text", "")
@@ -395,6 +397,8 @@ async def process_audio(
             stt_url = f"http://127.0.0.1:{stt_port}/transcribe"
             form = aiohttp.FormData()
             form.add_field('file', audio_data, filename='input.wav', content_type='audio/wav')
+            if language_id:
+                form.add_field('language', language_id)
             
             async with session.post(stt_url, data=form) as resp:
                 if resp.status != 200:
