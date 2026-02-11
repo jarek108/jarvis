@@ -6,6 +6,10 @@ import json
 import argparse
 import yaml
 import base64
+import av
+import numpy as np
+import io
+from PIL import Image
 
 # Allow importing utils from parent levels
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -14,9 +18,38 @@ from utils import report_llm_result, ensure_utf8_output, run_test_lifecycle, get
 # Ensure UTF-8 output
 ensure_utf8_output()
 
-def encode_image(image_path):
-    with open(image_path, "rb") as image_file:
-        return base64.b64encode(image_file.read()).decode('utf-8')
+def extract_frames(video_path, max_frames=8):
+    """Extracts evenly spaced frames from a video file using PyAV."""
+    frames = []
+    try:
+        container = av.open(video_path)
+        # Get total stream frames if available, else estimate
+        stream = container.streams.video[0]
+        
+        # We want to sample max_frames throughout the video
+        total_frames = stream.frames
+        if total_frames <= 0:
+            # Estimate from duration and rate
+            total_frames = int(stream.duration * stream.time_base * stream.average_rate)
+        
+        indices = np.linspace(0, total_frames - 1, max_frames, dtype=int)
+        
+        count = 0
+        for frame in container.decode(video=0):
+            if count in indices:
+                img = frame.to_image()
+                # Resize to save bandwidth/context
+                img.thumbnail((512, 512))
+                buffered = io.BytesIO()
+                img.save(buffered, format="JPEG")
+                frames.append(base64.b64encode(buffered.getvalue()).decode('utf-8'))
+            count += 1
+            if len(frames) >= max_frames:
+                break
+        container.close()
+    except Exception as e:
+        print(f"Error extracting frames from {video_path}: {e}")
+    return frames
 
 def run_test_suite(model_name):
     url = "http://127.0.0.1:11434/api/chat"
@@ -31,26 +64,33 @@ def run_test_suite(model_name):
     all_files = os.listdir(input_base)
     for f in all_files:
         ext = os.path.splitext(f)[1].lower()
+        name_base = os.path.splitext(f)[0]
+        txt_path = os.path.join(input_base, f"{name_base}.txt")
+        
+        if not os.path.exists(txt_path):
+            continue
+
         if ext in IMG_EXTS:
-            name_base = os.path.splitext(f)[0]
-            txt_path = os.path.join(input_base, f"{name_base}.txt")
-            
-            if os.path.exists(txt_path):
-                with open(txt_path, "r", encoding="utf-8") as tf:
-                    prompt = tf.read().strip()
-                scenarios.append({
-                    "name": name_base,
-                    "text": prompt,
-                    "file": f,
-                    "type": "image"
-                })
-            else:
-                print(f"WARN: File '{f}' found without matching .txt prompt. Skipping.")
+            with open(txt_path, "r", encoding="utf-8") as tf:
+                prompt = tf.read().strip()
+            scenarios.append({
+                "name": name_base,
+                "text": prompt,
+                "file": f,
+                "type": "image"
+            })
         elif ext in VID_EXTS:
-            print(f"INFO: Skipping video file '{f}' (Ollama direct video byte support pending verification).")
+            with open(txt_path, "r", encoding="utf-8") as tf:
+                prompt = tf.read().strip()
+            scenarios.append({
+                "name": name_base,
+                "text": prompt,
+                "file": f,
+                "type": "video"
+            })
 
     if not scenarios:
-        print(f"❌ ERROR: No valid VLM test cases (file + .txt) found in {input_base}")
+        print(f"❌ ERROR: No valid VLM test cases found in {input_base}")
         return
 
     # Audit Start
@@ -59,19 +99,23 @@ def run_test_suite(model_name):
     for s in scenarios:
         file_path = os.path.join(input_base, s['file'])
         
-        # Base64 encode the file
-        with open(file_path, "rb") as bf:
-            b64_data = base64.b64encode(bf.read()).decode('utf-8')
-        
-        # Determine payload key based on type
-        # Note: As of early 2026, many models in Ollama allow video bytes in the 'images' array 
-        # or a new 'videos' array. We will try 'images' first as Qwen2-VL often maps frames there.
+        if s['type'] == "image":
+            with open(file_path, "rb") as bf:
+                b64_frames = [base64.b64encode(bf.read()).decode('utf-8')]
+        else:
+            print(f"🎬 Processing video '{s['file']}'...")
+            b64_frames = extract_frames(file_path)
+
+        if not b64_frames:
+            report_llm_result({"name": s['name'], "status": "FAILED", "text": "Failed to load media frames."})
+            continue
+
         payload = {
             "model": model_name,
             "messages": [{
                 "role": "user", 
                 "content": s['text'],
-                "images": [b64_data]
+                "images": b64_frames
             }],
             "stream": True,
             "options": {"temperature": 0, "seed": 42}
