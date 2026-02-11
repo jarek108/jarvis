@@ -1,22 +1,27 @@
 import pandas as pd
 import json
 import os
-import glob
-import time
 import subprocess
 import argparse
 
 def load_json(path):
     if not os.path.exists(path): return []
     with open(path, "r", encoding="utf-8") as f:
-        return json.load(f)
+        try:
+            return json.load(f)
+        except:
+            return []
 
 def generate_excel():
     artifacts_dir = os.path.join(os.path.dirname(__file__), "artifacts")
     output_path = os.path.join(artifacts_dir, "Jarvis_Benchmark_Report.xlsx")
     
-    writer = pd.ExcelWriter(output_path, engine='openpyxl')
+    # Track if we actually have any data to write
+    has_any_data = False
     
+    # We use a temporary list to store valid dataframes and their sheet names
+    sheets = {}
+
     # 1. STT / TTS (Standard structure)
     for domain in ["stt", "tts"]:
         data = load_json(os.path.join(artifacts_dir, f"latest_{domain}.json"))
@@ -33,12 +38,15 @@ def generate_excel():
                     "Duration (s)": scenario.get('duration'),
                     "Result": scenario.get('result')
                 })
-        df = pd.DataFrame(rows)
-        df.to_excel(writer, sheet_name=domain.upper(), index=False)
+        if rows:
+            sheets[domain.upper()] = pd.DataFrame(rows)
+            has_any_data = True
 
-    # 2. LLMSTRUCTURE
-    data = load_json(os.path.join(artifacts_dir, "latest_llm.json"))
-    if data:
+    # 2. LLM / VLM
+    for domain in ["llm", "vlm"]:
+        data = load_json(os.path.join(artifacts_dir, f"latest_{domain}.json"))
+        if not data: continue
+        
         rows = []
         for entry in data:
             loadout = entry.get('loadout', 'unknown')
@@ -53,28 +61,11 @@ def generate_excel():
                     "VRAM Peak (GB)": vram,
                     "Text": s.get('text')
                 })
-        pd.DataFrame(rows).to_excel(writer, sheet_name="LLM", index=False)
+        if rows:
+            sheets[domain.upper()] = pd.DataFrame(rows)
+            has_any_data = True
 
-    # 3. VLM STRUCTURE
-    data = load_json(os.path.join(artifacts_dir, "latest_vlm.json"))
-    if data:
-        rows = []
-        for entry in data:
-            loadout = entry.get('loadout', 'unknown')
-            vram = entry.get('vram', {}).get('peak_gb', 0)
-            for s in entry.get('scenarios', []):
-                rows.append({
-                    "Loadout": loadout,
-                    "Scenario": s.get('name'),
-                    "Status": s.get('status'),
-                    "TTFT (s)": s.get('ttft'),
-                    "TPS": s.get('tps'),
-                    "VRAM Peak (GB)": vram,
-                    "Text": s.get('text')
-                })
-        pd.DataFrame(rows).to_excel(writer, sheet_name="VLM", index=False)
-
-    # 4. S2S STRUCTURE
+    # 3. S2S STRUCTURE
     data = load_json(os.path.join(artifacts_dir, "latest_s2s.json"))
     if data:
         rows = []
@@ -94,16 +85,25 @@ def generate_excel():
                     "TTS Time": s.get('tts_inf') or (m.get('tts', [0,0])[1] - m.get('tts', [0,0])[0]),
                     "VRAM Peak (GB)": vram
                 })
-        pd.DataFrame(rows).to_excel(writer, sheet_name="S2S", index=False)
+        if rows:
+            sheets["S2S"] = pd.DataFrame(rows)
+            has_any_data = True
 
-    writer.close()
+    if not has_any_data:
+        print("⚠️ No artifact data found. Excel generation skipped.")
+        return None
+
+    with pd.ExcelWriter(output_path, engine='openpyxl') as writer:
+        for name, df in sheets.items():
+            df.to_excel(writer, sheet_name=name, index=False)
+            
     print(f"📊 Excel Report Generated: {output_path}")
     return output_path
 
 def upload_rclone(file_path):
+    if not file_path or not os.path.exists(file_path): return
     print(f"☁️ Uploading to GDrive via rclone...")
     try:
-        # We assume a remote named 'gdrive' exists
         cmd = ["rclone", "copy", file_path, "gdrive:Jarvis_Reports", "-v"]
         subprocess.run(cmd, check=True)
         print("✅ Upload successful!")
@@ -116,5 +116,5 @@ if __name__ == "__main__":
     args = parser.parse_args()
     
     path = generate_excel()
-    if args.upload:
+    if args.upload and path:
         upload_rclone(path)

@@ -546,3 +546,17 @@ def save_artifact(domain, data):
     with open(file_path, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=4)
     print(f"✅ Artifact saved: {os.path.relpath(file_path, project_root)}")
+
+def trigger_report_generation(upload=True):
+    """Invokes the report generator and optionally uploads to cloud."""
+    print("\n" + "-"*40)
+    print("🔄 TRIGGERING AUTO-REPORT GENERATION...")
+    try:
+        # Import dynamically to avoid top-level dependencies in non-reporting scripts
+        from generate_report import generate_excel, upload_rclone
+        path = generate_excel()
+        if upload and path:
+            upload_rclone(path)
+    except Exception as e:
+        print(f"⚠️ Auto-report failed: {e}")
+    print("-" * 40 + "\n")

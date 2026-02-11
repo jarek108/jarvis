@@ -139,6 +139,11 @@ def run_s2s_suite():
     print(f"Total S2S Suite Time: {time.perf_counter() - total_start:.2f}s\n")
     
     save_artifact("s2s", suite_results)
+    trigger_report_generation(upload=upload)
 
 if __name__ == "__main__":
-    run_s2s_suite()
+    import argparse
+    parser = argparse.ArgumentParser(description="S2S Extensive Comparison")
+    parser.add_argument("--local", action="store_true", help="Skip cloud upload")
+    args = parser.parse_args()
+    run_s2s_suite(upload=not args.local)

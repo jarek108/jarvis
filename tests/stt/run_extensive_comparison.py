@@ -6,9 +6,9 @@ import json
 
 # Allow importing utils from root
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from utils import format_status, CYAN, BOLD, RESET, LINE_LEN, RED, list_all_loadouts, save_artifact
+from utils import format_status, CYAN, BOLD, RESET, LINE_LEN, RED, list_all_loadouts, save_artifact, trigger_report_generation
 
-def run_stt_comparison():
+def run_stt_comparison(upload=True):
     base_dir = os.path.dirname(os.path.abspath(__file__))
     loadouts = list_all_loadouts()
     
@@ -29,7 +29,7 @@ def run_stt_comparison():
         
         try:
             # We use --purge to ensure we get clean results for each model
-            process = subprocess.run([python_exe, script_path, "--loadout", lid, "--purge"], env=env, capture_output=True, text=True, encoding='utf-8')
+            process = subprocess.run([python_exe, script_path, "--loadout", lid, "--purge", "--benchmark-mode"], env=env, capture_output=True, text=True, encoding='utf-8')
             
             scenarios = []
             for line in process.stdout.splitlines():
@@ -79,6 +79,10 @@ def run_stt_comparison():
     print(f"Total STT Suite Time: {time.perf_counter() - total_start:.2f}s\n")
     
     save_artifact("stt", suite_results)
+    trigger_report_generation(upload=upload)
 
 if __name__ == "__main__":
-    run_stt_comparison()
+    parser = argparse.ArgumentParser(description="STT Extensive Comparison")
+    parser.add_argument("--local", action="store_true", help="Skip cloud upload")
+    args = parser.parse_args()
+    run_stt_comparison(upload=not args.local)

@@ -102,6 +102,10 @@ def run_vlm_comparison():
     print(f"Total VLM Comparison Time: {time.perf_counter() - total_start:.2f}s\n")
     
     save_artifact("vlm", suite_results)
+    trigger_report_generation(upload=upload)
 
 if __name__ == "__main__":
-    run_vlm_comparison()
+    parser = argparse.ArgumentParser(description="VLM Extensive Comparison")
+    parser.add_argument("--local", action="store_true", help="Skip cloud upload")
+    args = parser.parse_args()
+    run_vlm_comparison(upload=not args.local)

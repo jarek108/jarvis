@@ -6,9 +6,9 @@ import json
 
 # Allow importing utils from parent
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from utils import format_status, CYAN, GREEN, RED, BOLD, RESET, LINE_LEN, list_all_loadouts, save_artifact
+from utils import format_status, CYAN, GREEN, RED, BOLD, RESET, LINE_LEN, list_all_loadouts, save_artifact, trigger_report_generation
 
-def run_llm_comparison():
+def run_llm_comparison(upload=True):
     base_dir = os.path.dirname(os.path.abspath(__file__))
     loadouts = list_all_loadouts()
     
@@ -29,7 +29,7 @@ def run_llm_comparison():
         script_path = os.path.join(base_dir, "test.py")
         
         try:
-            process = subprocess.run([python_exe, script_path, "--loadout", lid, "--purge"], env=env, capture_output=True, text=True, encoding='utf-8')
+            process = subprocess.run([python_exe, script_path, "--loadout", lid, "--purge", "--benchmark-mode"], env=env, capture_output=True, text=True, encoding='utf-8')
             
             scenarios = []
             vram_audit = {}
@@ -88,6 +88,11 @@ def run_llm_comparison():
     print(f"Total Comparison Time: {time.perf_counter() - total_start:.2f}s\n")
     
     save_artifact("llm", suite_results)
+    trigger_report_generation(upload=upload)
 
 if __name__ == "__main__":
-    run_llm_comparison()
+    import argparse
+    parser = argparse.ArgumentParser(description="LLM Extensive Comparison")
+    parser.add_argument("--local", action="store_true", help="Skip cloud upload")
+    args = parser.parse_args()
+    run_llm_comparison(upload=not args.local)
