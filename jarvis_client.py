@@ -116,6 +116,8 @@ class JarvisController:
         self.selected_lang = "None"
         self.interaction_mode = "HOLD"
         self.is_recording = False
+        self.is_playing = False
+        self.interrupt_request = False
         self.server_process = None
         
         # Debounce / Slip protection
@@ -227,6 +229,11 @@ class JarvisController:
         self.ui_queue.put({"type": "log", "msg": "Thinking...", "tag": "system"})
         threading.Thread(target=self._send_request, args=(audio_data,), daemon=True).start()
 
+    def interrupt(self):
+        if self.is_playing:
+            self.interrupt_request = True
+            self.ui_queue.put({"type": "log", "msg": "Interrupting playback...", "tag": "system"})
+
     def _send_request(self, audio_data):
         buf = io.BytesIO()
         with wave.open(buf, 'wb') as wf:
@@ -244,10 +251,13 @@ class JarvisController:
                         if isinstance(err_json, dict): err_msg = err_json.get('detail', err_msg)
                     except: pass
                     self.ui_queue.put({"type": "log", "msg": f"Server Error ({resp.status_code}): {err_msg}", "tag": "system"}); return
+                
+                self.is_playing = True
+                self.interrupt_request = False
                 audio_stream = sd.RawOutputStream(samplerate=24000, blocksize=1024, channels=1, dtype='int16')
                 audio_stream.start()
                 stream = resp.raw
-                while True:
+                while not self.interrupt_request:
                     header = stream.read(5)
                     if not header or len(header) < 5: break
                     type_char = chr(header[0])
@@ -257,12 +267,19 @@ class JarvisController:
                         data_json = json.loads(payload.decode())
                         timestamped_msg = f"({data_json.get('start', 0.0):.2f}s) {data_json['text']} ({data_json.get('end', 0.0):.2f}s)"
                         self.ui_queue.put({"type": "log", "msg": timestamped_msg, "tag": data_json['role']})
-                    elif type_char == 'A': audio_stream.write(payload)
+                    elif type_char == 'A': 
+                        if not self.interrupt_request:
+                            audio_stream.write(payload)
                     elif type_char == 'M':
                         m = json.loads(payload.decode())
                         self.ui_queue.put({"type": "telemetry", "metrics": m, "total": time.perf_counter() - start_time}); break
+                
                 audio_stream.stop(); audio_stream.close()
-        except Exception as e: self.ui_queue.put({"type": "log", "msg": f"Pipeline Error: {e}", "tag": "system"})
+                self.is_playing = False
+                self.interrupt_request = False
+        except Exception as e: 
+            self.ui_queue.put({"type": "log", "msg": f"Pipeline Error: {e}", "tag": "system"})
+            self.is_playing = False
 
 class JarvisApp(ctk.CTk):
     def __init__(self):
@@ -323,8 +340,15 @@ class JarvisApp(ctk.CTk):
         self.console.tag_config("user", foreground=ACCENT_COLOR); self.console.tag_config("jarvis", foreground=SUCCESS_COLOR); self.console.tag_config("system", foreground=GRAY_COLOR)
         self.interaction_frame = ctk.CTkFrame(self, fg_color="transparent")
         self.interaction_frame.grid(row=2, column=1, padx=20, pady=20, sticky="nsew")
+        
         self.talk_btn = ctk.CTkButton(self.interaction_frame, text="HOLD TO TALK", height=80, corner_radius=40, fg_color=GRAY_COLOR, font=ctk.CTkFont(size=18, weight="bold"))
         self.talk_btn.pack(side="left", expand=True, fill="both", padx=(0, 10))
+        
+        self.stop_btn = ctk.CTkButton(self.interaction_frame, text="STOP", width=100, height=80, corner_radius=40, 
+                                     fg_color="#331111", text_color=ERROR_COLOR, border_width=1, border_color=ERROR_COLOR,
+                                     font=ctk.CTkFont(size=14, weight="bold"), command=self.controller.interrupt)
+        self.stop_btn.pack(side="left", padx=(0, 10))
+
         self.talk_btn.bind("<Button-1>", self.on_press); self.talk_btn.bind("<ButtonRelease-1>", self.on_release)
         self.bind("<KeyPress-space>", self.on_press); self.bind("<KeyRelease-space>", self.on_release)
         self.vu_canvas = ctk.CTkCanvas(self.interaction_frame, width=20, height=80, bg="#080C14", highlightthickness=0); self.vu_canvas.pack(side="right")
@@ -435,11 +459,26 @@ class JarvisApp(ctk.CTk):
                     if row_cache["kill_btn"].cget("text") != "💀": row_cache["kill_btn"].configure(state="normal", text="💀")
             else:
                 if port in self.status_rows: self.status_rows[port]["frame"].destroy(); del self.status_rows[port]
-        s2s_on = health.get(self.controller.cfg['ports']['s2s'], {}).get('status') == "ON"
+        # Update button availability
+        all_ready = len(active_ports) > 0
+        for port in active_ports:
+            if health.get(port, {}).get('status') != "ON":
+                all_ready = False
+                break
+
         if not self.controller.is_recording:
-            target_text = f"{self.controller.interaction_mode} TO TALK" if s2s_on else "SYSTEM OFFLINE"
-            if self.talk_btn.cget("text") != target_text:
-                self.talk_btn.configure(state="normal" if s2s_on else "disabled", fg_color=ACCENT_COLOR if s2s_on else GRAY_COLOR, text=target_text)
+            target_text = f"{self.controller.interaction_mode} TO TALK" if all_ready else "SYSTEM OFFLINE"
+            btn_state = "normal" if all_ready else "disabled"
+            btn_color = ACCENT_COLOR if all_ready else GRAY_COLOR
+            
+            if self.talk_btn.cget("text") != target_text or self.talk_btn.cget("state") != btn_state:
+                self.talk_btn.configure(state=btn_state, fg_color=btn_color, text=target_text)
+        
+        # STOP button only enabled when playing
+        stop_state = "normal" if self.controller.is_playing else "disabled"
+        if self.stop_btn.cget("state") != stop_state:
+            self.stop_btn.configure(state=stop_state)
+
         self.after(1000, self.poll_status)
 
 if __name__ == "__main__":
