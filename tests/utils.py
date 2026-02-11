@@ -54,18 +54,40 @@ def is_port_in_use(port: int) -> bool:
         return s.connect_ex(('127.0.0.1', port)) == 0
 
 def get_service_status(port: int):
-    if not is_port_in_use(port): return "OFF"
+    if not is_port_in_use(port): return "OFF", None
     try:
         url = f"http://127.0.0.1:{port}/health"
         if port == 11434: url = f"http://127.0.0.1:{port}/api/tags"
         response = requests.get(url, timeout=2)
         if response.status_code == 200:
-            return "BUSY" if response.json().get("status") == "busy" else "ON"
+            data = response.json()
+            if port == 11434:
+                return "ON", "Ollama Core"
+            return ("BUSY" if data.get("status") == "busy" else "ON"), data.get("model") or data.get("variant") or "Ready"
         elif response.status_code == 503 and response.json().get("status") == "STARTUP":
-            return "STARTUP"
-        return "UNHEALTHY"
+            return "STARTUP", "Loading..."
+        return "UNHEALTHY", None
     except:
-        return "UNHEALTHY"
+        return "UNHEALTHY", None
+
+def get_system_health():
+    """Returns a simplified map of port -> status for basic checks."""
+    cfg = load_config()
+    health = {}
+    
+    # We check the standard ports defined in config
+    ports_to_check = {
+        cfg['ports']['llm']: "LLM",
+        cfg['ports']['s2s']: "S2S"
+    }
+    # Add all STT/TTS ports from config
+    for name, port in cfg['stt_loadout'].items(): ports_to_check[port] = f"STT-{name}"
+    for name, port in cfg['tts_loadout'].items(): ports_to_check[port] = f"TTS-{name}"
+    
+    for port, label in ports_to_check.items():
+        status, info = get_service_status(port)
+        health[port] = {"status": status, "info": info, "label": label}
+    return health
 
 def start_server(cmd, loud=False):
     flags = subprocess.CREATE_NEW_CONSOLE if loud else (0x08000000 if os.name == 'nt' else 0)
@@ -76,7 +98,8 @@ def start_server(cmd, loud=False):
 def wait_for_port(port: int, timeout: int = 60, process=None) -> bool:
     start_time = time.time()
     while time.time() - start_time < timeout:
-        if get_service_status(port) == "ON": return True
+        status, info = get_service_status(port)
+        if status == "ON": return True
         if process and process.poll() is not None: return False
         time.sleep(1)
     return False

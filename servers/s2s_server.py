@@ -236,6 +236,9 @@ async def process_stream(
             return Response(status_code=400, content="No speech detected")
 
         async def audio_generator():
+            def frame(type_char, data):
+                return type_char.encode() + len(data).to_bytes(4, 'little') + data
+
             # Pipelined metrics (relative to total_start)
             m = {
                 "stt": [0, 0],
@@ -247,6 +250,9 @@ async def process_stream(
                 "tts_chunks": []  # [{text, end}]
             }
             
+            # 1. Send STT text immediately
+            yield frame('T', json.dumps({"role": "user", "text": input_text}).encode())
+
             # STT is buffered, so first/last output is the same timestamp
             stt_ready_time = round(time.perf_counter() - total_start, 2)
             m["stt"] = [stt_ready_time, stt_ready_time]
@@ -324,6 +330,9 @@ async def process_stream(
                         sentence = await queue.get()
                         if sentence is None: break
                         
+                        # 2. Yield LLM text chunk
+                        yield frame('T', json.dumps({"role": "jarvis", "text": sentence}).encode())
+
                         # 3. TTS for sentence
                         tts_url = f"http://127.0.0.1:{tts_port}/tts"
                         tts_payload = {"text": sentence, "voice": "default", "language_id": language_id or "en"}
@@ -337,13 +346,14 @@ async def process_stream(
                                 last_audio_time = time.perf_counter()
                                 # Mark TTS chunk delivery
                                 m["tts_chunks"].append({"text": sentence, "end": round(last_audio_time - total_start, 2)})
-                                yield audio_chunk[44:]
+                                # 4. Yield Audio frame (skipping 44-byte WAV header)
+                                yield frame('A', audio_chunk[44:])
             finally:
                 # End of stream metrics
                 m["tts"][1] = round((last_audio_time or time.perf_counter()) - total_start, 2)
                 await producer_task
-                # Add a clear boundary and metrics JSON
-                yield b"\nMETRICS_JSON:" + json.dumps(m).encode()
+                # 5. Yield Metrics frame
+                yield frame('M', json.dumps(m).encode())
 
         # Measure STT duration before stream starts
         stt_dur = time.perf_counter() - total_start

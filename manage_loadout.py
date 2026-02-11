@@ -60,33 +60,21 @@ def print_status():
     print(f"{'Service':<30} | {'Port':<8} | {'Status':<15} | {'Details'}")
     print("-" * LINE_LEN)
     
-    for name, info in health.items():
+    for port, info in health.items():
         status = info['status']
+        name = info['label']
+        detail_val = info['info']
+        
         color = GRAY
         if status == "ON": color = GREEN
         elif status == "UNHEALTHY": color = RED
         elif status == "BUSY": color = YELLOW
         
-        details = ""
-        if name == "Ollama":
-            if status == "ON":
-                resident = info.get('resident_models', [])
-                downloaded = info.get('downloaded_models', [])
-                
-                if resident:
-                    details = f"{BOLD}Resident (VRAM):{RESET} {', '.join(resident)}"
-                else:
-                    details = "Ready (VRAM Empty)"
-                
-                if downloaded:
-                    details += f" | {GRAY}Downloaded: {len(downloaded)}{RESET}"
-                
-                if not info['model_installed']:
-                    details += f" | {RED}Active Model Missing{RESET}"
-            else:
-                details = "Ollama Service Offline"
+        details = detail_val or ""
+        if name == "LLM" and status == "ON":
+            details = f"{BOLD}Ollama Resident:{RESET} {detail_val}"
             
-        print(f"{name:<30} | {info['port']:<8} | {color}{status:<15}{RESET} | {details}")
+        print(f"{name:<30} | {port:<8} | {color}{status:<15}{RESET} | {details}")
     
     print("="*LINE_LEN + "\n")
 

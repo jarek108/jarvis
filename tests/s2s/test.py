@@ -47,20 +47,42 @@ def run_test_suite(loadout_id, stream=False, trim_length=80):
                     
                     if stream:
                         response = requests.post(url, files=files, data=data, stream=True)
-                        raw_content = b""
-                        for chunk in response.iter_content(chunk_size=4096):
-                            raw_content += chunk
+                        if response.status_code != 200:
+                            res_obj = {"name": s['name'], "status": "FAILED", "duration": time.perf_counter() - start_time, "result": f"HTTP {response.status_code}", "mode": "STREAM"}
+                            report_scenario_result(res_obj)
+                            continue
+
+                        audio_content = b""
+                        metrics = {}
+                        llm_text = ""
+                        stt_text = ""
+                        
+                        # PROTOCOL PARSER
+                        # [TYPE(1b)][LEN(4b)][DATA(LENb)]
+                        stream_reader = response.raw
+                        while True:
+                            header = stream_reader.read(5)
+                            if not header or len(header) < 5:
+                                break
+                            
+                            type_char = chr(header[0])
+                            length = int.from_bytes(header[1:], 'little')
+                            payload = stream_reader.read(length)
+                            
+                            if type_char == 'T': # Text Frame
+                                frame_data = json.loads(payload.decode())
+                                if frame_data['role'] == "user":
+                                    stt_text = frame_data['text']
+                                else:
+                                    llm_text += " " + frame_data['text']
+                            elif type_char == 'A': # Audio Frame
+                                audio_content += payload
+                            elif type_char == 'M': # Metrics Frame
+                                metrics = json.loads(payload.decode())
+                                break
                         
                         duration = time.perf_counter() - start_time
                         
-                        metrics = {}
-                        audio_content = raw_content
-                        if b"\nMETRICS_JSON:" in raw_content:
-                            parts = raw_content.split(b"\nMETRICS_JSON:")
-                            audio_content = parts[0]
-                            try: metrics = json.loads(parts[1].decode())
-                            except: pass
-
                         if response.status_code == 200:
                             with open(output_path, "wb") as f_out:
                                 f_out.write(audio_content)

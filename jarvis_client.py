@@ -13,12 +13,15 @@ import customtkinter as ctk
 from PIL import Image
 import io
 import re
+import queue
+import yaml
+from loguru import logger
 
 # Add project root to sys.path
 script_dir = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(script_dir)
 
-from tests.utils import get_service_status, kill_process_on_port, load_config
+from tests.utils import get_service_status, kill_process_on_port, load_config, list_all_loadouts
 
 # --- UI CONSTANTS ---
 BG_COLOR = "#0B0F19"
@@ -31,315 +34,415 @@ YELLOW_COLOR = "#FFD700"
 
 ctk.set_appearance_mode("dark")
 
-class JarvisClient(ctk.CTk):
-    def __init__(self):
-        super().__init__()
+class RingBuffer:
+    def __init__(self, size_seconds, rate=16000):
+        self.size = size_seconds * rate
+        self.buffer = np.zeros(self.size, dtype=np.int16)
+        self.ptr = 0
 
-        self.title("JARVIS SYSTEM CONSOLE")
-        self.geometry("1000(800")
-        self.configure(fg_color=BG_COLOR)
+    def extend(self, data):
+        data_len = len(data)
+        if data_len > self.size:
+            data = data[-self.size:]
+            data_len = self.size
+        
+        end_space = self.size - self.ptr
+        if data_len <= end_space:
+            self.buffer[self.ptr:self.ptr+data_len] = data
+        else:
+            self.buffer[self.ptr:] = data[:end_space]
+            self.buffer[:data_len-end_space] = data[end_space:]
+        
+        self.ptr = (self.ptr + data_len) % self.size
 
-        # State
-        self.server_process = None
-        self.is_recording = False
-        self.audio_frames = []
-        self.stream = None
+    def get_last(self, seconds, rate=16000):
+        length = int(seconds * rate)
+        if length > self.size: length = self.size
+        
+        if self.ptr >= length:
+            return self.buffer[self.ptr-length:self.ptr].copy()
+        else:
+            part1 = self.buffer[self.size-(length-self.ptr):]
+            part2 = self.buffer[:self.ptr]
+            return np.concatenate([part1, part2])
+
+class AudioEngine:
+    def __init__(self, rate=16000, chunk=1024):
+        self.rate = rate
+        self.chunk = chunk
         self.p = pyaudio.PyAudio()
+        self.ring_buffer = RingBuffer(10, rate) # 10s ring buffer
+        self.is_running = True
+        self.recording_frames = []
+        self.is_capturing = False
+        self.vu_level = 0
+        
+        self.stream = self.p.open(
+            format=pyaudio.paInt16,
+            channels=1,
+            rate=self.rate,
+            input=True,
+            frames_per_buffer=self.chunk
+        )
+        
+        threading.Thread(target=self._background_listen, daemon=True).start()
+
+    def _background_listen(self):
+        while self.is_running:
+            try:
+                data = self.stream.read(self.chunk, exception_on_overflow=False)
+                samples = np.frombuffer(data, dtype=np.int16)
+                self.ring_buffer.extend(samples)
+                
+                # Calculate VU level (RMS)
+                rms = np.sqrt(np.mean(samples.astype(float)**2))
+                self.vu_level = min(1.0, rms / 3000.0) # Normalized 0-1
+                
+                if self.is_capturing:
+                    self.recording_frames.append(data)
+            except:
+                time.sleep(0.1)
+
+    def start_capture(self):
+        # Grab 0.5s pre-roll
+        pre_roll = self.ring_buffer.get_last(0.5)
+        self.recording_frames = [pre_roll.tobytes()]
+        self.is_capturing = True
+
+    def stop_capture(self):
+        self.is_capturing = False
+        return b''.join(self.recording_frames)
+
+    def shutdown(self):
+        self.is_running = False
+        self.stream.stop_stream()
+        self.stream.close()
+        self.p.terminate()
+
+class JarvisController:
+    def __init__(self, ui_queue):
+        self.ui_queue = ui_queue
         self.cfg = load_config()
+        self.audio = AudioEngine()
+        self.project_root = os.path.dirname(os.path.abspath(__file__))
         self.s2s_port = self.cfg['ports']['s2s']
         self.s2s_url = f"http://127.0.0.1:{self.s2s_port}"
         
-        # Configuration
-        self.streaming_mode = ctk.BooleanVar(value=True)
+        self.current_loadout = "base-qwen30-multi"
+        self.selected_lang = "en"
+        self.interaction_mode = "HOLD" # "HOLD" or "TOGGLE"
+        self.is_recording = False
+        self.server_process = None
 
-        self.setup_ui()
-        self.update_status_loop()
-
-    def setup_ui(self):
-        # Grid layout
-        self.grid_columnconfigure(1, weight=1)
-        self.grid_rowconfigure(1, weight=1)
-
-        # --- Sidebar (Infrastructure) ---
-        self.sidebar = ctk.CTkFrame(self, width=250, corner_radius=0, fg_color="#080C14")
-        self.sidebar.grid(row=0, column=0, rowspan=3, sticky="nsew")
-        
-        self.logo_label = ctk.CTkLabel(self.sidebar, text="⚛️ JARVIS", font=ctk.CTkFont(size=24, weight="bold"), text_color=ACCENT_COLOR)
-        self.logo_label.pack(pady=(20, 10))
-        
-        self.sub_label = ctk.CTkLabel(self.sidebar, text="BLACKWELL CORE V1", font=ctk.CTkFont(size=10), text_color=GRAY_COLOR)
-        self.sub_label.pack(pady=(0, 20))
-
-        # Tabs for Sidebar
-        self.sidebar_tabs = ctk.CTkTabview(self.sidebar, fg_color="transparent", text_color=TEXT_COLOR, segmented_button_selected_color=ACCENT_COLOR)
-        self.sidebar_tabs.pack(fill="both", expand=True, padx=10)
-        
-        self.tab_status = self.sidebar_tabs.add("STATUS")
-        self.tab_config = self.sidebar_tabs.add("CONFIG")
-
-        # --- STATUS TAB ---
-        self.init_btn = ctk.CTkButton(self.tab_status, text="INITIALIZE SYSTEM", command=self.toggle_server, 
-                                     fg_color=GRAY_COLOR, hover_color=ACCENT_COLOR, text_color=TEXT_COLOR)
-        self.init_btn.pack(pady=10, fill="x")
-
-        self.status_frame = ctk.CTkFrame(self.tab_status, fg_color="transparent")
-        self.status_frame.pack(pady=10, fill="x")
-        
-        self.stt_status = self.create_status_row(self.status_frame, "🎙️ STT ENGINE")
-        self.tts_status = self.create_status_row(self.status_frame, "🔊 TTS ENGINE")
-        self.llm_status = self.create_status_row(self.status_frame, "🧠 OLLAMA CORE")
-        self.s2s_status = self.create_status_row(self.status_frame, "✨ S2S PIPELINE")
-
-        # --- CONFIG TAB ---
-        self.stream_switch = ctk.CTkSwitch(self.tab_config, text="Streaming Mode", variable=self.streaming_mode, 
-                                          progress_color=SUCCESS_COLOR, text_color=TEXT_COLOR)
-        self.stream_switch.pack(pady=20, padx=20, anchor="w")
-        
-        self.benchmark_mode = ctk.BooleanVar(value=False)
-        self.bench_switch = ctk.CTkSwitch(self.tab_config, text="Benchmark Mode", variable=self.benchmark_mode, 
-                                         progress_color=YELLOW_COLOR, text_color=TEXT_COLOR)
-        self.bench_switch.pack(pady=10, padx=20, anchor="w")
-
-        # --- Main Area ---
-        # Top Telemetry
-        self.telemetry_frame = ctk.CTkFrame(self, fg_color="#0D121F", height=60, corner_radius=10)
-        self.telemetry_frame.grid(row=0, column=1, padx=20, pady=(20, 10), sticky="nsew")
-        
-        self.tel_stt = self.create_tel_item(self.telemetry_frame, "STT", "0.00s")
-        self.tel_llm = self.create_tel_item(self.telemetry_frame, "LLM", "0.00s")
-        self.tel_tts = self.create_tel_item(self.telemetry_frame, "TTS", "0.00s")
-        self.tel_tot = self.create_tel_item(self.telemetry_frame, "TOTAL", "0.00s", last=True)
-
-        # Chat/Terminal Area
-        self.chat_display = ctk.CTkTextbox(self, fg_color="#080C14", border_color=GRAY_COLOR, border_width=1, corner_radius=10, font=ctk.CTkFont(family="Consolas", size=13))
-        self.chat_display.grid(row=1, column=1, padx=20, pady=10, sticky="nsew")
-        self.chat_display.tag_config("user", foreground=ACCENT_COLOR)
-        self.chat_display.tag_config("jarvis", foreground=SUCCESS_COLOR)
-        self.chat_display.tag_config("system", foreground=GRAY_COLOR)
-
-        # Bottom Interaction
-        self.input_frame = ctk.CTkFrame(self, fg_color="transparent")
-        self.input_frame.grid(row=2, column=1, padx=20, pady=20, sticky="nsew")
-        
-        self.talk_btn = ctk.CTkButton(self.input_frame, text="HOLD TO TALK", height=60, corner_radius=30,
-                                     fg_color=GRAY_COLOR, hover_color="#1E2433", 
-                                     font=ctk.CTkFont(size=16, weight="bold"))
-        self.talk_btn.pack(side="left", expand=True, fill="x", padx=(0, 10))
-        self.talk_btn.bind("<Button-1>", self.start_recording)
-        self.talk_btn.bind("<ButtonRelease-1>", self.stop_recording)
-        
-        # Add spacebar support
-        self.bind("<KeyPress-space>", self.start_recording)
-        self.bind("<KeyRelease-space>", self.stop_recording)
-
-    def create_status_row(self, parent, label):
-        row = ctk.CTkFrame(parent, fg_color="transparent")
-        row.pack(fill="x", pady=5)
-        lbl = ctk.CTkLabel(row, text=label, font=ctk.CTkFont(size=11), text_color=TEXT_COLOR)
-        lbl.pack(side="left")
-        dot = ctk.CTkLabel(row, text="●", text_color=GRAY_COLOR, font=ctk.CTkFont(size=14))
-        dot.pack(side="right")
-        return dot
-
-    def create_tel_item(self, parent, label, val, last=False):
-        f = ctk.CTkFrame(parent, fg_color="transparent")
-        f.pack(side="left", expand=True)
-        l1 = ctk.CTkLabel(f, text=label, font=ctk.CTkFont(size=10, weight="bold"), text_color=GRAY_COLOR)
-        l1.pack()
-        l2 = ctk.CTkLabel(f, text=val, font=ctk.CTkFont(family="Consolas", size=14), text_color=ACCENT_COLOR)
-        l2.pack()
-        return l2
-
-    def log(self, msg, tag="system"):
-        self.chat_display.insert("end", f"[{time.strftime('%H:%M:%S')}] ", "system")
-        prefix = "YOU > " if tag == "user" else "JARVIS > " if tag == "jarvis" else "SYS  > "
-        self.chat_display.insert("end", f"{prefix}{msg}\n", tag)
-        self.chat_display.see("end")
-
-    def toggle_server(self):
+    def toggle_system(self):
         if self.server_process:
-            self.log("Shutting down system...")
+            self.ui_queue.put({"type": "log", "msg": "Shutting down system...", "tag": "system"})
             kill_process_on_port(self.s2s_port)
             self.server_process = None
-            self.init_btn.configure(text="INITIALIZE SYSTEM", fg_color=GRAY_COLOR)
+            return False
         else:
-            self.log("Starting Blackwell Core...")
-            self.init_btn.configure(text="STOP SYSTEM", fg_color=ERROR_COLOR)
-            threading.Thread(target=self.run_server, daemon=True).start()
+            self.ui_queue.put({"type": "log", "msg": f"Starting Loadout: {self.current_loadout}", "tag": "system"})
+            threading.Thread(target=self._run_server, daemon=True).start()
+            return True
 
-    def run_server(self):
-        project_root = os.path.dirname(os.path.abspath(__file__))
+    def _run_server(self):
         python_exe = sys.executable
-        server_script = os.path.join(project_root, "servers", "s2s_server.py")
+        server_script = os.path.join(self.project_root, "servers", "s2s_server.py")
+        cmd = [python_exe, server_script, "--loadout", self.current_loadout]
         
-        cmd = [python_exe, server_script, "--loadout", "default"]
-        if self.benchmark_mode.get(): cmd.append("--benchmark-mode")
-
         self.server_process = subprocess.Popen(
             cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, 
             text=True, encoding='utf-8', bufsize=1,
             creationflags=0x08000000 if os.name == 'nt' else 0
         )
         
-        log_pattern = re.compile(r".*?[A-Z]+\s+\| (.*)$")
-        ansi_escape = re.compile(r'\x1B(?:[@-Z\-_]|\[[0-?]*[ -/]*[@-~])')
-
         for line in iter(self.server_process.stdout.readline, ''):
             if line:
-                clean = ansi_escape.sub('', line.strip())
-                match = log_pattern.match(clean)
-                msg = match.group(1) if match else clean
-                if "INFO:" in msg: continue
-                self.log(msg, "system")
+                self.ui_queue.put({"type": "log", "msg": line.strip(), "tag": "system"})
         self.server_process.stdout.close()
 
-    def update_status_loop(self):
-        try:
-            # Quick check of ports from config
-            status_map = {
-                self.s2s_port: self.s2s_status,
-                8011: self.stt_status,
-                8021: self.tts_status,
-                11434: self.llm_status
-            }
-            
-            for port, dot in status_map.items():
-                s = get_service_status(port)
-                color = SUCCESS_COLOR if s == "ON" else YELLOW_COLOR if s == "STARTUP" else ERROR_COLOR if s == "UNHEALTHY" else GRAY_COLOR
-                dot.configure(text_color=color)
-        except:
-            pass
-        
-        # Update UI state
-        if self.is_recording:
-            self.talk_btn.configure(fg_color=ERROR_COLOR, text="LISTENING...")
-        else:
-            can_talk = get_service_status(self.s2s_port) == "ON"
-            self.talk_btn.configure(fg_color=ACCENT_COLOR if can_talk else GRAY_COLOR, 
-                                   text="HOLD TO TALK" if can_talk else "SYSTEM OFFLINE")
-
-        self.after(2000, self.update_status_loop)
-
-    def start_recording(self, event=None):
-        if self.is_recording or get_service_status(self.s2s_port) != "ON": return
+    def start_recording(self):
+        if self.is_recording: return
         self.is_recording = True
-        self.audio_frames = []
-        self.stream = self.p.open(format=pyaudio.paInt16, channels=1, rate=16000, 
-                                 input=True, frames_per_buffer=1024)
-        threading.Thread(target=self.record_loop, daemon=True).start()
+        self.audio.start_capture()
+        self.ui_queue.put({"type": "state", "recording": True})
 
-    def record_loop(self):
-        while self.is_recording:
-            try:
-                data = self.stream.read(1024)
-                self.audio_frames.append(data)
-            except:
-                break
-
-    def stop_recording(self, event=None):
+    def stop_recording(self):
         if not self.is_recording: return
         self.is_recording = False
-        self.stream.stop_stream()
-        self.stream.close()
+        audio_data = self.audio.stop_capture()
+        self.ui_queue.put({"type": "state", "recording": False})
         
-        # Save to temp buffer
+        # Dispatch request
+        self.ui_queue.put({"type": "log", "msg": "Thinking...", "tag": "system"})
+        threading.Thread(target=self._send_request, args=(audio_data,), daemon=True).start()
+
+    def _send_request(self, audio_data):
+        # Convert to WAV
         buf = io.BytesIO()
         with wave.open(buf, 'wb') as wf:
             wf.setnchannels(1)
-            wf.setsampwidth(self.p.get_sample_size(pyaudio.paInt16))
+            wf.setsampwidth(2) # 16-bit
             wf.setframerate(16000)
-            wf.writeframes(b''.join(self.audio_frames))
+            wf.writeframes(audio_data)
         
-        self.log("Thinking...", "system")
-        if self.streaming_mode.get():
-            threading.Thread(target=self.send_stream_request, args=(buf.getvalue(),), daemon=True).start()
-        else:
-            threading.Thread(target=self.send_request, args=(buf.getvalue(),), daemon=True).start()
-
-    def send_request(self, audio_data):
         try:
-            files = {'file': ('input.wav', audio_data, 'audio/wav')}
-            start_time = time.perf_counter()
-            resp = requests.post(f"{self.s2s_url}/process", files=files)
-            duration = time.perf_counter() - start_time
+            files = {'file': ('input.wav', buf.getvalue(), 'audio/wav')}
+            data = {'language_id': self.selected_lang}
             
-            if resp.status_code == 200:
-                self.tel_stt.configure(text=f"{resp.headers.get('X-Metric-STT-Inference', '0.00')}s")
-                self.tel_llm.configure(text=f"{resp.headers.get('X-Metric-LLM-Total', '0.00')}s")
-                self.tel_tts.configure(text=f"{resp.headers.get('X-Metric-TTS-Inference', '0.00')}s")
-                self.tel_tot.configure(text=f"{duration:.2f}s")
-                
-                self.log(resp.headers.get('X-Result-STT', '...'), "user")
-                self.log(resp.headers.get('X-Result-LLM', '...'), "jarvis")
-                
-                # Play audio
-                threading.Thread(target=self.play_audio_wav, args=(resp.content,), daemon=True).start()
-            else:
-                self.log(f"Error: {resp.status_code}", "system")
-        except Exception as e:
-            self.log(f"Pipeline Error: {e}", "system")
-
-    def send_stream_request(self, audio_data):
-        try:
-            files = {'file': ('input.wav', audio_data, 'audio/wav')}
             start_time = time.perf_counter()
-            
-            # Use requests stream=True
-            with requests.post(f"{self.s2s_url}/process_stream", files=files, stream=True) as resp:
+            with requests.post(f"{self.s2s_url}/process_stream", files=files, data=data, stream=True) as resp:
                 if resp.status_code != 200:
-                    self.log(f"Stream Error: {resp.status_code}", "system")
+                    self.ui_queue.put({"type": "log", "msg": f"Error {resp.status_code}", "tag": "system"})
                     return
 
-                # Setup sounddevice stream for live playback
-                # PCM 16-bit Mono 24kHz (Chatterbox default)
-                # Note: We should ideally get sample rate from headers, but 24k is standard for Chatterbox
+                # Setup audio playback
                 sample_rate = 24000
                 audio_stream = sd.RawOutputStream(samplerate=sample_rate, blocksize=1024, channels=1, dtype='int16')
                 audio_stream.start()
 
-                raw_buffer = b""
-                metrics_found = False
-                
-                for chunk in resp.iter_content(chunk_size=4096):
-                    if b"\nMETRICS_JSON:" in chunk:
-                        parts = chunk.split(b"\nMETRICS_JSON:")
-                        # Play the final audio part
-                        audio_stream.write(parts[0])
-                        # Parse metrics
-                        try:
-                            m_json = json.loads(parts[1].decode())
-                            self.update_telemetry_from_stream(m_json, time.perf_counter() - start_time)
-                            self.log(m_json.get("stt_text", "..."), "user")
-                            self.log(m_json.get("llm_text", "..."), "jarvis")
-                        except: pass
-                        metrics_found = True
+                # PROTOCOL PARSER
+                # [TYPE(1b)][LEN(4b)][DATA(LENb)]
+                stream = resp.raw
+                while True:
+                    header = stream.read(5)
+                    if not header or len(header) < 5:
                         break
-                    else:
-                        audio_stream.write(chunk)
+                    
+                    type_char = chr(header[0])
+                    length = int.from_bytes(header[1:], 'little')
+                    payload = stream.read(length)
+                    
+                    if type_char == 'T': # Text Frame
+                        data = json.loads(payload.decode())
+                        self.ui_queue.put({"type": "log", "msg": data['text'], "tag": data['role']})
+                    elif type_char == 'A': # Audio Frame
+                        audio_stream.write(payload)
+                    elif type_char == 'M': # Metrics Frame
+                        m = json.loads(payload.decode())
+                        self.ui_queue.put({"type": "telemetry", "metrics": m, "total": time.perf_counter() - start_time})
+                        break
                 
                 audio_stream.stop()
                 audio_stream.close()
-
         except Exception as e:
-            self.log(f"Streaming Pipeline Error: {e}", "system")
+            self.ui_queue.put({"type": "log", "msg": f"Pipeline Error: {e}", "tag": "system"})
 
-    def update_telemetry_from_stream(self, m, total_dur):
-        stt_dur = m.get("stt", [0,0])[1]
-        llm_dur = m.get("llm", [0,0])[1] - m.get("llm", [0,0])[0]
-        tts_dur = m.get("tts", [0,0])[1] - m.get("tts", [0,0])[0]
+class JarvisApp(ctk.CTk):
+    def __init__(self):
+        super().__init__()
+        self.title("JARVIS SYSTEM CONSOLE")
+        self.geometry("1100x800")
+        self.configure(fg_color=BG_COLOR)
+
+        self.queue = queue.Queue()
+        self.controller = JarvisController(self.queue)
         
-        self.tel_stt.configure(text=f"{stt_dur:.2f}s")
-        self.tel_llm.configure(text=f"{llm_dur:.2f}s")
-        self.tel_tts.configure(text=f"{tts_dur:.2f}s")
-        self.tel_tot.configure(text=f"{total_dur:.2f}s")
+        self.setup_ui()
+        self.poll_queue()
+        self.poll_status()
 
-    def play_audio_wav(self, data):
-        with io.BytesIO(data) as f:
-            with wave.open(f, 'rb') as wf:
-                samples = np.frombuffer(wf.readframes(wf.getnframes()), dtype=np.int16)
-                sd.play(samples, wf.getframerate())
-                sd.wait()
+    def setup_ui(self):
+        self.grid_columnconfigure(1, weight=1)
+        self.grid_rowconfigure(1, weight=1)
+
+        # --- Sidebar ---
+        self.sidebar = ctk.CTkFrame(self, width=280, corner_radius=0, fg_color="#080C14")
+        self.sidebar.grid(row=0, column=0, rowspan=3, sticky="nsew")
+        
+        self.logo = ctk.CTkLabel(self.sidebar, text="⚛️ JARVIS", font=ctk.CTkFont(size=24, weight="bold"), text_color=ACCENT_COLOR)
+        self.logo.pack(pady=(20, 5))
+        self.sub_logo = ctk.CTkLabel(self.sidebar, text="BLACKWELL ENGINE V2", font=ctk.CTkFont(size=10), text_color=GRAY_COLOR)
+        self.sub_logo.pack(pady=(0, 20))
+
+        self.tabs = ctk.CTkTabview(self.sidebar, fg_color="transparent", segmented_button_selected_color=ACCENT_COLOR)
+        self.tabs.pack(fill="both", expand=True, padx=10)
+        
+        self.tab_status = self.tabs.add("SYSTEM")
+        self.tab_config = self.tabs.add("CONFIG")
+
+        # --- System Tab ---
+        self.init_btn = ctk.CTkButton(self.tab_status, text="INITIALIZE SYSTEM", command=self.on_toggle_system, 
+                                     fg_color=GRAY_COLOR, hover_color=ACCENT_COLOR)
+        self.init_btn.pack(pady=10, fill="x")
+
+        self.status_frame = ctk.CTkFrame(self.tab_status, fg_color="transparent")
+        self.status_frame.pack(pady=10, fill="x")
+        
+        self.status_indicators = {}
+        for key in ["S2S", "LLM", "STT", "TTS"]:
+            row = ctk.CTkFrame(self.status_frame, fg_color="transparent")
+            row.pack(fill="x", pady=2)
+            lbl = ctk.CTkLabel(row, text=key, font=ctk.CTkFont(size=11, weight="bold"), text_color=TEXT_COLOR)
+            lbl.pack(side="left")
+            val = ctk.CTkLabel(row, text="OFFLINE", font=ctk.CTkFont(size=10), text_color=GRAY_COLOR)
+            val.pack(side="left", padx=10)
+            dot = ctk.CTkLabel(row, text="●", text_color=GRAY_COLOR, font=ctk.CTkFont(size=14))
+            dot.pack(side="right")
+            self.status_indicators[key] = {"dot": dot, "val": val}
+
+        # --- Config Tab ---
+        ctk.CTkLabel(self.tab_config, text="LOADOUT", font=ctk.CTkFont(size=11, weight="bold")).pack(pady=(10,0), anchor="w", padx=20)
+        self.loadout_var = ctk.StringVar(value=self.controller.current_loadout)
+        self.loadout_drop = ctk.CTkOptionMenu(self.tab_config, values=list_all_loadouts(), variable=self.loadout_var, 
+                                             command=self.on_loadout_change, fg_color=GRAY_COLOR, button_color=GRAY_COLOR, dropdown_fg_color=GRAY_COLOR)
+        self.loadout_drop.pack(pady=5, padx=20, fill="x")
+
+        self.edit_btn = ctk.CTkButton(self.tab_config, text="EDIT YAML", width=80, height=24, fg_color=GRAY_COLOR, command=self.on_edit_yaml)
+        self.edit_btn.pack(pady=5, padx=20, anchor="e")
+
+        ctk.CTkLabel(self.tab_config, text="TTS LANGUAGE", font=ctk.CTkFont(size=11, weight="bold")).pack(pady=(10,0), anchor="w", padx=20)
+        self.lang_var = ctk.StringVar(value="en")
+        self.lang_drop = ctk.CTkOptionMenu(self.tab_config, values=["en", "pl", "fr", "zh"], variable=self.lang_var,
+                                          command=lambda v: setattr(self.controller, 'selected_lang', v))
+        self.lang_drop.pack(pady=5, padx=20, fill="x")
+
+        ctk.CTkLabel(self.tab_config, text="INTERACTION", font=ctk.CTkFont(size=11, weight="bold")).pack(pady=(10,0), anchor="w", padx=20)
+        self.mode_var = ctk.StringVar(value="HOLD TO TALK")
+        self.mode_seg = ctk.CTkSegmentedButton(self.tab_config, values=["HOLD", "TOGGLE"], 
+                                              command=lambda v: setattr(self.controller, 'interaction_mode', v))
+        self.mode_seg.set("HOLD")
+        self.mode_seg.pack(pady=5, padx=20, fill="x")
+
+        # --- Main View ---
+        self.telemetry = ctk.CTkFrame(self, fg_color="#0D121F", height=60)
+        self.telemetry.grid(row=0, column=1, padx=20, pady=(20, 10), sticky="nsew")
+        
+        self.tel_labels = {}
+        for i, key in enumerate(["STT", "LLM", "TTS", "TOTAL"]):
+            f = ctk.CTkFrame(self.telemetry, fg_color="transparent")
+            f.pack(side="left", expand=True)
+            ctk.CTkLabel(f, text=key, font=ctk.CTkFont(size=9, weight="bold"), text_color=GRAY_COLOR).pack()
+            l = ctk.CTkLabel(f, text="0.00s", font=ctk.CTkFont(family="Consolas", size=14), text_color=ACCENT_COLOR)
+            l.pack()
+            self.tel_labels[key] = l
+
+        self.console = ctk.CTkTextbox(self, fg_color="#080C14", border_color=GRAY_COLOR, border_width=1, font=ctk.CTkFont(family="Consolas", size=13))
+        self.console.grid(row=1, column=1, padx=20, pady=10, sticky="nsew")
+        self.console.tag_config("user", foreground=ACCENT_COLOR)
+        self.console.tag_config("jarvis", foreground=SUCCESS_COLOR)
+        self.console.tag_config("system", foreground=GRAY_COLOR)
+
+        self.interaction_frame = ctk.CTkFrame(self, fg_color="transparent")
+        self.interaction_frame.grid(row=2, column=1, padx=20, pady=20, sticky="nsew")
+        
+        self.talk_btn = ctk.CTkButton(self.interaction_frame, text="HOLD TO TALK", height=80, corner_radius=40,
+                                     fg_color=GRAY_COLOR, font=ctk.CTkFont(size=18, weight="bold"))
+        self.talk_btn.pack(side="left", expand=True, fill="both", padx=(0, 10))
+        
+        # Bindings
+        self.talk_btn.bind("<Button-1>", self.on_press)
+        self.talk_btn.bind("<ButtonRelease-1>", self.on_release)
+        self.bind("<KeyPress-space>", self.on_press)
+        self.bind("<KeyRelease-space>", self.on_release)
+
+        # VU Meter
+        self.vu_canvas = ctk.CTkCanvas(self.interaction_frame, width=20, height=80, bg="#080C14", highlightthickness=0)
+        self.vu_canvas.pack(side="right")
+        self.vu_bar = self.vu_canvas.create_rectangle(0, 80, 20, 80, fill=ACCENT_COLOR, outline="")
+
+    def on_toggle_system(self):
+        is_starting = self.controller.toggle_system()
+        if is_starting:
+            self.init_btn.configure(text="STOP SYSTEM", fg_color=ERROR_COLOR)
+        else:
+            self.init_btn.configure(text="INITIALIZE SYSTEM", fg_color=GRAY_COLOR)
+
+    def on_loadout_change(self, val):
+        self.controller.current_loadout = val
+        if self.controller.server_process:
+            self.on_toggle_system() # Stop
+            self.on_toggle_system() # Start with new
+
+    def on_edit_yaml(self):
+        # Simple top-level editor
+        top = ctk.CTkToplevel(self)
+        top.title(f"Editor: {self.loadout_var.get()}")
+        top.geometry("600x400")
+        
+        path = os.path.join(self.controller.project_root, "tests", "loadouts", f"{self.loadout_var.get()}.yaml")
+        with open(path, "r") as f: content = f.read()
+        
+        txt = ctk.CTkTextbox(top, font=ctk.CTkFont(family="Consolas", size=12))
+        txt.pack(fill="both", expand=True, padx=10, pady=10)
+        txt.insert("1.0", content)
+        
+        def save():
+            with open(path, "w") as f: f.write(txt.get("1.0", "end"))
+            top.destroy()
+        
+        ctk.CTkButton(top, text="SAVE", command=save, fg_color=SUCCESS_COLOR, text_color="black").pack(pady=10)
+
+    def on_press(self, event=None):
+        if self.controller.interaction_mode == "TOGGLE":
+            if self.controller.is_recording: self.controller.stop_recording()
+            else: self.controller.start_recording()
+        else:
+            self.controller.start_recording()
+
+    def on_release(self, event=None):
+        if self.controller.interaction_mode == "HOLD":
+            self.controller.stop_recording()
+
+    def poll_queue(self):
+        while not self.queue.empty():
+            item = self.queue.get()
+            if item['type'] == "log":
+                self.console.insert("end", f"[{time.strftime('%H:%M:%S')}] ", "system")
+                prefix = "YOU > " if item['tag'] == "user" else "JARVIS > " if item['tag'] == "jarvis" else "SYS  > "
+                self.console.insert("end", f"{prefix}{item['msg']}\n", item['tag'])
+                self.console.see("end")
+            elif item['type'] == "state":
+                if item.get('recording'):
+                    self.talk_btn.configure(fg_color=ERROR_COLOR, text="LISTENING...")
+                else:
+                    self.talk_btn.configure(fg_color=ACCENT_COLOR, text=self.mode_var.get())
+            elif item['type'] == "telemetry":
+                m = item['metrics']
+                self.tel_labels["STT"].configure(text=f"{m.get('stt',[0,0])[1]:.2f}s")
+                self.tel_labels["LLM"].configure(text=f"{m.get('llm',[0,0])[1]-m.get('llm',[0,0])[0]:.2f}s")
+                self.tel_labels["TTS"].configure(text=f"{m.get('tts',[0,0])[1]-m.get('tts',[0,0])[0]:.2f}s")
+                self.tel_labels["TOTAL"].configure(text=f"{item['total']:.2f}s")
+        
+        # Update VU Meter
+        level = self.controller.audio.vu_level
+        self.vu_canvas.coords(self.vu_bar, 0, 80 - (level * 80), 20, 80)
+        
+        self.after(50, self.poll_queue)
+
+    def poll_status(self):
+        cfg = self.controller.cfg
+        # We only check ports relevant to active loadout to be clean
+        ports = {
+            "S2S": cfg['ports']['s2s'],
+            "LLM": cfg['ports']['llm']
+        }
+        # Get active models from loadout
+        path = os.path.join(self.controller.project_root, "tests", "loadouts", f"{self.controller.current_loadout}.yaml")
+        if os.path.exists(path):
+            with open(path, "r") as f:
+                l = yaml.safe_load(f)
+                if l.get('stt'): ports["STT"] = cfg['stt_loadout'][l['stt'][0]]
+                if l.get('tts'): ports["TTS"] = cfg['tts_loadout'][l['tts'][0]]
+
+        for key, port in ports.items():
+            status, info = get_service_status(port)
+            color = SUCCESS_COLOR if status == "ON" else YELLOW_COLOR if status == "STARTUP" else ERROR_COLOR if status == "UNHEALTHY" else GRAY_COLOR
+            self.status_indicators[key]["dot"].configure(text_color=color)
+            self.status_indicators[key]["val"].configure(text=info or "OFFLINE", text_color=color if status != "OFF" else GRAY_COLOR)
+        
+        # Update button availability
+        s2s_on = get_service_status(cfg['ports']['s2s'])[0] == "ON"
+        if not self.controller.is_recording:
+            self.talk_btn.configure(state="normal" if s2s_on else "disabled", 
+                                   fg_color=ACCENT_COLOR if s2s_on else GRAY_COLOR,
+                                   text=f"{self.controller.interaction_mode} TO TALK" if s2s_on else "SYSTEM OFFLINE")
+
+        self.after(2000, self.poll_status)
 
 if __name__ == "__main__":
-    app = JarvisClient()
-    app.mainloop()
+    app = JarvisApp()
+    try:
+        app.mainloop()
+    finally:
+        app.controller.audio.shutdown()
