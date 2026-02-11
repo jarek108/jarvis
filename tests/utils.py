@@ -449,11 +449,21 @@ def report_scenario_result(res_obj):
     sys.stdout.write(f"SCENARIO_RESULT: {json.dumps(res_obj)}\n")
     sys.stdout.flush()
 
-def list_all_loadouts():
+def list_all_loadouts(include_experimental=False):
     project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     loadout_dir = os.path.join(project_root, "tests", "loadouts")
     if not os.path.exists(loadout_dir): return []
-    return [f.replace(".yaml", "") for f in os.listdir(loadout_dir) if f.endswith(".yaml")]
+    all_f = [f.replace(".yaml", "") for f in os.listdir(loadout_dir) if f.endswith(".yaml")]
+    if include_experimental:
+        return all_f
+    return [f for f in all_f if not f.startswith("_")]
+
+def kill_all_jarvis_services():
+    """Kills every service defined in config.yaml."""
+    cfg = load_config()
+    ports = get_jarvis_ports()
+    for port in ports:
+        kill_process_on_port(port)
 
 def list_all_llm_models():
     loadouts = list_all_loadouts()

@@ -21,7 +21,7 @@ from loguru import logger
 script_dir = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(script_dir)
 
-from tests.utils import get_service_status, kill_process_on_port, load_config, list_all_loadouts, get_system_health, get_loaded_ollama_models
+from tests.utils import get_service_status, kill_process_on_port, load_config, list_all_loadouts, get_system_health, get_loaded_ollama_models, kill_all_jarvis_services
 
 # --- UI CONSTANTS ---
 BG_COLOR = "#0B0F19"
@@ -118,6 +118,9 @@ class JarvisController:
         self.is_recording = False
         self.server_process = None
         
+        # Debounce / Slip protection
+        self._stop_timer = None
+        
         # State sharing
         self.health_state = {}
         self.loaded_ollama_models = []
@@ -154,6 +157,11 @@ class JarvisController:
         self.ui_queue.put({"type": "log", "msg": f"💀 Killing service: {label} (Port {port})", "tag": "system"})
         threading.Thread(target=kill_process_on_port, args=(port,), daemon=True).start()
 
+    def purge_system(self):
+        self.ui_queue.put({"type": "log", "msg": "☢️ PURGING SYSTEM: Killing all workers and clearing VRAM...", "tag": "system"})
+        threading.Thread(target=kill_all_jarvis_services, daemon=True).start()
+        self.server_process = None
+
     def _run_server(self):
         python_exe = sys.executable
         server_script = os.path.join(self.project_root, "servers", "s2s_server.py")
@@ -172,23 +180,47 @@ class JarvisController:
                 if line:
                     log_file.write(line)
                     log_file.flush()
-                    # Only log critical errors or startup confirmations to the console
                     if "PIPELINE READY" in line or "CRITICAL" in line or "ERROR" in line:
                         self.ui_queue.put({"type": "log", "msg": line.strip(), "tag": "system"})
             
             self.server_process.stdout.close()
 
     def start_recording(self):
+        # If we just released and pressed again within 0.3s, cancel the stop
+        if self._stop_timer:
+            self._stop_timer.cancel()
+            self._stop_timer = None
+            return
+
         if self.is_recording: return
         self.is_recording = True
         self.audio.start_capture()
         self.ui_queue.put({"type": "state", "recording": True})
 
     def stop_recording(self):
-        if not self.is_recording: return
+        if not self.is_recording or self._stop_timer: return
+        
+        if self.interaction_mode == "HOLD":
+            # Start debounce timer for slip-release protection
+            self._stop_timer = threading.Timer(0.3, self._finalize_recording)
+            self._stop_timer.start()
+        else:
+            # In toggle mode, stop is immediate
+            self._finalize_recording()
+
+    def _finalize_recording(self):
+        self._stop_timer = None
         self.is_recording = False
         audio_data = self.audio.stop_capture()
         self.ui_queue.put({"type": "state", "recording": False})
+        
+        # Guard: Ensure we have enough audio (at least 0.5s)
+        # 16000 samples/sec * 0.5s * 2 bytes/sample = 16000 bytes
+        if len(audio_data) < 16000:
+            self.ui_queue.put({"type": "log", "msg": "Capture too short (<0.5s), ignoring.", "tag": "system"})
+            return
+
+        self.ui_queue.put({"type": "log", "msg": "Thinking...", "tag": "system"})
         threading.Thread(target=self._send_request, args=(audio_data,), daemon=True).start()
 
     def _send_request(self, audio_data):
@@ -202,7 +234,12 @@ class JarvisController:
             start_time = time.perf_counter()
             with requests.post(f"{self.s2s_url}/process_stream", files=files, data=data, stream=True) as resp:
                 if resp.status_code != 200:
-                    self.ui_queue.put({"type": "log", "msg": f"Error {resp.status_code}", "tag": "system"}); return
+                    err_msg = resp.text
+                    try:
+                        err_json = resp.json()
+                        if isinstance(err_json, dict): err_msg = err_json.get('detail', err_msg)
+                    except: pass
+                    self.ui_queue.put({"type": "log", "msg": f"Server Error ({resp.status_code}): {err_msg}", "tag": "system"}); return
                 audio_stream = sd.RawOutputStream(samplerate=24000, blocksize=1024, channels=1, dtype='int16')
                 audio_stream.start()
                 stream = resp.raw
@@ -256,6 +293,10 @@ class JarvisApp(ctk.CTk):
         ctk.CTkLabel(self.status_container, text="HEALTH STATUS", font=ctk.CTkFont(size=11, weight="bold"), text_color=GRAY_COLOR).pack(anchor="w")
         self.init_btn = ctk.CTkButton(self.status_container, text="INITIALIZE SYSTEM", command=self.on_toggle_system, fg_color=GRAY_COLOR, hover_color=ACCENT_COLOR)
         self.init_btn.pack(pady=5, fill="x")
+        
+        self.purge_btn = ctk.CTkButton(self.status_container, text="PURGE SYSTEM 💀", command=self.controller.purge_system, fg_color="transparent", border_width=1, border_color=ERROR_COLOR, text_color=ERROR_COLOR, hover_color="#331111")
+        self.purge_btn.pack(pady=2, fill="x")
+
         self.status_frame = ctk.CTkFrame(self.status_container, fg_color="transparent")
         self.status_frame.pack(fill="x", pady=5)
         self.status_rows = {}
@@ -266,7 +307,7 @@ class JarvisApp(ctk.CTk):
         
         ctk.CTkLabel(self.config_container, text="LOADOUT", font=ctk.CTkFont(size=11, weight="bold"), text_color=GRAY_COLOR).pack(anchor="w")
         self.loadout_var = ctk.StringVar(value=self.controller.current_loadout)
-        loadouts = ["None"] + list_all_loadouts()
+        loadouts = ["None"] + list_all_loadouts(include_experimental=True)
         self.loadout_drop = ctk.CTkOptionMenu(self.config_container, values=loadouts, variable=self.loadout_var, command=self.on_loadout_change, fg_color=GRAY_COLOR, button_color=GRAY_COLOR)
         self.loadout_drop.pack(pady=5, fill="x")
         self.edit_btn = ctk.CTkButton(self.config_container, text="EDIT YAML", width=80, height=24, fg_color=GRAY_COLOR, command=self.on_edit_yaml)
@@ -372,133 +413,69 @@ class JarvisApp(ctk.CTk):
         # Create a sorted list of ports to maintain consistent UI order
         sorted_ports = sorted(health.keys())
 
-                for port in sorted_ports:
+        for port in sorted_ports:
+            info = health[port]
+            status = info['status']
+            is_active = port in active_ports
+            is_rogue = not is_active and status != "OFF"
+            
+            if info['label'] == "LLM" and status == "ON":
+                if active_llm and not any(active_llm in m for m in loaded_ollama):
+                    is_rogue = True
 
-                    info = health[port]
+            should_show = (status != "OFF") or is_active
 
-                    status = info['status']
-
-                    is_active = port in active_ports
-
-                    is_rogue = not is_active and status != "OFF"
-
+            if should_show:
+                if port not in self.status_rows:
+                    row = ctk.CTkFrame(self.status_frame, fg_color="transparent"); row.pack(fill="x", pady=1)
+                    lbl = ctk.CTkLabel(row, text=info['label'][:15], font=ctk.CTkFont(size=10, weight="bold"), text_color=TEXT_COLOR); lbl.pack(side="left")
+                    val = ctk.CTkLabel(row, text="...", font=ctk.CTkFont(size=9), text_color=GRAY_COLOR); val.pack(side="left", padx=5)
                     
-
-                    if info['label'] == "LLM" and status == "ON":
-
-                        if active_llm and not any(active_llm in m for m in loaded_ollama):
-
-                            is_rogue = True
-
-        
-
-                    should_show = (status != "OFF") or is_active
-
-        
-
-                    if should_show:
-
-                        if port not in self.status_rows:
-
-                            row = ctk.CTkFrame(self.status_frame, fg_color="transparent"); row.pack(fill="x", pady=1)
-
-                            lbl = ctk.CTkLabel(row, text=info['label'][:15], font=ctk.CTkFont(size=10, weight="bold"), text_color=TEXT_COLOR); lbl.pack(side="left")
-
-                            val = ctk.CTkLabel(row, text="...", font=ctk.CTkFont(size=9), text_color=GRAY_COLOR); val.pack(side="left", padx=5)
-
-                            
-
-                            kill_btn = ctk.CTkButton(row, text="💀", width=20, height=20, fg_color="transparent", hover_color=ERROR_COLOR, 
-
-                                                    command=lambda p=port, l=info['label']: self.controller.kill_service(p, l))
-
-                            kill_btn.pack(side="right", padx=2)
-
-                            
-
-                            dot = ctk.CTkLabel(row, text="●", font=ctk.CTkFont(size=12)); dot.pack(side="right")
-
-                            self.status_rows[port] = {"frame": row, "val": val, "dot": dot, "kill_btn": kill_btn, "last_status": None, "last_text": None}
-
-                        
-
-                        color = YELLOW_COLOR if is_rogue else (SUCCESS_COLOR if status == "ON" else YELLOW_COLOR if status == "STARTUP" else ERROR_COLOR if status == "UNHEALTHY" else GRAY_COLOR)
-
-                        text = (info['info'] or "READY") if not is_rogue else f"ROGUE: {info['info'] or 'BUSY'}"
-
-                        if info['label'] == "LLM" and is_rogue: 
-
-                            model_name = loaded_ollama[0] if loaded_ollama else "EMPTY"
-
-                            text = f"WRONG MODEL: {model_name}"
-
-                        
-
-                        # ONLY UPDATE IF CHANGED
-
-                        row_cache = self.status_rows[port]
-
-                        if row_cache["last_status"] != color:
-
-                            row_cache["dot"].configure(text_color=color)
-
-                            row_cache["val"].configure(text_color=color if status != "OFF" else GRAY_COLOR)
-
-                            row_cache["last_status"] = color
-
-                        
-
-                        if row_cache["last_text"] != text:
-
-                            row_cache["val"].configure(text=text)
-
-                            row_cache["last_text"] = text
-
-                        
-
-                        if status == "OFF":
-
-                            if row_cache["kill_btn"].cget("text") != "":
-
-                                row_cache["kill_btn"].configure(state="disabled", text="")
-
-                        else:
-
-                            if row_cache["kill_btn"].cget("text") != "💀":
-
-                                row_cache["kill_btn"].configure(state="normal", text="💀")
-
-                    else:
-
-                        if port in self.status_rows:
-
-                            self.status_rows[port]["frame"].destroy()
-
-                            del self.status_rows[port]
-
-        
-
-                s2s_on = health.get(self.controller.cfg['ports']['s2s'], {}).get('status') == "ON"
-
-                if not self.controller.is_recording:
-
-                    # Only update button if state changed to prevent cursor flickering
-
-                    target_text = f"{self.controller.interaction_mode} TO TALK" if s2s_on else "SYSTEM OFFLINE"
-
-                    if self.talk_btn.cget("text") != target_text:
-
-                        self.talk_btn.configure(state="normal" if s2s_on else "disabled", 
-
-                                               fg_color=ACCENT_COLOR if s2s_on else GRAY_COLOR, 
-
-                                               text=target_text)
-
+                    kill_btn = ctk.CTkButton(row, text="💀", width=20, height=20, fg_color="transparent", hover_color=ERROR_COLOR, 
+                                            command=lambda p=port, l=info['label']: self.controller.kill_service(p, l))
+                    kill_btn.pack(side="right", padx=2)
+                    
+                    dot = ctk.CTkLabel(row, text="●", font=ctk.CTkFont(size=12)); dot.pack(side="right")
+                    self.status_rows[port] = {"frame": row, "val": val, "dot": dot, "kill_btn": kill_btn, "last_status": None, "last_text": None}
                 
+                color = YELLOW_COLOR if is_rogue else (SUCCESS_COLOR if status == "ON" else YELLOW_COLOR if status == "STARTUP" else ERROR_COLOR if status == "UNHEALTHY" else GRAY_COLOR)
+                text = (info['info'] or "READY") if not is_rogue else f"ROGUE: {info['info'] or 'BUSY'}"
+                if info['label'] == "LLM" and is_rogue: 
+                    model_name = loaded_ollama[0] if loaded_ollama else "EMPTY"
+                    text = f"WRONG MODEL: {model_name}"
+                
+                # ONLY UPDATE IF CHANGED
+                row_cache = self.status_rows[port]
+                if row_cache["last_status"] != color:
+                    row_cache["dot"].configure(text_color=color)
+                    row_cache["val"].configure(text_color=color if status != "OFF" else GRAY_COLOR)
+                    row_cache["last_status"] = color
+                
+                if row_cache["last_text"] != text:
+                    row_cache["val"].configure(text=text)
+                    row_cache["last_text"] = text
+                
+                if status == "OFF":
+                    if row_cache["kill_btn"].cget("text") != "":
+                        row_cache["kill_btn"].configure(state="disabled", text="")
+                else:
+                    if row_cache["kill_btn"].cget("text") != "💀":
+                        row_cache["kill_btn"].configure(state="normal", text="💀")
+            else:
+                if port in self.status_rows:
+                    self.status_rows[port]["frame"].destroy()
+                    del self.status_rows[port]
 
-                self.after(1000, self.poll_status)
-
+        s2s_on = health.get(self.controller.cfg['ports']['s2s'], {}).get('status') == "ON"
+        if not self.controller.is_recording:
+            # Only update button if state changed to prevent cursor flickering
+            target_text = f"{self.controller.interaction_mode} TO TALK" if s2s_on else "SYSTEM OFFLINE"
+            if self.talk_btn.cget("text") != target_text:
+                self.talk_btn.configure(state="normal" if s2s_on else "disabled", 
+                                       fg_color=ACCENT_COLOR if s2s_on else GRAY_COLOR, 
+                                       text=target_text)
         
+        self.after(1000, self.poll_status)
 
 if __name__ == "__main__":
     app = JarvisApp()
