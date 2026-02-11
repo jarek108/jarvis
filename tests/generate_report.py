@@ -3,6 +3,14 @@ import json
 import os
 import subprocess
 import argparse
+import pickle
+from google_auth_oauthlib.flow import InstalledAppFlow
+from google.auth.transport.requests import Request
+from googleapiclient.discovery import build
+from googleapiclient.http import MediaFileUpload
+
+# If modifying these scopes, delete the file token.pickle.
+SCOPES = ['https://www.googleapis.com/auth/drive.file']
 
 def load_json(path):
     if not os.path.exists(path): return []
@@ -16,17 +24,13 @@ def generate_excel():
     artifacts_dir = os.path.join(os.path.dirname(__file__), "artifacts")
     output_path = os.path.join(artifacts_dir, "Jarvis_Benchmark_Report.xlsx")
     
-    # Track if we actually have any data to write
-    has_any_data = False
-    
-    # We use a temporary list to store valid dataframes and their sheet names
     sheets = {}
+    has_any_data = False
 
-    # 1. STT / TTS (Standard structure)
+    # 1. STT / TTS
     for domain in ["stt", "tts"]:
         data = load_json(os.path.join(artifacts_dir, f"latest_{domain}.json"))
         if not data: continue
-        
         rows = []
         for entry in data:
             loadout = entry.get('loadout', 'unknown')
@@ -46,7 +50,6 @@ def generate_excel():
     for domain in ["llm", "vlm"]:
         data = load_json(os.path.join(artifacts_dir, f"latest_{domain}.json"))
         if not data: continue
-        
         rows = []
         for entry in data:
             loadout = entry.get('loadout', 'unknown')
@@ -65,7 +68,7 @@ def generate_excel():
             sheets[domain.upper()] = pd.DataFrame(rows)
             has_any_data = True
 
-    # 3. S2S STRUCTURE
+    # 3. S2S
     data = load_json(os.path.join(artifacts_dir, "latest_s2s.json"))
     if data:
         rows = []
@@ -75,11 +78,8 @@ def generate_excel():
             for s in entry.get('scenarios', []):
                 m = s.get('metrics', {})
                 rows.append({
-                    "Loadout": loadout,
-                    "Scenario": s.get('name'),
-                    "Mode": s.get('mode'),
-                    "Status": s.get('status'),
-                    "Total Duration (s)": s.get('duration'),
+                    "Loadout": loadout, "Scenario": s.get('name'), "Mode": s.get('mode'),
+                    "Status": s.get('status'), "Total Duration (s)": s.get('duration'),
                     "STT Time": s.get('stt_inf') or m.get('stt', [0,0])[1],
                     "LLM Time": s.get('llm_tot') or (m.get('llm', [0,0])[1] - m.get('llm', [0,0])[0]),
                     "TTS Time": s.get('tts_inf') or (m.get('tts', [0,0])[1] - m.get('tts', [0,0])[0]),
@@ -100,21 +100,77 @@ def generate_excel():
     print(f"📊 Excel Report Generated: {output_path}")
     return output_path
 
-def upload_rclone(file_path):
-    if not file_path or not os.path.exists(file_path): return
-    print(f"☁️ Uploading to GDrive via rclone...")
-    try:
-        cmd = ["rclone", "copy", file_path, "gdrive:Jarvis_Reports", "-v"]
-        subprocess.run(cmd, check=True)
-        print("✅ Upload successful!")
-    except Exception as e:
-        print(f"❌ Upload failed (Is rclone configured?): {e}")
+def get_gdrive_service():
+    """Handles OAuth2 flow and returns the Drive service object."""
+    creds = None
+    project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    pickle_path = os.path.join(project_root, 'token.pickle')
+    creds_path = os.path.join(project_root, 'credentials.json')
+
+    if os.path.exists(pickle_path):
+        with open(pickle_path, 'rb') as token:
+            creds = pickle.load(token)
+    
+    if not creds or not creds.valid:
+        if creds and creds.expired and creds.refresh_token:
+            creds.refresh(Request())
+        else:
+            if not os.path.exists(creds_path):
+                print(f"❌ ERROR: Google API credentials not found at {creds_path}")
+                print("Please download credentials.json from Google Cloud Console.")
+                return None
+            flow = InstalledAppFlow.from_client_secrets_file(creds_path, SCOPES)
+            creds = flow.run_local_server(port=0)
+        
+        with open(pickle_path, 'wb') as token:
+            pickle.dump(creds, token)
+
+    return build('drive', 'v3', credentials=creds)
+
+def upload_to_gdrive(file_path):
+    """Uploads the file to Google Drive, creating or updating the folder/file."""
+    service = get_gdrive_service()
+    if not service: return
+
+    file_name = os.path.basename(file_path)
+    folder_name = "Jarvis_Reports"
+    
+    # 1. Find or create folder
+    query = f"name = '{folder_name}' and mimeType = 'application/vnd.google-apps.folder' and trashed = false"
+    results = service.files().list(q=query, spaces='drive', fields='files(id, name)').execute()
+    folders = results.get('files', [])
+    
+    if not folders:
+        folder_metadata = {'name': folder_name, 'mimeType': 'application/vnd.google-apps.folder'}
+        folder = service.files().create(body=folder_metadata, fields='id').execute()
+        folder_id = folder.get('id')
+        print(f"📁 Created new GDrive folder: {folder_name}")
+    else:
+        folder_id = folders[0].get('id')
+
+    # 2. Check if file already exists in folder
+    query = f"name = '{file_name}' and '{folder_id}' in parents and trashed = false"
+    results = service.files().list(q=query, spaces='drive', fields='files(id, name)').execute()
+    files = results.get('files', [])
+
+    media = MediaFileUpload(file_path, mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', resumable=True)
+
+    if not files:
+        # Create new file
+        file_metadata = {'name': file_name, 'parents': [folder_id]}
+        service.files().create(body=file_metadata, media_body=media, fields='id').execute()
+        print(f"📤 Uploaded new report to GDrive: {file_name}")
+    else:
+        # Update existing file
+        file_id = files[0].get('id')
+        service.files().update(fileId=file_id, media_body=media).execute()
+        print(f"🔄 Updated existing report on GDrive: {file_name}")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Generate and upload Jarvis benchmark reports.")
-    parser.add_argument("--upload", action="store_true", help="Upload to GDrive via rclone")
+    parser.add_argument("--upload", action="store_true", help="Upload to GDrive via native API")
     args = parser.parse_args()
     
     path = generate_excel()
     if args.upload and path:
-        upload_rclone(path)
+        upload_to_gdrive(path)

@@ -553,10 +553,10 @@ def trigger_report_generation(upload=True):
     print("🔄 TRIGGERING AUTO-REPORT GENERATION...")
     try:
         # Import dynamically to avoid top-level dependencies in non-reporting scripts
-        from generate_report import generate_excel, upload_rclone
+        from generate_report import generate_excel, upload_to_gdrive
         path = generate_excel()
         if upload and path:
-            upload_rclone(path)
+            upload_to_gdrive(path)
     except Exception as e:
         print(f"⚠️ Auto-report failed: {e}")
     print("-" * 40 + "\n")
