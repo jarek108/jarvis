@@ -22,20 +22,32 @@ def run_test_suite(model_name):
     url = "http://127.0.0.1:11434/api/chat"
     input_base = os.path.join(os.path.dirname(__file__), "input_data")
     
-    # DISCOVERY: Find all .png files and look for matching .txt
+    # Supported image extensions
+    IMG_EXTS = (".png", ".jpg", ".jpeg", ".webp")
+    
+    # DISCOVERY: Find all image files and look for matching .txt
     scenarios = []
-    for f in os.listdir(input_base):
-        if f.endswith(".png"):
-            name_base = f.replace(".png", "")
+    all_files = os.listdir(input_base)
+    for f in all_files:
+        ext = os.path.splitext(f)[1].lower()
+        if ext in IMG_EXTS:
+            name_base = os.path.splitext(f)[0]
             txt_path = os.path.join(input_base, f"{name_base}.txt")
+            
             if os.path.exists(txt_path):
-                with open(txt_path, "r") as tf:
+                with open(txt_path, "r", encoding="utf-8") as tf:
                     prompt = tf.read().strip()
                 scenarios.append({
                     "name": name_base,
                     "text": prompt,
                     "image": f
                 })
+            else:
+                print(f"WARN: Image '{f}' found without matching .txt prompt. Skipping.")
+
+    if not scenarios:
+        print(f"❌ ERROR: No valid VLM test cases (image + .txt) found in {input_base}")
+        return
 
     # Audit Start
     vram_baseline = get_gpu_vram_usage()
