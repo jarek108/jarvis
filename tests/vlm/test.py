@@ -22,18 +22,20 @@ def run_test_suite(model_name):
     url = "http://127.0.0.1:11434/api/chat"
     input_base = os.path.join(os.path.dirname(__file__), "input_data")
     
-    scenarios = [
-        {
-            "name": "vlm_object_id",
-            "text": "What is in this image?",
-            "image": "jarvis_logo.png"
-        },
-        {
-            "name": "vlm_count",
-            "text": "How many colored circles do you see in this photo?",
-            "image": "three_objects.png"
-        }
-    ]
+    # DISCOVERY: Find all .png files and look for matching .txt
+    scenarios = []
+    for f in os.listdir(input_base):
+        if f.endswith(".png"):
+            name_base = f.replace(".png", "")
+            txt_path = os.path.join(input_base, f"{name_base}.txt")
+            if os.path.exists(txt_path):
+                with open(txt_path, "r") as tf:
+                    prompt = tf.read().strip()
+                scenarios.append({
+                    "name": name_base,
+                    "text": prompt,
+                    "image": f
+                })
 
     # Audit Start
     vram_baseline = get_gpu_vram_usage()

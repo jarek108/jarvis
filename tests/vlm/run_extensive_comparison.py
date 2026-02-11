@@ -87,7 +87,7 @@ def run_vlm_comparison():
         print(f"  {'Loadout':<40} | {'TTFT':<8} | {'TPS':<6} | {'VRAM Peak'}")
         print(f"  {'-'*40} | {'-'*8} | {'-'*6} | {'-'*10}")
         
-        for lid in loadouts:
+        for lid in vlm_loadouts:
             s_res = pivoted_data[name].get(lid)
             m_res = next((r for r in suite_results if r['loadout'] == lid), {})
             vram = m_res.get('vram', {})
