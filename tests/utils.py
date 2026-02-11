@@ -71,22 +71,27 @@ def get_service_status(port: int):
         return "UNHEALTHY", None
 
 def get_system_health():
-    """Returns a simplified map of port -> status for basic checks."""
+    """Returns a full map of all known ports defined in config.yaml."""
     cfg = load_config()
     health = {}
     
-    # We check the standard ports defined in config
-    ports_to_check = {
-        cfg['ports']['llm']: "LLM",
-        cfg['ports']['s2s']: "S2S"
-    }
-    # Add all STT/TTS ports from config
-    for name, port in cfg['stt_loadout'].items(): ports_to_check[port] = f"STT-{name}"
-    for name, port in cfg['tts_loadout'].items(): ports_to_check[port] = f"TTS-{name}"
+    # 1. System Core
+    s2s_status, s2s_info = get_service_status(cfg['ports']['s2s'])
+    health[cfg['ports']['s2s']] = {"status": s2s_status, "info": s2s_info, "label": "S2S", "type": "s2s"}
     
-    for port, label in ports_to_check.items():
+    llm_status, llm_info = get_service_status(cfg['ports']['llm'])
+    health[cfg['ports']['llm']] = {"status": llm_status, "info": llm_info, "label": "LLM", "type": "llm"}
+    
+    # 2. All defined STT ports
+    for name, port in cfg['stt_loadout'].items():
         status, info = get_service_status(port)
-        health[port] = {"status": status, "info": info, "label": label}
+        health[port] = {"status": status, "info": info, "label": name, "type": "stt"}
+        
+    # 3. All defined TTS ports
+    for name, port in cfg['tts_loadout'].items():
+        status, info = get_service_status(port)
+        health[port] = {"status": status, "info": info, "label": name, "type": "tts"}
+        
     return health
 
 def start_server(cmd, loud=False):

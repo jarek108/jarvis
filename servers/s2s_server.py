@@ -253,10 +253,14 @@ async def process_stream(
             }
             
             # 1. Send STT text immediately
-            yield frame('T', json.dumps({"role": "user", "text": input_text}).encode())
-
-            # STT is buffered, so first/last output is the same timestamp
             stt_ready_time = round(time.perf_counter() - total_start, 2)
+            yield frame('T', json.dumps({
+                "role": "user", 
+                "text": input_text,
+                "start": 0.0,
+                "end": stt_ready_time
+            }).encode())
+
             m["stt"] = [stt_ready_time, stt_ready_time]
             
             queue = asyncio.Queue()
@@ -332,10 +336,8 @@ async def process_stream(
                         sentence = await queue.get()
                         if sentence is None: break
                         
-                        # 2. Yield LLM text chunk
-                        yield frame('T', json.dumps({"role": "jarvis", "text": sentence}).encode())
-
                         # 3. TTS for sentence
+                        sentence_start = round(time.perf_counter() - total_start, 2)
                         tts_url = f"http://127.0.0.1:{tts_port}/tts"
                         tts_payload = {"text": sentence, "voice": "default", "language_id": language_id or "en"}
                         async with session.post(tts_url, json=tts_payload) as tts_resp:
@@ -346,8 +348,19 @@ async def process_stream(
                                 
                                 audio_chunk = await tts_resp.read()
                                 last_audio_time = time.perf_counter()
+                                sentence_end = round(last_audio_time - total_start, 2)
+                                
                                 # Mark TTS chunk delivery
-                                m["tts_chunks"].append({"text": sentence, "end": round(last_audio_time - total_start, 2)})
+                                m["tts_chunks"].append({"text": sentence, "end": sentence_end})
+                                
+                                # 2. Yield LLM text chunk with timestamps
+                                yield frame('T', json.dumps({
+                                    "role": "jarvis", 
+                                    "text": sentence,
+                                    "start": sentence_start,
+                                    "end": sentence_end
+                                }).encode())
+
                                 # 4. Yield Audio frame (skipping 44-byte WAV header)
                                 yield frame('A', audio_chunk[44:])
             finally:
