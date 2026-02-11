@@ -176,22 +176,33 @@ class JarvisController:
                 creationflags=0x08000000 if os.name == 'nt' else 0
             )
             
+            in_traceback = False
             for line in iter(self.server_process.stdout.readline, ''):
                 if line:
                     log_file.write(line)
                     log_file.flush()
-                    if "PIPELINE READY" in line or "CRITICAL" in line or "ERROR" in line:
+                    
+                    line_upper = line.upper()
+                    # Start capturing traceback
+                    if "TRACEBACK" in line_upper:
+                        in_traceback = True
+                    
+                    # Show line if it matches criteria or we are in a traceback
+                    if in_traceback or "PIPELINE READY" in line_upper or "CRITICAL" in line_upper or "ERROR" in line_upper:
                         self.ui_queue.put({"type": "log", "msg": line.strip(), "tag": "system"})
+                    
+                    # End traceback capture if we hit a log line with a level or empty line
+                    if in_traceback and (" | " in line or line.strip() == ""):
+                        if "TRACEBACK" not in line_upper:
+                            in_traceback = False
             
             self.server_process.stdout.close()
 
     def start_recording(self):
-        # If we just released and pressed again within 0.3s, cancel the stop
         if self._stop_timer:
             self._stop_timer.cancel()
             self._stop_timer = None
             return
-
         if self.is_recording: return
         self.is_recording = True
         self.audio.start_capture()
@@ -199,13 +210,10 @@ class JarvisController:
 
     def stop_recording(self):
         if not self.is_recording or self._stop_timer: return
-        
         if self.interaction_mode == "HOLD":
-            # Start debounce timer for slip-release protection
             self._stop_timer = threading.Timer(0.3, self._finalize_recording)
             self._stop_timer.start()
         else:
-            # In toggle mode, stop is immediate
             self._finalize_recording()
 
     def _finalize_recording(self):
@@ -213,13 +221,9 @@ class JarvisController:
         self.is_recording = False
         audio_data = self.audio.stop_capture()
         self.ui_queue.put({"type": "state", "recording": False})
-        
-        # Guard: Ensure we have enough audio (at least 0.5s)
-        # 16000 samples/sec * 0.5s * 2 bytes/sample = 16000 bytes
         if len(audio_data) < 16000:
             self.ui_queue.put({"type": "log", "msg": "Capture too short (<0.5s), ignoring.", "tag": "system"})
             return
-
         self.ui_queue.put({"type": "log", "msg": "Thinking...", "tag": "system"})
         threading.Thread(target=self._send_request, args=(audio_data,), daemon=True).start()
 
@@ -251,7 +255,6 @@ class JarvisController:
                     payload = stream.read(length)
                     if type_char == 'T':
                         data_json = json.loads(payload.decode())
-                        # Format: (start s) Text (end s)
                         timestamped_msg = f"({data_json.get('start', 0.0):.2f}s) {data_json['text']} ({data_json.get('end', 0.0):.2f}s)"
                         self.ui_queue.put({"type": "log", "msg": timestamped_msg, "tag": data_json['role']})
                     elif type_char == 'A': audio_stream.write(payload)
@@ -276,53 +279,37 @@ class JarvisApp(ctk.CTk):
     def setup_ui(self):
         self.grid_columnconfigure(1, weight=1)
         self.grid_rowconfigure(1, weight=1)
-
-        # --- Sidebar ---
         self.sidebar = ctk.CTkFrame(self, width=280, corner_radius=0, fg_color="#080C14")
         self.sidebar.grid(row=0, column=0, rowspan=3, sticky="nsew")
-        
         self.logo = ctk.CTkLabel(self.sidebar, text="⚛️ JARVIS", font=ctk.CTkFont(size=24, weight="bold"), text_color=ACCENT_COLOR)
         self.logo.pack(pady=(20, 20))
-        
         self.sidebar_content = ctk.CTkFrame(self.sidebar, fg_color="transparent")
         self.sidebar_content.pack(fill="both", expand=True, padx=10)
-
-        # 1. Health Section
         self.status_container = ctk.CTkFrame(self.sidebar_content, fg_color="transparent")
         self.status_container.pack(fill="x", pady=5)
         ctk.CTkLabel(self.status_container, text="HEALTH STATUS", font=ctk.CTkFont(size=11, weight="bold"), text_color=GRAY_COLOR).pack(anchor="w")
         self.init_btn = ctk.CTkButton(self.status_container, text="INITIALIZE SYSTEM", command=self.on_toggle_system, fg_color=GRAY_COLOR, hover_color=ACCENT_COLOR)
         self.init_btn.pack(pady=5, fill="x")
-        
         self.purge_btn = ctk.CTkButton(self.status_container, text="PURGE SYSTEM 💀", command=self.controller.purge_system, fg_color="transparent", border_width=1, border_color=ERROR_COLOR, text_color=ERROR_COLOR, hover_color="#331111")
         self.purge_btn.pack(pady=2, fill="x")
-
         self.status_frame = ctk.CTkFrame(self.status_container, fg_color="transparent")
         self.status_frame.pack(fill="x", pady=5)
         self.status_rows = {}
-
-        # 2. Config Section (Now directly under health)
         self.config_container = ctk.CTkFrame(self.sidebar_content, fg_color="transparent")
         self.config_container.pack(fill="x", pady=10)
-        
         ctk.CTkLabel(self.config_container, text="LOADOUT", font=ctk.CTkFont(size=11, weight="bold"), text_color=GRAY_COLOR).pack(anchor="w")
         self.loadout_var = ctk.StringVar(value=self.controller.current_loadout)
-        loadouts = ["None"] + list_all_loadouts(include_experimental=True)
-        self.loadout_drop = ctk.CTkOptionMenu(self.config_container, values=loadouts, variable=self.loadout_var, command=self.on_loadout_change, fg_color=GRAY_COLOR, button_color=GRAY_COLOR)
+        self.loadout_drop = ctk.CTkOptionMenu(self.config_container, values=["None"] + list_all_loadouts(include_experimental=True), variable=self.loadout_var, command=self.on_loadout_change, fg_color=GRAY_COLOR, button_color=GRAY_COLOR)
         self.loadout_drop.pack(pady=5, fill="x")
         self.edit_btn = ctk.CTkButton(self.config_container, text="EDIT YAML", width=80, height=24, fg_color=GRAY_COLOR, command=self.on_edit_yaml)
         self.edit_btn.pack(pady=2, anchor="e")
-
         ctk.CTkLabel(self.config_container, text="TTS LANGUAGE", font=ctk.CTkFont(size=11, weight="bold"), text_color=GRAY_COLOR).pack(anchor="w", pady=(10,0))
         self.lang_var = ctk.StringVar(value="None")
         self.lang_drop = ctk.CTkOptionMenu(self.config_container, values=["None", "en", "pl", "fr", "zh"], variable=self.lang_var, command=lambda v: setattr(self.controller, 'selected_lang', v))
         self.lang_drop.pack(pady=5, fill="x")
-
         ctk.CTkLabel(self.config_container, text="INTERACTION", font=ctk.CTkFont(size=11, weight="bold"), text_color=GRAY_COLOR).pack(anchor="w", pady=(10,0))
         self.mode_seg = ctk.CTkSegmentedButton(self.config_container, values=["HOLD", "TOGGLE"], command=lambda v: setattr(self.controller, 'interaction_mode', v))
         self.mode_seg.set("HOLD"); self.mode_seg.pack(pady=5, fill="x")
-
-        # --- Main View ---
         self.telemetry = ctk.CTkFrame(self, fg_color="#0D121F", height=60)
         self.telemetry.grid(row=0, column=1, padx=20, pady=(20, 10), sticky="nsew")
         self.tel_labels = {}
@@ -331,11 +318,9 @@ class JarvisApp(ctk.CTk):
             ctk.CTkLabel(f, text=key, font=ctk.CTkFont(size=9, weight="bold"), text_color=GRAY_COLOR).pack()
             l = ctk.CTkLabel(f, text="0.00s", font=ctk.CTkFont(family="Consolas", size=14), text_color=ACCENT_COLOR); l.pack()
             self.tel_labels[key] = l
-
         self.console = ctk.CTkTextbox(self, fg_color="#080C14", border_color=GRAY_COLOR, border_width=1, font=ctk.CTkFont(family="Consolas", size=13))
         self.console.grid(row=1, column=1, padx=20, pady=10, sticky="nsew")
         self.console.tag_config("user", foreground=ACCENT_COLOR); self.console.tag_config("jarvis", foreground=SUCCESS_COLOR); self.console.tag_config("system", foreground=GRAY_COLOR)
-
         self.interaction_frame = ctk.CTkFrame(self, fg_color="transparent")
         self.interaction_frame.grid(row=2, column=1, padx=20, pady=20, sticky="nsew")
         self.talk_btn = ctk.CTkButton(self.interaction_frame, text="HOLD TO TALK", height=80, corner_radius=40, fg_color=GRAY_COLOR, font=ctk.CTkFont(size=18, weight="bold"))
@@ -367,8 +352,7 @@ class JarvisApp(ctk.CTk):
         if self.controller.interaction_mode == "TOGGLE":
             if self.controller.is_recording: self.controller.stop_recording()
             else: self.controller.start_recording()
-        else:
-            self.controller.start_recording()
+        else: self.controller.start_recording()
 
     def on_release(self, event=None):
         if self.controller.interaction_mode == "HOLD": self.controller.stop_recording()
@@ -395,94 +379,67 @@ class JarvisApp(ctk.CTk):
     def poll_status(self):
         health = self.controller.health_state
         loaded_ollama = self.controller.loaded_ollama_models
-        
-        active_ports = set()
-        active_llm = None
-        
+        active_ports = set(); active_llm = None
         if self.controller.current_loadout != "None":
             path = os.path.join(self.controller.project_root, "tests", "loadouts", f"{self.controller.current_loadout}.yaml")
-                    if os.path.exists(path):
-                        with open(path, "r") as f:
-                            l = yaml.safe_load(f)
-                            active_llm = l.get('llm')
-                            active_ports.add(self.controller.cfg['ports']['s2s'])
-                            active_ports.add(self.controller.cfg['ports']['llm'])
-                            
-                            # Handle both list and single string
-                            stt_val = l.get('stt')
-                            if stt_val:
-                                stt_id = stt_val[0] if isinstance(stt_val, list) else stt_val
-                                active_ports.add(self.controller.cfg['stt_loadout'][stt_id])
-                            
-                            tts_val = l.get('tts')
-                            if tts_val:
-                                tts_id = tts_val[0] if isinstance(tts_val, list) else tts_val
-                                active_ports.add(self.controller.cfg['tts_loadout'][tts_id])
-                    # Create a sorted list of ports to maintain consistent UI order
+            if os.path.exists(path):
+                with open(path, "r") as f:
+                    l = yaml.safe_load(f)
+                    active_llm = l.get('llm'); active_ports.add(self.controller.cfg['ports']['s2s']); active_ports.add(self.controller.cfg['ports']['llm'])
+                    stt_val = l.get('stt')
+                    if stt_val:
+                        stt_id = stt_val[0] if isinstance(stt_val, list) else stt_val
+                        active_ports.add(self.controller.cfg['stt_loadout'][stt_id])
+                    tts_val = l.get('tts')
+                    if tts_val:
+                        tts_id = tts_val[0] if isinstance(tts_val, list) else tts_val
+                        active_ports.add(self.controller.cfg['tts_loadout'][tts_id])
         sorted_ports = sorted(health.keys())
-
         for port in sorted_ports:
-            info = health[port]
-            status = info['status']
-            is_active = port in active_ports
-            is_rogue = not is_active and status != "OFF"
+            info = health[port]; status = info['status']; is_active = port in active_ports; is_rogue = not is_active and status != "OFF"
             
             if info['label'] == "LLM" and status == "ON":
-                if active_llm and not any(active_llm in m for m in loaded_ollama):
-                    is_rogue = True
-
-            should_show = (status != "OFF") or is_active
-
-            if should_show:
+                if active_llm and not any(active_llm in m for m in loaded_ollama): is_rogue = True
+            
+            if (status != "OFF") or is_active:
                 if port not in self.status_rows:
                     row = ctk.CTkFrame(self.status_frame, fg_color="transparent"); row.pack(fill="x", pady=1)
-                    lbl = ctk.CTkLabel(row, text=info['label'][:15], font=ctk.CTkFont(size=10, weight="bold"), text_color=TEXT_COLOR); lbl.pack(side="left")
+                    
+                    # Display the CATEGORY (STT/TTS/LLM) instead of the model ID twice
+                    category = info['type'].upper()
+                    lbl = ctk.CTkLabel(row, text=f"{category:<5}", font=ctk.CTkFont(size=10, weight="bold"), text_color=TEXT_COLOR); lbl.pack(side="left")
+                    
                     val = ctk.CTkLabel(row, text="...", font=ctk.CTkFont(size=9), text_color=GRAY_COLOR); val.pack(side="left", padx=5)
-                    
-                    kill_btn = ctk.CTkButton(row, text="💀", width=20, height=20, fg_color="transparent", hover_color=ERROR_COLOR, 
-                                            command=lambda p=port, l=info['label']: self.controller.kill_service(p, l))
-                    kill_btn.pack(side="right", padx=2)
-                    
-                    dot = ctk.CTkLabel(row, text="●", font=ctk.CTkFont(size=12)); dot.pack(side="right")
+                    kill_btn = ctk.CTkButton(row, text="💀", width=20, height=20, fg_color="transparent", hover_color=ERROR_COLOR, command=lambda p=port, l=info['label']: self.controller.kill_service(p, l))
+                    kill_btn.pack(side="right", padx=2); dot = ctk.CTkLabel(row, text="●", font=ctk.CTkFont(size=12)); dot.pack(side="right")
                     self.status_rows[port] = {"frame": row, "val": val, "dot": dot, "kill_btn": kill_btn, "last_status": None, "last_text": None}
                 
                 color = YELLOW_COLOR if is_rogue else (SUCCESS_COLOR if status == "ON" else YELLOW_COLOR if status == "STARTUP" else ERROR_COLOR if status == "UNHEALTHY" else GRAY_COLOR)
-                text = (info['info'] or "READY") if not is_rogue else f"ROGUE: {info['info'] or 'BUSY'}"
-                if info['label'] == "LLM" and is_rogue: 
-                    model_name = loaded_ollama[0] if loaded_ollama else "EMPTY"
-                    text = f"WRONG MODEL: {model_name}"
                 
-                # ONLY UPDATE IF CHANGED
+                # The 'info['info']' now contains Name + VRAM from utils.py
+                text = (info['info'] or "READY")
+                if is_rogue:
+                    if info['label'] == "LLM":
+                        text = f"WRONG MODEL: {loaded_ollama[0] if loaded_ollama else 'EMPTY'}"
+                    else:
+                        text = f"ROGUE: {text}"
+                
                 row_cache = self.status_rows[port]
                 if row_cache["last_status"] != color:
-                    row_cache["dot"].configure(text_color=color)
-                    row_cache["val"].configure(text_color=color if status != "OFF" else GRAY_COLOR)
-                    row_cache["last_status"] = color
-                
+                    row_cache["dot"].configure(text_color=color); row_cache["val"].configure(text_color=color if status != "OFF" else GRAY_COLOR); row_cache["last_status"] = color
                 if row_cache["last_text"] != text:
-                    row_cache["val"].configure(text=text)
-                    row_cache["last_text"] = text
-                
+                    row_cache["val"].configure(text=text); row_cache["last_text"] = text
                 if status == "OFF":
-                    if row_cache["kill_btn"].cget("text") != "":
-                        row_cache["kill_btn"].configure(state="disabled", text="")
+                    if row_cache["kill_btn"].cget("text") != "": row_cache["kill_btn"].configure(state="disabled", text="")
                 else:
-                    if row_cache["kill_btn"].cget("text") != "💀":
-                        row_cache["kill_btn"].configure(state="normal", text="💀")
+                    if row_cache["kill_btn"].cget("text") != "💀": row_cache["kill_btn"].configure(state="normal", text="💀")
             else:
-                if port in self.status_rows:
-                    self.status_rows[port]["frame"].destroy()
-                    del self.status_rows[port]
-
+                if port in self.status_rows: self.status_rows[port]["frame"].destroy(); del self.status_rows[port]
         s2s_on = health.get(self.controller.cfg['ports']['s2s'], {}).get('status') == "ON"
         if not self.controller.is_recording:
-            # Only update button if state changed to prevent cursor flickering
             target_text = f"{self.controller.interaction_mode} TO TALK" if s2s_on else "SYSTEM OFFLINE"
             if self.talk_btn.cget("text") != target_text:
-                self.talk_btn.configure(state="normal" if s2s_on else "disabled", 
-                                       fg_color=ACCENT_COLOR if s2s_on else GRAY_COLOR, 
-                                       text=target_text)
-        
+                self.talk_btn.configure(state="normal" if s2s_on else "disabled", fg_color=ACCENT_COLOR if s2s_on else GRAY_COLOR, text=target_text)
         self.after(1000, self.poll_status)
 
 if __name__ == "__main__":

@@ -26,4 +26,4 @@ ports:
 
 system:
 
-  health_check_interval: 2.0
+  health_check_interval: 1.0

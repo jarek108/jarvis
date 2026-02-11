@@ -53,17 +53,62 @@ def is_port_in_use(port: int) -> bool:
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         return s.connect_ex(('127.0.0.1', port)) == 0
 
+def get_process_vram_map():
+    """Returns a map of PID -> VRAM usage in GB via nvidia-smi."""
+    vram_map = {}
+    try:
+        # Query compute apps: pid and used_gpu_memory
+        cmd = ["nvidia-smi", "--query-compute-apps=pid,used_gpu_memory", "--format=csv,noheader,nounits"]
+        output = subprocess.check_output(cmd, text=True, stderr=subprocess.STDOUT).strip()
+        for line in output.splitlines():
+            if ',' in line:
+                pid_str, mem_str = line.split(',')
+                vram_map[int(pid_str.strip())] = float(mem_str.strip()) / 1024.0
+    except:
+        pass
+    return vram_map
+
+def get_vram_for_port(port):
+    """Finds VRAM usage for the process owning a specific port."""
+    try:
+        pids = {conn.pid for conn in psutil.net_connections(kind='inet') if conn.laddr.port == port and conn.pid}
+        if not pids: return 0.0
+        
+        vram_map = get_process_vram_map()
+        total_vram = 0.0
+        for pid in pids:
+            # Check the PID and its children (some servers use workers)
+            try:
+                main_proc = psutil.Process(pid)
+                all_pids = [pid] + [child.pid for child in main_proc.children(recursive=True)]
+                for p in all_pids:
+                    total_vram += vram_map.get(p, 0.0)
+            except:
+                total_vram += vram_map.get(pid, 0.0)
+        return total_vram
+    except:
+        return 0.0
+
 def get_service_status(port: int):
     if not is_port_in_use(port): return "OFF", None
     try:
         url = f"http://127.0.0.1:{port}/health"
         if port == 11434: url = f"http://127.0.0.1:{port}/api/tags"
         response = requests.get(url, timeout=2)
+        
+        vram_usage = get_vram_for_port(port)
+        vram_str = f"({vram_usage:.1f}GB)" if vram_usage > 0.05 else ""
+
         if response.status_code == 200:
             data = response.json()
             if port == 11434:
-                return "ON", "Ollama Core"
-            return ("BUSY" if data.get("status") == "busy" else "ON"), data.get("model") or data.get("variant") or "Ready"
+                # For Ollama, we check api/ps for more accurate resident models
+                models = get_loaded_ollama_models()
+                model_info = models[0] if models else "Ollama Core"
+                return "ON", f"{model_info} {vram_str}".strip()
+            
+            name = data.get("model") or data.get("variant") or "Ready"
+            return ("BUSY" if data.get("status") == "busy" else "ON"), f"{name} {vram_str}".strip()
         elif response.status_code == 503 and response.json().get("status") == "STARTUP":
             return "STARTUP", "Loading..."
         return "UNHEALTHY", None

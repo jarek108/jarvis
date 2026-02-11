@@ -120,8 +120,14 @@ async def lifespan(app: FastAPI):
     if os.path.exists(loadout_path):
         with open(loadout_path, "r") as f:
             l_data = yaml.safe_load(f)
-            if not active_stt: active_stt = l_data.get("stt", [None])[0]
-            if not active_tts: active_tts = l_data.get("tts", [None])[0]
+            if not active_stt:
+                stt_val = l_data.get("stt")
+                if stt_val:
+                    active_stt = stt_val[0] if isinstance(stt_val, list) else stt_val
+            if not active_tts:
+                tts_val = l_data.get("tts")
+                if tts_val:
+                    active_tts = tts_val[0] if isinstance(tts_val, list) else tts_val
             if not active_llm: active_llm = l_data.get("llm")
             logger.info(f"📦 Loadout: {selected_loadout}")
     else:
