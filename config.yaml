@@ -15,6 +15,15 @@ tts_loadout:
   chatterbox-turbo: 8022
 
 # System Services
+
 ports:
+
   llm: 11434
+
   s2s: 8002
+
+
+
+system:
+
+  health_check_interval: 2.0

@@ -117,11 +117,32 @@ class JarvisController:
         self.interaction_mode = "HOLD"
         self.is_recording = False
         self.server_process = None
+        
+        # State sharing
+        self.health_state = {}
+        self.loaded_ollama_models = []
+        self.is_polling = True
+        
+        # Logs dir
+        self.log_dir = os.path.join(self.project_root, "logs")
+        os.makedirs(self.log_dir, exist_ok=True)
+        
+        threading.Thread(target=self._status_polling_loop, daemon=True).start()
+
+    def _status_polling_loop(self):
+        interval = self.cfg.get('system', {}).get('health_check_interval', 2.0)
+        while self.is_polling:
+            try:
+                self.health_state = get_system_health()
+                self.loaded_ollama_models = get_loaded_ollama_models()
+            except Exception as e:
+                logger.error(f"Status Polling Error: {e}")
+            time.sleep(interval)
 
     def toggle_system(self):
         if self.server_process:
             self.ui_queue.put({"type": "log", "msg": "Shutting down system...", "tag": "system"})
-            kill_process_on_port(self.s2s_port)
+            threading.Thread(target=kill_process_on_port, args=(self.s2s_port,), daemon=True).start()
             self.server_process = None
             return False
         else:
@@ -133,10 +154,25 @@ class JarvisController:
         python_exe = sys.executable
         server_script = os.path.join(self.project_root, "servers", "s2s_server.py")
         cmd = [python_exe, server_script, "--loadout", self.current_loadout]
-        self.server_process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding='utf-8', bufsize=1, creationflags=0x08000000 if os.name == 'nt' else 0)
-        for line in iter(self.server_process.stdout.readline, ''):
-            if line: self.ui_queue.put({"type": "log", "msg": line.strip(), "tag": "system"})
-        self.server_process.stdout.close()
+        
+        log_file_path = os.path.join(self.log_dir, "s2s_server.log")
+        with open(log_file_path, "a", encoding="utf-8") as log_file:
+            log_file.write(f"\n--- SESSION START: {time.ctime()} ---\n")
+            self.server_process = subprocess.Popen(
+                cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, 
+                text=True, encoding='utf-8', bufsize=1, 
+                creationflags=0x08000000 if os.name == 'nt' else 0
+            )
+            
+            for line in iter(self.server_process.stdout.readline, ''):
+                if line:
+                    log_file.write(line)
+                    log_file.flush()
+                    # Only log critical errors or startup confirmations to the console
+                    if "PIPELINE READY" in line or "CRITICAL" in line or "ERROR" in line:
+                        self.ui_queue.put({"type": "log", "msg": line.strip(), "tag": "system"})
+            
+            self.server_process.stdout.close()
 
     def start_recording(self):
         if self.is_recording: return
@@ -149,7 +185,6 @@ class JarvisController:
         self.is_recording = False
         audio_data = self.audio.stop_capture()
         self.ui_queue.put({"type": "state", "recording": False})
-        self.ui_queue.put({"type": "log", "msg": "Thinking...", "tag": "system"})
         threading.Thread(target=self._send_request, args=(audio_data,), daemon=True).start()
 
     def _send_request(self, audio_data):
@@ -174,10 +209,10 @@ class JarvisController:
                     length = int.from_bytes(header[1:], 'little')
                     payload = stream.read(length)
                     if type_char == 'T':
-                        data = json.loads(payload.decode())
+                        data_json = json.loads(payload.decode())
                         # Format: (start s) Text (end s)
-                        timestamped_msg = f"({data.get('start', 0.0):.2f}s) {data['text']} ({data.get('end', 0.0):.2f}s)"
-                        self.ui_queue.put({"type": "log", "msg": timestamped_msg, "tag": data['role']})
+                        timestamped_msg = f"({data_json.get('start', 0.0):.2f}s) {data_json['text']} ({data_json.get('end', 0.0):.2f}s)"
+                        self.ui_queue.put({"type": "log", "msg": timestamped_msg, "tag": data_json['role']})
                     elif type_char == 'A': audio_stream.write(payload)
                     elif type_char == 'M':
                         m = json.loads(payload.decode())
@@ -193,7 +228,6 @@ class JarvisApp(ctk.CTk):
         self.configure(fg_color=BG_COLOR)
         self.queue = queue.Queue()
         self.controller = JarvisController(self.queue)
-        self.detailed_view = ctk.BooleanVar(value=True)
         self.setup_ui()
         self.poll_queue()
         self.poll_status()
@@ -207,27 +241,22 @@ class JarvisApp(ctk.CTk):
         self.sidebar.grid(row=0, column=0, rowspan=3, sticky="nsew")
         
         self.logo = ctk.CTkLabel(self.sidebar, text="⚛️ JARVIS", font=ctk.CTkFont(size=24, weight="bold"), text_color=ACCENT_COLOR)
-        self.logo.pack(pady=(20, 5))
+        self.logo.pack(pady=(20, 20))
         
-        # Detailed View Switch at top of sidebar
-        self.detail_switch = ctk.CTkSwitch(self.sidebar, text="Detailed View", variable=self.detailed_view, command=self.on_detail_toggle, progress_color=ACCENT_COLOR)
-        self.detail_switch.pack(pady=10)
-
-        # Container for collapsible content
         self.sidebar_content = ctk.CTkFrame(self.sidebar, fg_color="transparent")
         self.sidebar_content.pack(fill="both", expand=True, padx=10)
 
         # 1. Health Section
         self.status_container = ctk.CTkFrame(self.sidebar_content, fg_color="transparent")
-        self.status_container.pack(fill="x", pady=10)
+        self.status_container.pack(fill="x", pady=5)
         ctk.CTkLabel(self.status_container, text="HEALTH STATUS", font=ctk.CTkFont(size=11, weight="bold"), text_color=GRAY_COLOR).pack(anchor="w")
         self.init_btn = ctk.CTkButton(self.status_container, text="INITIALIZE SYSTEM", command=self.on_toggle_system, fg_color=GRAY_COLOR, hover_color=ACCENT_COLOR)
         self.init_btn.pack(pady=5, fill="x")
         self.status_frame = ctk.CTkFrame(self.status_container, fg_color="transparent")
         self.status_frame.pack(fill="x", pady=5)
-        self.status_rows = {} # Map port -> widget_dict
+        self.status_rows = {}
 
-        # 2. Config Section
+        # 2. Config Section (Now directly under health)
         self.config_container = ctk.CTkFrame(self.sidebar_content, fg_color="transparent")
         self.config_container.pack(fill="x", pady=10)
         
@@ -270,14 +299,6 @@ class JarvisApp(ctk.CTk):
         self.vu_canvas = ctk.CTkCanvas(self.interaction_frame, width=20, height=80, bg="#080C14", highlightthickness=0); self.vu_canvas.pack(side="right")
         self.vu_bar = self.vu_canvas.create_rectangle(0, 80, 20, 80, fill=ACCENT_COLOR, outline="")
 
-    def on_detail_toggle(self):
-        if self.detailed_view.get():
-            self.sidebar_content.pack(fill="both", expand=True, padx=10)
-            self.telemetry.grid(row=0, column=1, padx=20, pady=(20, 10), sticky="nsew")
-        else:
-            self.sidebar_content.pack_forget()
-            self.telemetry.grid_forget()
-
     def on_toggle_system(self):
         if self.controller.toggle_system(): self.init_btn.configure(text="STOP SYSTEM", fg_color=ERROR_COLOR)
         else: self.init_btn.configure(text="INITIALIZE SYSTEM", fg_color=GRAY_COLOR)
@@ -300,7 +321,8 @@ class JarvisApp(ctk.CTk):
         if self.controller.interaction_mode == "TOGGLE":
             if self.controller.is_recording: self.controller.stop_recording()
             else: self.controller.start_recording()
-        else: self.controller.start_recording()
+        else:
+            self.controller.start_recording()
 
     def on_release(self, event=None):
         if self.controller.interaction_mode == "HOLD": self.controller.stop_recording()
@@ -325,10 +347,9 @@ class JarvisApp(ctk.CTk):
         self.after(50, self.poll_queue)
 
     def poll_status(self):
-        health = get_system_health()
-        loaded_ollama = get_loaded_ollama_models()
+        health = self.controller.health_state
+        loaded_ollama = self.controller.loaded_ollama_models
         
-        # Get active ports for loadout
         active_ports = set()
         active_llm = None
         path = os.path.join(self.controller.project_root, "tests", "loadouts", f"{self.controller.current_loadout}.yaml")
@@ -341,19 +362,14 @@ class JarvisApp(ctk.CTk):
                 if l.get('stt'): active_ports.add(self.controller.cfg['stt_loadout'][l['stt'][0]])
                 if l.get('tts'): active_ports.add(self.controller.cfg['tts_loadout'][l['tts'][0]])
 
-        # Update existing and add new rows
         for port, info in health.items():
             status = info['status']
             is_active = port in active_ports
-            
-            # Visibility logic
-            # Show if: 1. Part of loadout, 2. Rogue (Known port but not in loadout and IS running)
             is_rogue = not is_active and status != "OFF"
             
-            # Special Ollama Check: if LLM is ON, check if the model matches
             if info['label'] == "LLM" and status == "ON":
                 if active_llm and not any(active_llm in m for m in loaded_ollama):
-                    is_rogue = True # Model mismatch is a rogue state
+                    is_rogue = True
 
             if is_active or is_rogue:
                 if port not in self.status_rows:
@@ -370,17 +386,18 @@ class JarvisApp(ctk.CTk):
                 self.status_rows[port]["dot"].configure(text_color=color)
                 self.status_rows[port]["val"].configure(text=text, text_color=color if status != "OFF" else GRAY_COLOR)
             else:
-                # Hide if no longer relevant
                 if port in self.status_rows:
                     self.status_rows[port]["frame"].destroy()
                     del self.status_rows[port]
 
-        s2s_on = get_service_status(self.controller.cfg['ports']['s2s'])[0] == "ON"
+        s2s_on = health.get(self.controller.cfg['ports']['s2s'], {}).get('status') == "ON"
         if not self.controller.is_recording:
             self.talk_btn.configure(state="normal" if s2s_on else "disabled", fg_color=ACCENT_COLOR if s2s_on else GRAY_COLOR, text=f"{self.controller.interaction_mode} TO TALK" if s2s_on else "SYSTEM OFFLINE")
-        self.after(2000, self.poll_status)
+        self.after(500, self.poll_status)
 
 if __name__ == "__main__":
     app = JarvisApp()
     try: app.mainloop()
-    finally: app.controller.audio.shutdown()
+    finally:
+        app.controller.is_polling = False
+        app.controller.audio.shutdown()
