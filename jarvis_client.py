@@ -372,61 +372,133 @@ class JarvisApp(ctk.CTk):
         # Create a sorted list of ports to maintain consistent UI order
         sorted_ports = sorted(health.keys())
 
-        for port in sorted_ports:
-            info = health[port]
-            status = info['status']
-            is_active = port in active_ports
-            
-            # Logic:
-            # 1. If status is ON/STARTUP/BUSY, always show it.
-            # 2. If status is OFF, only show it if it's in the active loadout.
-            
-            is_rogue = not is_active and status != "OFF"
-            
-            # Special Ollama Check: Model mismatch is always rogue (Yellow)
-            if info['label'] == "LLM" and status == "ON":
-                if active_llm and not any(active_llm in m for m in loaded_ollama):
-                    is_rogue = True
+                for port in sorted_ports:
 
-            should_show = (status != "OFF") or is_active
+                    info = health[port]
 
-            if should_show:
-                if port not in self.status_rows:
-                    row = ctk.CTkFrame(self.status_frame, fg_color="transparent"); row.pack(fill="x", pady=1)
-                    lbl = ctk.CTkLabel(row, text=info['label'][:15], font=ctk.CTkFont(size=10, weight="bold"), text_color=TEXT_COLOR); lbl.pack(side="left")
-                    val = ctk.CTkLabel(row, text="...", font=ctk.CTkFont(size=9), text_color=GRAY_COLOR); val.pack(side="left", padx=5)
+                    status = info['status']
+
+                    is_active = port in active_ports
+
+                    is_rogue = not is_active and status != "OFF"
+
                     
-                    # Kill Button (Skull)
-                    kill_btn = ctk.CTkButton(row, text="💀", width=20, height=20, fg_color="transparent", hover_color=ERROR_COLOR, 
-                                            command=lambda p=port, l=info['label']: self.controller.kill_service(p, l))
-                    kill_btn.pack(side="right", padx=2)
-                    
-                    dot = ctk.CTkLabel(row, text="●", font=ctk.CTkFont(size=12)); dot.pack(side="right")
-                    self.status_rows[port] = {"frame": row, "val": val, "dot": dot, "kill_btn": kill_btn}
-                
-                color = YELLOW_COLOR if is_rogue else (SUCCESS_COLOR if status == "ON" else YELLOW_COLOR if status == "STARTUP" else ERROR_COLOR if status == "UNHEALTHY" else GRAY_COLOR)
-                text = (info['info'] or "READY") if not is_rogue else f"ROGUE: {info['info'] or 'BUSY'}"
-                if info['label'] == "LLM" and is_rogue: 
-                    model_name = loaded_ollama[0] if loaded_ollama else "EMPTY"
-                    text = f"WRONG MODEL: {model_name}"
-                
-                self.status_rows[port]["dot"].configure(text_color=color)
-                self.status_rows[port]["val"].configure(text=text, text_color=color if status != "OFF" else GRAY_COLOR)
-                
-                # Only show skull if service is actually running (not OFF)
-                if status == "OFF":
-                    self.status_rows[port]["kill_btn"].configure(state="disabled", text="")
-                else:
-                    self.status_rows[port]["kill_btn"].configure(state="normal", text="💀")
-            else:
-                if port in self.status_rows:
-                    self.status_rows[port]["frame"].destroy()
-                    del self.status_rows[port]
 
-        s2s_on = health.get(self.controller.cfg['ports']['s2s'], {}).get('status') == "ON"
-        if not self.controller.is_recording:
-            self.talk_btn.configure(state="normal" if s2s_on else "disabled", fg_color=ACCENT_COLOR if s2s_on else GRAY_COLOR, text=f"{self.controller.interaction_mode} TO TALK" if s2s_on else "SYSTEM OFFLINE")
-        self.after(500, self.poll_status)
+                    if info['label'] == "LLM" and status == "ON":
+
+                        if active_llm and not any(active_llm in m for m in loaded_ollama):
+
+                            is_rogue = True
+
+        
+
+                    should_show = (status != "OFF") or is_active
+
+        
+
+                    if should_show:
+
+                        if port not in self.status_rows:
+
+                            row = ctk.CTkFrame(self.status_frame, fg_color="transparent"); row.pack(fill="x", pady=1)
+
+                            lbl = ctk.CTkLabel(row, text=info['label'][:15], font=ctk.CTkFont(size=10, weight="bold"), text_color=TEXT_COLOR); lbl.pack(side="left")
+
+                            val = ctk.CTkLabel(row, text="...", font=ctk.CTkFont(size=9), text_color=GRAY_COLOR); val.pack(side="left", padx=5)
+
+                            
+
+                            kill_btn = ctk.CTkButton(row, text="💀", width=20, height=20, fg_color="transparent", hover_color=ERROR_COLOR, 
+
+                                                    command=lambda p=port, l=info['label']: self.controller.kill_service(p, l))
+
+                            kill_btn.pack(side="right", padx=2)
+
+                            
+
+                            dot = ctk.CTkLabel(row, text="●", font=ctk.CTkFont(size=12)); dot.pack(side="right")
+
+                            self.status_rows[port] = {"frame": row, "val": val, "dot": dot, "kill_btn": kill_btn, "last_status": None, "last_text": None}
+
+                        
+
+                        color = YELLOW_COLOR if is_rogue else (SUCCESS_COLOR if status == "ON" else YELLOW_COLOR if status == "STARTUP" else ERROR_COLOR if status == "UNHEALTHY" else GRAY_COLOR)
+
+                        text = (info['info'] or "READY") if not is_rogue else f"ROGUE: {info['info'] or 'BUSY'}"
+
+                        if info['label'] == "LLM" and is_rogue: 
+
+                            model_name = loaded_ollama[0] if loaded_ollama else "EMPTY"
+
+                            text = f"WRONG MODEL: {model_name}"
+
+                        
+
+                        # ONLY UPDATE IF CHANGED
+
+                        row_cache = self.status_rows[port]
+
+                        if row_cache["last_status"] != color:
+
+                            row_cache["dot"].configure(text_color=color)
+
+                            row_cache["val"].configure(text_color=color if status != "OFF" else GRAY_COLOR)
+
+                            row_cache["last_status"] = color
+
+                        
+
+                        if row_cache["last_text"] != text:
+
+                            row_cache["val"].configure(text=text)
+
+                            row_cache["last_text"] = text
+
+                        
+
+                        if status == "OFF":
+
+                            if row_cache["kill_btn"].cget("text") != "":
+
+                                row_cache["kill_btn"].configure(state="disabled", text="")
+
+                        else:
+
+                            if row_cache["kill_btn"].cget("text") != "💀":
+
+                                row_cache["kill_btn"].configure(state="normal", text="💀")
+
+                    else:
+
+                        if port in self.status_rows:
+
+                            self.status_rows[port]["frame"].destroy()
+
+                            del self.status_rows[port]
+
+        
+
+                s2s_on = health.get(self.controller.cfg['ports']['s2s'], {}).get('status') == "ON"
+
+                if not self.controller.is_recording:
+
+                    # Only update button if state changed to prevent cursor flickering
+
+                    target_text = f"{self.controller.interaction_mode} TO TALK" if s2s_on else "SYSTEM OFFLINE"
+
+                    if self.talk_btn.cget("text") != target_text:
+
+                        self.talk_btn.configure(state="normal" if s2s_on else "disabled", 
+
+                                               fg_color=ACCENT_COLOR if s2s_on else GRAY_COLOR, 
+
+                                               text=target_text)
+
+                
+
+                self.after(1000, self.poll_status)
+
+        
 
 if __name__ == "__main__":
     app = JarvisApp()
