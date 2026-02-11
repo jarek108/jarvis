@@ -150,6 +150,10 @@ class JarvisController:
             threading.Thread(target=self._run_server, daemon=True).start()
             return True
 
+    def kill_service(self, port, label):
+        self.ui_queue.put({"type": "log", "msg": f"💀 Killing service: {label} (Port {port})", "tag": "system"})
+        threading.Thread(target=kill_process_on_port, args=(port,), daemon=True).start()
+
     def _run_server(self):
         python_exe = sys.executable
         server_script = os.path.join(self.project_root, "servers", "s2s_server.py")
@@ -391,8 +395,14 @@ class JarvisApp(ctk.CTk):
                     row = ctk.CTkFrame(self.status_frame, fg_color="transparent"); row.pack(fill="x", pady=1)
                     lbl = ctk.CTkLabel(row, text=info['label'][:15], font=ctk.CTkFont(size=10, weight="bold"), text_color=TEXT_COLOR); lbl.pack(side="left")
                     val = ctk.CTkLabel(row, text="...", font=ctk.CTkFont(size=9), text_color=GRAY_COLOR); val.pack(side="left", padx=5)
+                    
+                    # Kill Button (Skull)
+                    kill_btn = ctk.CTkButton(row, text="💀", width=20, height=20, fg_color="transparent", hover_color=ERROR_COLOR, 
+                                            command=lambda p=port, l=info['label']: self.controller.kill_service(p, l))
+                    kill_btn.pack(side="right", padx=2)
+                    
                     dot = ctk.CTkLabel(row, text="●", font=ctk.CTkFont(size=12)); dot.pack(side="right")
-                    self.status_rows[port] = {"frame": row, "val": val, "dot": dot}
+                    self.status_rows[port] = {"frame": row, "val": val, "dot": dot, "kill_btn": kill_btn}
                 
                 color = YELLOW_COLOR if is_rogue else (SUCCESS_COLOR if status == "ON" else YELLOW_COLOR if status == "STARTUP" else ERROR_COLOR if status == "UNHEALTHY" else GRAY_COLOR)
                 text = (info['info'] or "READY") if not is_rogue else f"ROGUE: {info['info'] or 'BUSY'}"
@@ -402,6 +412,12 @@ class JarvisApp(ctk.CTk):
                 
                 self.status_rows[port]["dot"].configure(text_color=color)
                 self.status_rows[port]["val"].configure(text=text, text_color=color if status != "OFF" else GRAY_COLOR)
+                
+                # Only show skull if service is actually running (not OFF)
+                if status == "OFF":
+                    self.status_rows[port]["kill_btn"].configure(state="disabled", text="")
+                else:
+                    self.status_rows[port]["kill_btn"].configure(state="normal", text="💀")
             else:
                 if port in self.status_rows:
                     self.status_rows[port]["frame"].destroy()
