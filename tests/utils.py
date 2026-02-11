@@ -325,12 +325,13 @@ class LifecycleManager:
                     print(f"❌ FAILED to start {s['id']}")
                     sys.exit(1)
 
-        # 3. WARMUP (Special handling for LLM)
-        if domain == "llm" or self.full or domain == "s2s":
+        # 3. WARMUP (Special handling for LLM/VLM)
+        if domain in ["llm", "vlm"] or self.full or domain == "s2s":
             target_llm = self.loadout.get('llm')
             if target_llm:
                 check_and_pull_model(target_llm)
-                warmup_llm(target_llm)
+                # For VLM domain, we do a visual warmup
+                warmup_llm(target_llm, visual=(domain == "vlm"))
 
         return time.perf_counter() - setup_start
 
@@ -396,15 +397,23 @@ def check_and_pull_model(model_name):
     except:
         return False
 
-def warmup_llm(model_name):
+def warmup_llm(model_name, visual=False):
     """Performs a dummy request to hot-load the model into VRAM."""
     print(f"🔥 Warming up {model_name} (Hot-loading weights)...")
+    payload = {
+        "model": model_name,
+        "messages": [{"role": "user", "content": "hi"}],
+        "stream": False
+    }
+    
+    if visual:
+        # 1x1 black pixel PNG
+        tiny_img = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII="
+        payload["messages"][0]["images"] = [tiny_img]
+        print("  ↳ 👁️ Performing Visual Encoder Warmup...")
+
     try:
-        requests.post("http://127.0.0.1:11434/api/chat", json={
-            "model": model_name,
-            "messages": [{"role": "user", "content": "hi"}],
-            "stream": False
-        }, timeout=120)
+        requests.post("http://127.0.0.1:11434/api/chat", json=payload, timeout=120)
     except Exception as e:
         print(f"⚠️ Warmup failed: {e}")
 

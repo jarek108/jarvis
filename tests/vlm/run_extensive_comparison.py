@@ -4,12 +4,13 @@ import time
 import subprocess
 import json
 import yaml
+import argparse
 
 # Allow importing utils from parent
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from utils import format_status, CYAN, GREEN, RED, BOLD, RESET, LINE_LEN, list_all_loadouts, save_artifact
+from utils import format_status, CYAN, GREEN, RED, BOLD, RESET, LINE_LEN, list_all_loadouts, save_artifact, trigger_report_generation
 
-def run_vlm_comparison():
+def run_vlm_comparison(upload=True):
     base_dir = os.path.dirname(os.path.abspath(__file__))
     loadouts = list_all_loadouts()
     
