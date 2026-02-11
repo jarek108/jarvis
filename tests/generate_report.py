@@ -51,27 +51,49 @@ def generate_excel():
             sheets[domain.upper()] = pd.DataFrame(rows)
             has_any_data = True
 
-    # 2. LLM / VLM
-    for domain in ["llm", "vlm"]:
-        data = load_json(os.path.join(artifacts_dir, f"latest_{domain}.json"))
-        if not data: continue
-        rows = []
-        for entry in data:
-            loadout = entry.get('loadout', 'unknown')
-            vram = entry.get('vram', {}).get('peak_gb', 0)
-            for s in entry.get('scenarios', []):
-                rows.append({
-                    "Loadout": loadout,
-                    "Scenario": s.get('name'),
-                    "Status": s.get('status'),
-                    "TTFT (s)": s.get('ttft'),
-                    "TPS": s.get('tps'),
-                    "VRAM Peak (GB)": vram,
-                    "Text": s.get('text')
-                })
-        if rows:
-            sheets[domain.upper()] = pd.DataFrame(rows)
-            has_any_data = True
+        # 2. LLM / VLM
+
+        for domain in ["llm", "vlm"]:
+
+            data = load_json(os.path.join(artifacts_dir, f"latest_{domain}.json"))
+
+            if not data: continue
+
+            rows = []
+
+            for entry in data:
+
+                loadout = entry.get('loadout', 'unknown')
+
+                vram = entry.get('vram', {}).get('peak_gb', 0)
+
+                for s in entry.get('scenarios', []):
+
+                    rows.append({
+
+                        "Loadout": loadout,
+
+                        "Scenario": s.get('name'),
+
+                        "Status": s.get('status'),
+
+                        "TTFT (s)": s.get('ttft'),
+
+                        "TPS": s.get('tps'),
+
+                        "VRAM Peak (GB)": vram,
+
+                        "Text": s.get('text')
+
+                    })
+
+            if rows:
+
+                sheets[domain.upper()] = pd.DataFrame(rows)
+
+                has_any_data = True
+
+    
 
     # 3. S2S
     data = load_json(os.path.join(artifacts_dir, "latest_s2s.json"))
