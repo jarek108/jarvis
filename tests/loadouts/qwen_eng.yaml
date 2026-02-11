@@ -1,5 +1,0 @@
-stt:
-  - faster-whisper-base
-llm: qwen3-vl:30b-a3b-instruct
-tts:
-  - chatterbox-multilingual

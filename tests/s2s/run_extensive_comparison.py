@@ -27,7 +27,7 @@ def run_s2s_suite():
 
     for lid in loadouts:
         print(f"\n>>> Benchmarking Loadout: {lid.upper()}")
-        script_path = os.path.join(base_dir, "run_isolated.py")
+        script_path = os.path.join(base_dir, "test.py")
         
         env = os.environ.copy()
         env["PYTHONPATH"] = project_root + os.pathsep + os.path.dirname(base_dir) + os.pathsep + env.get("PYTHONPATH", "")

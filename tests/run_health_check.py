@@ -13,9 +13,9 @@ def run_master_suite():
     python_exe = os.path.join(os.path.dirname(base_dir), "jarvis-venv", "Scripts", "python.exe")
 
     suites = [
-        {"name": "STT (Base)", "path": "stt/whisper/isolated_base.py"},
-        {"name": "TTS (Eng)", "path": "tts/chatterbox/isolated_eng.py"},
-        {"name": "S2S (Default)", "path": "s2s/isolated_default.py"}
+        {"name": "STT (Base)", "path": "stt/test.py", "args": ["--loadout", "base-qwen30-multi"]},
+        {"name": "TTS (Turbo)", "path": "tts/test.py", "args": ["--loadout", "tiny-gpt20-turbo"]},
+        {"name": "S2S (Default)", "path": "s2s/test.py", "args": ["--loadout", "base-qwen30-multi"]}
     ]
 
     print("#"*LINE_LEN)
@@ -30,7 +30,8 @@ def run_master_suite():
         
         try:
             # Explicitly run in its own directory
-            subprocess.run([python_exe, script_path], cwd=os.path.dirname(script_path), env=env)
+            cmd = [python_exe, script_path] + suite.get("args", [])
+            subprocess.run(cmd, cwd=os.path.dirname(script_path), env=env)
         except Exception as e:
             print(f"Error running {suite['name']} suite: {e}")
 

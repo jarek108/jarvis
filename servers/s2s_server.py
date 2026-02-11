@@ -41,7 +41,7 @@ from tests.utils import load_config, is_port_in_use, kill_process_on_port, start
 # Global config and state
 cfg = load_config()
 owned_ports = []
-DEFAULT_LOADOUT = "default"
+DEFAULT_LOADOUT = "base-qwen30-multi"
 
 # Configure lean logging
 logger.remove()
@@ -222,8 +222,9 @@ async def process_stream(
     try:
         audio_data = await file.read()
         
+        timeout = aiohttp.ClientTimeout(total=300)
         # 1. STT (Buffered)
-        async with aiohttp.ClientSession() as session:
+        async with aiohttp.ClientSession(timeout=timeout) as session:
             stt_url = f"http://127.0.0.1:{stt_port}/transcribe"
             form = aiohttp.FormData()
             form.add_field('file', audio_data, filename='input.wav', content_type='audio/wav')
@@ -378,7 +379,8 @@ async def process_audio(
     try:
         audio_data = await file.read()
         
-        async with aiohttp.ClientSession() as session:
+        timeout = aiohttp.ClientTimeout(total=300) # 5 minutes
+        async with aiohttp.ClientSession(timeout=timeout) as session:
             # 1. STT
             stt_url = f"http://127.0.0.1:{stt_port}/transcribe"
             form = aiohttp.FormData()

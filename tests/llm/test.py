@@ -1,17 +1,19 @@
 import requests
-import time
-import json
 import os
 import sys
-import re
+import time
+import json
+import argparse
+import yaml
 
-# Allow importing utils from parent
+# Allow importing utils from parent levels
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from utils import report_llm_result, ensure_utf8_output
+from utils import report_llm_result, ensure_utf8_output, run_test_lifecycle, get_gpu_vram_usage, check_ollama_offload
 
+# Ensure UTF-8 output
 ensure_utf8_output()
 
-def run_test(model_name="gpt-oss:20b"):
+def run_test_suite(model_name):
     url = "http://127.0.0.1:11434/api/chat"
     
     scenarios = [
@@ -20,6 +22,9 @@ def run_test(model_name="gpt-oss:20b"):
         {"name": "short2long", "text": "Tell me a four to five sentences story about a dog."},
         {"name": "long2short", "text": "It is a truth universally acknowledged, that a single man in possession of a good fortune, must be in want of a wife. However little known the feelings or views of such a man may be on his first entering a neighbourhood, this truth is so well fixed in the minds of the surrounding families, that he is considered the rightful property of some one or other of their daughters. What is the title of this book? Respond with title only."}
     ]
+
+    # Audit Start
+    vram_baseline = get_gpu_vram_usage()
 
     for s in scenarios:
         payload = {
@@ -53,7 +58,6 @@ def run_test(model_name="gpt-oss:20b"):
                         if first_token_time is None:
                             first_token_time = time.perf_counter()
 
-                        # Logic to handle <thought> tags if present
                         if "<thought>" in token: 
                             is_thinking = True
                             continue
@@ -69,7 +73,6 @@ def run_test(model_name="gpt-oss:20b"):
                             if first_response_time is None and token.strip():
                                 first_response_time = time.perf_counter()
 
-                            # Detect sentence end in the actual response
                             if any(c in token for c in ".!?"):
                                 chunks.append({
                                     "text": sentence_buffer.strip(),
@@ -87,14 +90,12 @@ def run_test(model_name="gpt-oss:20b"):
 
             total_dur = time.perf_counter() - start_time
             ttft = first_token_time - start_time if first_token_time else 0
-            ttfr = (first_response_time - start_time) if first_response_time else ttft
             tps = total_tokens / total_dur if total_dur > 0 else 0
 
             res_obj = {
                 "name": s['name'],
                 "status": "PASSED",
                 "ttft": ttft,
-                "ttfr": ttfr,
                 "tps": tps,
                 "raw_text": full_text,
                 "thought": thought_text.strip(),
@@ -106,5 +107,59 @@ def run_test(model_name="gpt-oss:20b"):
         except Exception as e:
             report_llm_result({"name": s['name'], "status": "FAILED", "text": str(e)})
 
+    # Audit End
+    vram_peak = get_gpu_vram_usage()
+    is_ok, vram_used, total_size = check_ollama_offload(model_name)
+    
+    audit_data = {
+        "model": model_name,
+        "baseline_gb": vram_baseline,
+        "peak_gb": vram_peak,
+        "is_ok": is_ok,
+        "vram_used_gb": vram_used,
+        "total_size_gb": total_size
+    }
+    
+    # Unified output for LLM Audit
+    print("\n" + "-"*40)
+    print(f"VRAM FOOTPRINT: {model_name.upper()}")
+    print(f"  Baseline: {vram_baseline:.1f} GB")
+    print(f"  Peak:     {vram_peak:.1f} GB")
+    if total_size > 0:
+        status_txt = "FULL VRAM" if is_ok else "🚨 RAM SWAP"
+        print(f"  Placement: {status_txt} ({vram_used:.1f}GB / {total_size:.1f}GB)")
+    print("-"*40 + "\n")
+    print(f"VRAM_AUDIT_RESULT: {json.dumps(audit_data)}")
+
 if __name__ == "__main__":
-    run_test()
+    parser = argparse.ArgumentParser(description="Jarvis LLM Test Suite")
+    parser.add_argument("--loadout", type=str, required=True, help="Loadout YAML name")
+    parser.add_argument("--purge", action="store_true", help="Kill extra Jarvis services")
+    parser.add_argument("--full", action="store_true", help="Ensure all loadout services are running")
+    parser.add_argument("--benchmark-mode", action="store_true", help="Enable deterministic output")
+    args = parser.parse_args()
+
+    # Load loadout to get model_id
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    project_root = os.path.dirname(os.path.dirname(script_dir))
+    loadout_path = os.path.join(project_root, "tests", "loadouts", f"{args.loadout}.yaml")
+    
+    if not os.path.exists(loadout_path):
+        print(f"❌ ERROR: Loadout '{args.loadout}' not found.")
+        sys.exit(1)
+        
+    with open(loadout_path, "r") as f:
+        l_data = yaml.safe_load(f)
+        target_model = l_data.get('llm')
+        if not target_model:
+            print(f"❌ ERROR: Loadout '{args.loadout}' defines no LLM component.")
+            sys.exit(1)
+
+    run_test_lifecycle(
+        domain="llm",
+        loadout_name=args.loadout,
+        purge=args.purge,
+        full=args.full,
+        test_func=lambda: run_test_suite(target_model),
+        benchmark_mode=args.benchmark_mode
+    )
