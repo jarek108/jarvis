@@ -1,4 +1,5 @@
 description: "Standard English loadout, balanced for speed, using Qwen 30B and multilingual TTS"
+vision: true
 stt: ["faster-whisper-base"]
 tts: ["chatterbox-multilingual"]
 llm: "qwen3-vl:30b-a3b-instruct"

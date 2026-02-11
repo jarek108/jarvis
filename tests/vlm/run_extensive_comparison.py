@@ -3,6 +3,7 @@ import sys
 import time
 import subprocess
 import json
+import yaml
 
 # Allow importing utils from parent
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -24,7 +25,21 @@ def run_vlm_comparison():
     print(f"{BOLD}{CYAN}{'VLM MULTI-LOADOUT VISION COMPARISON BENCHMARK':^120}{RESET}")
     print("#"*LINE_LEN)
 
+    vlm_loadouts = []
     for lid in loadouts:
+        path = os.path.join(project_root, "tests", "loadouts", f"{lid}.yaml")
+        try:
+            with open(path, "r") as f:
+                data = yaml.safe_load(f)
+                llm = data.get("llm", "").lower()
+                # Run if 'vision: true' IS explicitly set OR if name contains 'vl' and vision IS NOT false
+                has_vision_flag = data.get("vision")
+                if has_vision_flag is True or (has_vision_flag is not False and "vl" in llm):
+                    vlm_loadouts.append(lid)
+        except:
+            pass
+
+    for lid in vlm_loadouts:
         print(f"\n>>> Benchmarking VLM Loadout: {lid.upper()}")
         script_path = os.path.join(base_dir, "test.py")
         
