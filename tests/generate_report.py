@@ -4,6 +4,7 @@ import os
 import subprocess
 import argparse
 import pickle
+import time
 from google_auth_oauthlib.flow import InstalledAppFlow
 from google.auth.transport.requests import Request
 from googleapiclient.discovery import build
@@ -22,7 +23,11 @@ def load_json(path):
 
 def generate_excel():
     artifacts_dir = os.path.join(os.path.dirname(__file__), "artifacts")
-    output_path = os.path.join(artifacts_dir, "Jarvis_Benchmark_Report.xlsx")
+    
+    # Add date to filename
+    date_str = time.strftime("%Y-%m-%d")
+    file_name = f"Jarvis_Benchmark_Report_{date_str}.xlsx"
+    output_path = os.path.join(artifacts_dir, file_name)
     
     sheets = {}
     has_any_data = False
@@ -96,6 +101,19 @@ def generate_excel():
     with pd.ExcelWriter(output_path, engine='openpyxl') as writer:
         for name, df in sheets.items():
             df.to_excel(writer, sheet_name=name, index=False)
+            
+            # --- AUTO-SIZE COLUMNS ---
+            worksheet = writer.sheets[name]
+            for idx, col in enumerate(df.columns):
+                # Measure max width of header and data cells
+                series = df[col]
+                max_len = max((
+                    series.astype(str).map(len).max(),  # Len of longest cell
+                    len(str(series.name))  # Len of column name
+                )) + 2  # Padding
+                # Limit max width to avoid crazy columns
+                max_len = min(max_len, 100)
+                worksheet.column_dimensions[chr(65 + idx)].width = max_len
             
     print(f"📊 Excel Report Generated: {output_path}")
     return output_path

@@ -5,44 +5,44 @@
             {
                 "name": "bunny",
                 "status": "PASSED",
-                "ttft": 0.3603103999994346,
-                "ttfr": 0.3603103999994346,
-                "tps": 126.50418441372523,
+                "ttft": 0.3601946999988286,
+                "ttfr": 0.3601946999988286,
+                "tps": 123.84956801562078,
                 "text": "The animal in the video is a large, white, anthropomorphic rabbit. It is shown in a series of scenes in a lush, green field.\n\n- In the first scene, the rabbit is lying on its back on the grass, with a large, pink butterfly resting on its belly.\n- In the second scene, the rabbit is sitting up, looking down at the butterfly, which is now perched on its head.\n- In the final scene, the rabbit is standing in a field, looking down at a small, red, round object on the ground, possibly a flower or a ball.",
-                "duration": 0.9564900999976089
+                "duration": 0.9769917000012356
             },
             {
                 "name": "jarvis_logo",
                 "status": "PASSED",
-                "ttft": 0.15636069999891333,
-                "ttfr": 0.15636069999891333,
-                "tps": 176.01411207610073,
+                "ttft": 0.1601029000012204,
+                "ttfr": 0.1601029000012204,
+                "tps": 171.35620907330363,
                 "text": "This image features a stylized, futuristic robot head, which appears to be a representation of Iron Man's helmet. The helmet is centrally positioned within a circular, high-tech interface that resembles a heads-up display (HUD) or targeting system.\n\nKey visual elements include:\n- A glowing blue, metallic helmet with a sleek, angular design.\n- Bright, glowing green eyes that give it an intense, focused look.\n- Red accents on the sides of the helmet, possibly representing earpieces or sensors.\n- A circular frame surrounding the helmet, composed of concentric rings with glowing blue lines and markings, suggesting a digital or scanning interface.\n- The overall color scheme is dominated by shades of blue and black, creating a dark, high-tech, and cybernetic atmosphere.\n\nThe image is likely a logo or icon for a game, app, or digital platform related to Iron Man or a similar sci-fi theme.",
-                "duration": 1.034008000002359
+                "duration": 1.062115000000631
             },
             {
                 "name": "three_objects",
                 "status": "PASSED",
-                "ttft": 0.13103290000435663,
-                "ttfr": 0.13103290000435663,
-                "tps": 146.95019134083748,
+                "ttft": 0.1514924000002793,
+                "ttfr": 0.1514924000002793,
+                "tps": 139.34369121364466,
                 "text": "Based on the image provided, we can identify the following:\n\n- There is one red circle in the upper left.\n- There is one blue circle in the upper right.\n- There is one green circle in the lower center.\n\nEach of these is a distinct, colored circle.\n\nTherefore, there are 3 colored circles in the photo.",
-                "duration": 0.45593680000456516
+                "duration": 0.4808255000025383
             },
             {
                 "name": "traffic",
                 "status": "PASSED",
-                "ttft": 1.030388999999559,
-                "ttfr": 1.030388999999559,
-                "tps": 39.32765441986089,
+                "ttft": 1.0275782000026084,
+                "ttfr": 1.0275782000026084,
+                "tps": 39.44337509068225,
                 "text": "Based on the video frames provided, the following types of vehicles are visible:\n\n- **Car**: A white car is seen driving into the parking lot and then parking.\n- **Bicycle**: A person is seen riding a bicycle across the parking lot.",
-                "duration": 1.2967974000057438
+                "duration": 1.2929928000012296
             }
         ],
         "vram": {
             "model": "qwen3-vl:30b-a3b-instruct",
-            "baseline_gb": 24.0966796875,
-            "peak_gb": 24.1025390625,
+            "baseline_gb": 24.076171875,
+            "peak_gb": 24.072265625,
             "is_ok": true,
             "vram_used_gb": 22.01561689376831,
             "total_size_gb": 22.01561689376831
