@@ -22,10 +22,11 @@ def run_test_suite(model_name):
     url = "http://127.0.0.1:11434/api/chat"
     input_base = os.path.join(os.path.dirname(__file__), "input_data")
     
-    # Supported image extensions
+    # Supported extensions
     IMG_EXTS = (".png", ".jpg", ".jpeg", ".webp")
+    VID_EXTS = (".mp4", ".mkv", ".avi", ".mov")
     
-    # DISCOVERY: Find all image files and look for matching .txt
+    # DISCOVERY: Find all files and look for matching .txt
     scenarios = []
     all_files = os.listdir(input_base)
     for f in all_files:
@@ -40,32 +41,37 @@ def run_test_suite(model_name):
                 scenarios.append({
                     "name": name_base,
                     "text": prompt,
-                    "image": f
+                    "file": f,
+                    "type": "image"
                 })
             else:
-                print(f"WARN: Image '{f}' found without matching .txt prompt. Skipping.")
+                print(f"WARN: File '{f}' found without matching .txt prompt. Skipping.")
+        elif ext in VID_EXTS:
+            print(f"INFO: Skipping video file '{f}' (Ollama direct video byte support pending verification).")
 
     if not scenarios:
-        print(f"❌ ERROR: No valid VLM test cases (image + .txt) found in {input_base}")
+        print(f"❌ ERROR: No valid VLM test cases (file + .txt) found in {input_base}")
         return
 
     # Audit Start
     vram_baseline = get_gpu_vram_usage()
 
     for s in scenarios:
-        image_path = os.path.join(input_base, s['image'])
-        if not os.path.exists(image_path):
-            report_llm_result({"name": s['name'], "status": "FAILED", "text": f"Image missing: {s['image']}"})
-            continue
-
-        img_b64 = encode_image(image_path)
+        file_path = os.path.join(input_base, s['file'])
         
+        # Base64 encode the file
+        with open(file_path, "rb") as bf:
+            b64_data = base64.b64encode(bf.read()).decode('utf-8')
+        
+        # Determine payload key based on type
+        # Note: As of early 2026, many models in Ollama allow video bytes in the 'images' array 
+        # or a new 'videos' array. We will try 'images' first as Qwen2-VL often maps frames there.
         payload = {
             "model": model_name,
             "messages": [{
                 "role": "user", 
                 "content": s['text'],
-                "images": [img_b64]
+                "images": [b64_data]
             }],
             "stream": True,
             "options": {"temperature": 0, "seed": 42}
