@@ -59,20 +59,23 @@ def run_test_suite(model_name):
     IMG_EXTS = (".png", ".jpg", ".jpeg", ".webp")
     VID_EXTS = (".mp4", ".mkv", ".avi", ".mov")
     
-    # DISCOVERY: Find all files and look for matching .txt
+    # DISCOVERY: Find all files and look for matching .yaml
     scenarios = []
     all_files = os.listdir(input_base)
     for f in all_files:
         ext = os.path.splitext(f)[1].lower()
         name_base = os.path.splitext(f)[0]
-        txt_path = os.path.join(input_base, f"{name_base}.txt")
+        yaml_path = os.path.join(input_base, f"{name_base}.yaml")
         
-        if not os.path.exists(txt_path):
+        if not os.path.exists(yaml_path):
             continue
 
+        with open(yaml_path, "r", encoding="utf-8") as yf:
+            config = yaml.safe_load(yf)
+            prompt = config.get("prompt", "")
+            max_frames = config.get("max_frames", 8)
+
         if ext in IMG_EXTS:
-            with open(txt_path, "r", encoding="utf-8") as tf:
-                prompt = tf.read().strip()
             scenarios.append({
                 "name": name_base,
                 "text": prompt,
@@ -80,13 +83,12 @@ def run_test_suite(model_name):
                 "type": "image"
             })
         elif ext in VID_EXTS:
-            with open(txt_path, "r", encoding="utf-8") as tf:
-                prompt = tf.read().strip()
             scenarios.append({
                 "name": name_base,
                 "text": prompt,
                 "file": f,
-                "type": "video"
+                "type": "video",
+                "max_frames": max_frames
             })
 
     if not scenarios:
@@ -103,8 +105,8 @@ def run_test_suite(model_name):
             with open(file_path, "rb") as bf:
                 b64_frames = [base64.b64encode(bf.read()).decode('utf-8')]
         else:
-            print(f"🎬 Processing video '{s['file']}'...")
-            b64_frames = extract_frames(file_path)
+            print(f"🎬 Processing video '{s['file']}' (Sampling {s['max_frames']} frames)...")
+            b64_frames = extract_frames(file_path, max_frames=s['max_frames'])
 
         if not b64_frames:
             report_llm_result({"name": s['name'], "status": "FAILED", "text": "Failed to load media frames."})
