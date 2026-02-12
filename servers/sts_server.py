@@ -1,5 +1,5 @@
 """
-[Title] : Speech-to-Speech (S2S) Pipeline Server
+[Title] : Speech-to-Speech (sts) Pipeline Server
 [Section] : Description
 This server orchestrates the full STT -> LLM -> TTS pipeline. It acts as the 
 central entry point for Jarvis, managing its own dependencies (STT, TTS, Ollama)
@@ -7,13 +7,13 @@ if they are not already running.
 
 [Section] : Usage Examples
 [Subsection] : Default (uses default.yaml)
-python servers/s2s_server.py
+python servers/sts_server.py
 
 [Subsection] : Custom Loadout
-python servers/s2s_server.py --loadout eng_turbo
+python servers/sts_server.py --loadout eng_turbo
 
 [Subsection] : Manual Overrides
-python servers/s2s_server.py --stt faster-whisper-tiny --tts chatterbox-turbo
+python servers/sts_server.py --stt faster-whisper-tiny --tts chatterbox-turbo
 """
 
 from fastapi import FastAPI, UploadFile, File, HTTPException, Form
@@ -48,8 +48,8 @@ logger.remove()
 logger.add(sys.stderr, format="<level>{level: <8}</level> | <cyan>{message}</cyan>", colorize=True, enqueue=True)
 
 def get_args():
-    parser = argparse.ArgumentParser(description="Jarvis S2S Server")
-    parser.add_argument("--port", type=int, default=cfg['ports']['s2s'], help="Port to run the S2S server on")
+    parser = argparse.ArgumentParser(description="Jarvis sts Server")
+    parser.add_argument("--port", type=int, default=cfg['ports']['sts'], help="Port to run the sts server on")
     parser.add_argument("--loadout", type=str, help="Name of a loadout preset (e.g., eng_turbo)")
     parser.add_argument("--stt", type=str, help="STT model override")
     parser.add_argument("--tts", type=str, help="TTS variant override")
@@ -107,7 +107,7 @@ async def warmup_ollama(url, model_name):
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # --- STARTUP ---
-    logger.info("Initializing Jarvis S2S Cluster...")
+    logger.info("Initializing Jarvis sts Cluster...")
     
     # 1. Determine active models
     active_stt = args.stt
@@ -197,7 +197,7 @@ async def lifespan(app: FastAPI):
     yield
     
     # --- SHUTDOWN ---
-    logger.info(f"S2S Server shutting down. Cleaning up {len(owned_ports)} owned services...")
+    logger.info(f"sts Server shutting down. Cleaning up {len(owned_ports)} owned services...")
     for port in owned_ports:
         kill_process_on_port(port)
     logger.info("Cleanup complete.")
@@ -209,7 +209,7 @@ app.state.is_ready = False
 async def health_check():
     if not app.state.is_ready:
         return JSONResponse(status_code=503, content={"status": "STARTUP"})
-    return {"status": "ON", "service": "s2s_server"}
+    return {"status": "ON", "service": "sts_server"}
 
 @app.post("/process_stream")
 async def process_stream(
@@ -388,7 +388,7 @@ async def process_stream(
         return StreamingResponse(audio_generator(), media_type="application/octet-stream", headers=custom_headers)
 
     except Exception as e:
-        logger.error(f"S2S Streaming Error: {e}")
+        logger.error(f"sts Streaming Error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/process")
@@ -474,7 +474,7 @@ async def process_audio(
         return Response(content=output_audio, media_type="audio/wav", headers=custom_headers)
 
     except Exception as e:
-        logger.error(f"S2S Pipeline Error: {e}")
+        logger.error(f"sts Pipeline Error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 if __name__ == "__main__":
@@ -483,7 +483,7 @@ if __name__ == "__main__":
     # Pre-flight check: is the port already held by a healthy Jarvis?
     status = get_service_status(args.port)
     if status == "ON":
-        logger.info(f"✅ S2S Server is already running and HEALTHY on port {args.port}. Exiting.")
+        logger.info(f"✅ sts Server is already running and HEALTHY on port {args.port}. Exiting.")
         sys.exit(0)
     elif status != "OFF":
         logger.warning(f"⚠️ Port {args.port} is {status}. Cleaning up before start...")

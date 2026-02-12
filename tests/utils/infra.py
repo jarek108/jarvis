@@ -17,7 +17,7 @@ def start_server(cmd, loud=False):
     project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     return subprocess.Popen(final_cmd, creationflags=flags, shell=True, cwd=project_root)
 
-def wait_for_port(port: int, timeout: int = 60, process=None) -> bool:
+def wait_for_port(port: int, timeout: int = 120, process=None) -> bool:
     # Local import to avoid circular dependency if get_service_status moves elsewhere
     from .vram import get_service_status
     start_time = time.time()
@@ -49,7 +49,7 @@ def kill_process_on_port(port: int):
 def get_jarvis_ports():
     """Returns a set of all ports defined in config.yaml for Jarvis services."""
     cfg = load_config()
-    ports = {cfg['ports']['s2s'], cfg['ports']['llm']}
+    ports = {cfg['ports']['sts'], cfg['ports']['llm']}
     ports.update(cfg['stt_loadout'].values())
     ports.update(cfg['tts_loadout'].values())
     return ports

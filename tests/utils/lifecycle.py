@@ -29,13 +29,13 @@ class LifecycleManager:
     def get_required_services(self, domain=None):
         required = []
         llm_model = self.loadout.get('llm')
-        if llm_model and (domain in ["llm", "vlm"] or self.full or domain == "s2s"):
+        if llm_model and (domain in ["llm", "vlm"] or self.full or domain == "sts"):
             required.append({
                 "type": "llm", "id": llm_model, "port": self.cfg['ports']['llm'],
                 "cmd": ["ollama", "serve"], "health": f"http://127.0.0.1:{self.cfg['ports']['llm']}/api/tags"
             })
         stt_val = self.loadout.get('stt')
-        if stt_val and (domain == "stt" or self.full or domain == "s2s"):
+        if stt_val and (domain == "stt" or self.full or domain == "sts"):
             stt_id = stt_val[0] if isinstance(stt_val, list) else stt_val
             stt_port = self.cfg['stt_loadout'][stt_id]
             stt_script = os.path.join(self.project_root, "servers", "stt_server.py")
@@ -43,21 +43,21 @@ class LifecycleManager:
             if self.benchmark_mode: cmd.append("--benchmark-mode")
             required.append({"type": "stt", "id": stt_id, "port": stt_port, "cmd": cmd, "health": f"http://127.0.0.1:{stt_port}/health"})
         tts_val = self.loadout.get('tts')
-        if tts_val and (domain == "tts" or self.full or domain == "s2s"):
+        if tts_val and (domain == "tts" or self.full or domain == "sts"):
             tts_id = tts_val[0] if isinstance(tts_val, list) else tts_val
             tts_port = self.cfg['tts_loadout'][tts_id]
             tts_script = os.path.join(self.project_root, "servers", "tts_server.py")
             cmd = [self.python_exe, tts_script, "--port", str(tts_port), "--variant", tts_id]
             if self.benchmark_mode: cmd.append("--benchmark-mode")
             required.append({"type": "tts", "id": tts_id, "port": tts_port, "cmd": cmd, "health": f"http://127.0.0.1:{tts_port}/health"})
-        if domain == "s2s":
-            s2s_port = self.cfg['ports']['s2s']
-            s2s_script = os.path.join(self.project_root, "servers", "s2s_server.py")
-            cmd = [self.python_exe, s2s_script, "--loadout", self.loadout_name]
+        if domain == "sts":
+            sts_port = self.cfg['ports']['sts']
+            sts_script = os.path.join(self.project_root, "servers", "sts_server.py")
+            cmd = [self.python_exe, sts_script, "--loadout", self.loadout_name]
             if self.benchmark_mode: cmd.append("--benchmark-mode")
             required.append({
-                "type": "s2s", "id": self.loadout_name, "port": s2s_port, "cmd": cmd, 
-                "health": f"http://127.0.0.1:{s2s_port}/health"
+                "type": "sts", "id": self.loadout_name, "port": sts_port, "cmd": cmd, 
+                "health": f"http://127.0.0.1:{sts_port}/health"
             })
         return required
 
@@ -92,7 +92,7 @@ class LifecycleManager:
                 self.owned_processes.append((s['port'], proc))
                 if not wait_for_port(s['port'], process=proc):
                     print(f"❌ FAILED to start {s['id']}"); sys.exit(1)
-        if domain in ["llm", "vlm"] or self.full or domain == "s2s":
+        if domain in ["llm", "vlm"] or self.full or domain == "sts":
             target_llm = self.loadout.get('llm')
             if target_llm: check_and_pull_model(target_llm); warmup_llm(target_llm, visual=(domain == "vlm"))
         return time.perf_counter() - setup_start
@@ -118,7 +118,7 @@ def run_test_lifecycle(domain, loadout_name, purge, full, test_func, benchmark_m
     manager = LifecycleManager(loadout_name, purge=purge, full=full, benchmark_mode=benchmark_mode)
     required = manager.loadout.get(domain)
     if not required and domain == "vlm": required = manager.loadout.get("llm")
-    if not required and domain != "s2s":
+    if not required and domain != "sts":
         print(f"❌ ERROR: Loadout '{loadout_name}' does not define a component for domain '{domain}'."); sys.exit(1)
     setup_time = manager.reconcile(domain)
     print("\n" + "="*LINE_LEN)

@@ -3,12 +3,12 @@
 Jarvis is a modular, high-performance local voice assistant optimized for the **NVIDIA RTX 5090 (Blackwell architecture)**. It leverages a persistent inference cluster to provide zero-latency switching between different model variants for Speech-to-Text (STT), Large Language Models (LLM), and Text-to-Speech (TTS).
 
 ## [Section] : Core Architecture
-The system is built on a **Stateless Sub-Server** pattern orchestrated by a stateful **Speech-to-Speech (S2S) Pipeline**.
+The system is built on a **Stateless Sub-Server** pattern orchestrated by a stateful **Speech-to-Speech (sts) Pipeline**.
 
 - **STT (faster-whisper)**: Multiple model sizes (tiny to large) running on dedicated ports (8010-8014). Includes internal warmup.
-- **LLM (Ollama)**: Centralized local LLM service running on port 11434. Warmed up via the S2S orchestrator.
+- **LLM (Ollama)**: Centralized local LLM service running on port 11434. Warmed up via the sts orchestrator.
 - **TTS (Chatterbox)**: Optimized English, Multilingual, and Turbo variants on dedicated ports (8020-8022). Includes internal warmup.
-- **S2S Orchestrator**: A FastAPI server that coordinates the full STT ➔ LLM ➔ TTS pipeline.
+- **sts Orchestrator**: A FastAPI server that coordinates the full STT ➔ LLM ➔ TTS pipeline.
 
 ## [Section] : Repository Structure
 
@@ -19,12 +19,12 @@ C:\Users\chojn\jarvis
 ├── servers/                # Core service implementations
 │   ├── stt_server.py       # Faster-Whisper wrapper with internal warmup
 │   ├── tts_server.py       # Chatterbox wrapper with internal warmup
-│   └── s2s_server.py       # Pipeline orchestrator with dynamic loadout support
+│   └── sts_server.py       # Pipeline orchestrator with dynamic loadout support
 ├── tests/                  # Benchmarking and lifecycle tests
 │   ├── loadouts/           # YAML presets (default.yaml, eng_turbo.yaml, etc.)
 │   ├── stt/                # Whisper multi-size test suites
 │   ├── tts/                # Chatterbox variant test suites
-│   ├── s2s/                # End-to-end pipeline verification (isolated_*.py)
+│   ├── sts/                # End-to-end pipeline verification (isolated_*.py)
 │   ├── run_health_check.py # Master smoke test (Representative subset)
 │   ├── run_extensive_comparison.py # Master benchmark suite (All variants)
 │   └── utils.py            # 4-state health probes and process management
@@ -51,7 +51,7 @@ The system uses a **Discovery-Based Loadout** approach. Models are kept resident
 Jarvis uses a "Smart Discovery" testing pattern designed to balance developer speed with infrastructure reliability.
 
 ### 1. Functional Logic (`tests.py`)
-Each domain (STT, TTS, S2S) contains a `tests.py` file. This is **stateless logic**.
+Each domain (STT, TTS, sts) contains a `tests.py` file. This is **stateless logic**.
 - It defines the actual test scenarios (e.g., Polish transcription, English synthesis).
 - It assumes the required server is already running on its assigned port.
 - It reports results in both human-readable tables and machine-readable JSON (captured by orchestrators).

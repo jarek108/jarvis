@@ -15,7 +15,7 @@ def run_master_suite():
     suites = [
         {"name": "STT (Base)", "path": "stt/test.py", "args": ["--loadout", "base-qwen30-multi"]},
         {"name": "TTS (Turbo)", "path": "tts/test.py", "args": ["--loadout", "tiny-gpt20-turbo"]},
-        {"name": "S2S (Default)", "path": "s2s/test.py", "args": ["--loadout", "base-qwen30-multi"]}
+        {"name": "sts (Default)", "path": "sts/test.py", "args": ["--loadout", "base-qwen30-multi"]}
     ]
 
     print("#"*LINE_LEN)

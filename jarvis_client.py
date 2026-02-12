@@ -110,8 +110,8 @@ class JarvisController:
         self.cfg = load_config()
         self.audio = AudioEngine()
         self.project_root = os.path.dirname(os.path.abspath(__file__))
-        self.s2s_port = self.cfg['ports']['s2s']
-        self.s2s_url = f"http://127.0.0.1:{self.s2s_port}"
+        self.sts_port = self.cfg['ports']['sts']
+        self.sts_url = f"http://127.0.0.1:{self.sts_port}"
         self.current_loadout = "base-qwen30-multi"
         self.selected_lang = "None"
         self.interaction_mode = "HOLD"
@@ -147,7 +147,7 @@ class JarvisController:
     def toggle_system(self):
         if self.server_process:
             self.ui_queue.put({"type": "log", "msg": "Shutting down system...", "tag": "system"})
-            threading.Thread(target=kill_process_on_port, args=(self.s2s_port,), daemon=True).start()
+            threading.Thread(target=kill_process_on_port, args=(self.sts_port,), daemon=True).start()
             self.server_process = None
             return False
         else:
@@ -166,10 +166,10 @@ class JarvisController:
 
     def _run_server(self):
         python_exe = sys.executable
-        server_script = os.path.join(self.project_root, "servers", "s2s_server.py")
+        server_script = os.path.join(self.project_root, "servers", "sts_server.py")
         cmd = [python_exe, server_script, "--loadout", self.current_loadout]
         
-        log_file_path = os.path.join(self.log_dir, "s2s_server.log")
+        log_file_path = os.path.join(self.log_dir, "sts_server.log")
         with open(log_file_path, "a", encoding="utf-8") as log_file:
             log_file.write(f"\n--- SESSION START: {time.ctime()} ---\n")
             self.server_process = subprocess.Popen(
@@ -243,7 +243,7 @@ class JarvisController:
             data = {}
             if self.selected_lang != "None": data['language_id'] = self.selected_lang
             start_time = time.perf_counter()
-            with requests.post(f"{self.s2s_url}/process_stream", files=files, data=data, stream=True) as resp:
+            with requests.post(f"{self.sts_url}/process_stream", files=files, data=data, stream=True) as resp:
                 if resp.status_code != 200:
                     err_msg = resp.text
                     try:
@@ -409,7 +409,7 @@ class JarvisApp(ctk.CTk):
             if os.path.exists(path):
                 with open(path, "r") as f:
                     l = yaml.safe_load(f)
-                    active_llm = l.get('llm'); active_ports.add(self.controller.cfg['ports']['s2s']); active_ports.add(self.controller.cfg['ports']['llm'])
+                    active_llm = l.get('llm'); active_ports.add(self.controller.cfg['ports']['sts']); active_ports.add(self.controller.cfg['ports']['llm'])
                     stt_val = l.get('stt')
                     if stt_val:
                         stt_id = stt_val[0] if isinstance(stt_val, list) else stt_val
@@ -446,7 +446,7 @@ class JarvisApp(ctk.CTk):
                 else:
                     if info['label'] == "LLM":
                         text = active_llm or "Ollama"
-                    elif info['label'] == "S2S":
+                    elif info['label'] == "sts":
                         text = self.controller.current_loadout
                     else:
                         text = info['label'] # For STT/TTS label is the model ID

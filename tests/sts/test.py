@@ -17,7 +17,7 @@ ensure_utf8_output()
 def run_test_suite(loadout_id, stream=False, trim_length=80):
     cfg = load_config()
     endpoint = "/process_stream" if stream else "/process"
-    url = f"http://127.0.0.1:{cfg['ports']['s2s']}{endpoint}"
+    url = f"http://127.0.0.1:{cfg['ports']['sts']}{endpoint}"
     
     input_base = os.path.join(os.path.dirname(__file__), "input_data")
     results_dir = os.path.join(os.path.dirname(__file__), "results")
@@ -129,14 +129,14 @@ def run_test_suite(loadout_id, stream=False, trim_length=80):
         report_scenario_result(res_obj)
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Jarvis S2S Test Suite")
+    parser = argparse.ArgumentParser(description="Jarvis sts Test Suite")
     parser.add_argument("--loadout", type=str, required=True, help="Loadout YAML name")
     parser.add_argument("--purge", action="store_true", help="Kill extra Jarvis services")
     parser.add_argument("--full", action="store_true", help="Ensure all loadout services are running")
     parser.add_argument("--benchmark-mode", action="store_true", help="Enable deterministic output")
     args = parser.parse_args()
 
-    # S2S Audit wrapper
+    # sts Audit wrapper
     def test_wrapper():
         vram_start = get_gpu_vram_usage()
         # Run both modes
@@ -162,7 +162,7 @@ if __name__ == "__main__":
         print("-"*40 + "\n")
 
     run_test_lifecycle(
-        domain="s2s",
+        domain="sts",
         loadout_name=args.loadout,
         purge=args.purge,
         full=args.full,

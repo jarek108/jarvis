@@ -46,10 +46,10 @@ def run_domain_tests(domain, loadout_name, purge=False, full=False, benchmark_mo
             target_id = val[0] if isinstance(val, list) else val
     elif domain in ["llm", "vlm"]:
         target_id = l_data.get("llm")
-    elif domain == "s2s":
-        target_id = loadout_name # S2S uses the loadout ID directly
+    elif domain == "sts":
+        target_id = loadout_name # sts uses the loadout ID directly
 
-    if not target_id and domain != "s2s":
+    if not target_id and domain != "sts":
         print(f"⚠️ Skipping '{domain}' for loadout '{loadout_name}': Component not defined.")
         return None
 
@@ -79,7 +79,7 @@ def run_domain_tests(domain, loadout_name, purge=False, full=False, benchmark_mo
         loadout_name=loadout_name,
         purge=purge,
         full=full,
-        test_func=lambda: test_func_to_run(target_id) if domain != "s2s" else test_func_to_run(target_id),
+        test_func=lambda: test_func_to_run(target_id) if domain != "sts" else test_func_to_run(target_id),
         benchmark_mode=benchmark_mode
     )
     
@@ -91,7 +91,7 @@ def run_domain_tests(domain, loadout_name, purge=False, full=False, benchmark_mo
 
 def main():
     parser = argparse.ArgumentParser(description="Jarvis Unified Test Runner")
-    parser.add_argument("--domain", type=str, help="Comma-separated list of domains (stt,tts,llm,vlm,s2s). Defaults to all.")
+    parser.add_argument("--domain", type=str, help="Comma-separated list of domains (stt,tts,llm,vlm,sts). Defaults to all.")
     parser.add_argument("--loadout", type=str, help="Loadout name to test. If omitted, runs against all non-experimental loadouts.")
     parser.add_argument("--purge", action="store_true", help="Kill extra services before/after")
     parser.add_argument("--full", action="store_true", help="Ensure all loadout services are running")
@@ -101,7 +101,7 @@ def main():
     args = parser.parse_args()
 
     # 1. Resolve Domains
-    all_possible_domains = ["llm", "vlm", "stt", "tts", "s2s"]
+    all_possible_domains = ["llm", "vlm", "stt", "tts", "sts"]
     if args.domain:
         target_domains = [d.strip().lower() for d in args.domain.split(",")]
     else:

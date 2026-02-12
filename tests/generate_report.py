@@ -103,11 +103,14 @@ def generate_excel(sync_artifacts=True):
             loadout = entry.get('loadout', 'unknown')
             for s in entry.get('scenarios', []):
                 rows.append({
-                    "Loadout": loadout, "Scenario": s.get('name'), "Status": s.get('status'),
+                    "Loadout": loadout,
+                    "Scenario": s.get('name'),
+                    "Status": s.get('status'),
                     "Input Text": s.get('input_text', 'N/A'),
                     "Input Link": link_file(s.get('input_file'), input_folder_id, overwrite=False),
                     "Output Link": link_file(s.get('output_file'), output_folder_id, overwrite=True),
-                    "Duration (s)": s.get('duration'), "Result": s.get('result')
+                    "Duration (s)": s.get('duration'),
+                    "Result": s.get('result')
                 })
         if rows:
             sheets[domain.upper()] = pd.DataFrame(rows)
@@ -123,17 +126,22 @@ def generate_excel(sync_artifacts=True):
             vram = entry.get('vram', {}).get('peak_gb', 0)
             for s in entry.get('scenarios', []):
                 rows.append({
-                    "Loadout": loadout, "Scenario": s.get('name'), "Status": s.get('status'),
+                    "Loadout": loadout,
+                    "Scenario": s.get('name'),
+                    "Status": s.get('status'),
                     "Input Text": s.get('input_text', 'N/A'),
                     "Input Link": link_file(s.get('input_file'), input_folder_id, overwrite=False),
-                    "TTFT (s)": s.get('ttft'), "TPS": s.get('tps'), "VRAM Peak (GB)": vram, "Text": s.get('text')
+                    "TTFT (s)": s.get('ttft'),
+                    "TPS": s.get('tps'),
+                    "VRAM Peak (GB)": vram,
+                    "Text": s.get('text')
                 })
         if rows:
             sheets[domain.upper()] = pd.DataFrame(rows)
             has_any_data = True
 
-    # 3. S2S
-    data = load_json(os.path.join(artifacts_dir, "latest_s2s.json"))
+    # 3. STS
+    data = load_json(os.path.join(artifacts_dir, "latest_sts.json"))
     if data:
         rows = []
         for entry in data:
@@ -142,7 +150,11 @@ def generate_excel(sync_artifacts=True):
             for s in entry.get('scenarios', []):
                 m = s.get('metrics', {})
                 rows.append({
-                    "Loadout": loadout, "Scenario": s.get('name'), "Mode": s.get('mode'), "Status": s.get('status'),
+                    "Loadout": loadout, 
+                    "Scenario": s.get('name'), 
+                    "Mode": s.get('mode'),
+                    "Status": s.get('status'),
+                    "Input Text": s.get('input_text', 'N/A'),
                     "Input Link": link_file(s.get('input_file'), input_folder_id, overwrite=False),
                     "Output Link": link_file(s.get('output_file'), output_folder_id, overwrite=True),
                     "Total Duration (s)": s.get('duration'),
@@ -152,7 +164,7 @@ def generate_excel(sync_artifacts=True):
                     "VRAM Peak (GB)": vram
                 })
         if rows:
-            sheets["S2S"] = pd.DataFrame(rows)
+            sheets["STS"] = pd.DataFrame(rows)
             has_any_data = True
 
     if not has_any_data:

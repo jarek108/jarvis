@@ -66,8 +66,8 @@ def get_service_status(port: int):
 def get_system_health():
     cfg = load_config()
     health = {}
-    s2s_status, s2s_info = get_service_status(cfg['ports']['s2s'])
-    health[cfg['ports']['s2s']] = {"status": s2s_status, "info": s2s_info, "label": "S2S", "type": "s2s"}
+    sts_status, sts_info = get_service_status(cfg['ports']['sts'])
+    health[cfg['ports']['sts']] = {"status": sts_status, "info": sts_info, "label": "sts", "type": "sts"}
     llm_status, llm_info = get_service_status(cfg['ports']['llm'])
     health[cfg['ports']['llm']] = {"status": llm_status, "info": llm_info, "label": "LLM", "type": "llm"}
     for name, port in cfg['stt_loadout'].items():

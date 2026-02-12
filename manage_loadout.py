@@ -138,7 +138,7 @@ def apply_loadout(name, loud=False):
 def kill_loadout(target):
     cfg = load_config()
     if target == "all":
-        ports = [cfg['ports']['llm'], cfg['ports']['s2s']] + list(cfg['stt_loadout'].values()) + list(cfg['tts_loadout'].values())
+        ports = [cfg['ports']['llm'], cfg['ports']['sts']] + list(cfg['stt_loadout'].values()) + list(cfg['tts_loadout'].values())
         for p in ports:
             kill_process_on_port(p)
     else:

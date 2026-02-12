@@ -7,16 +7,16 @@
 - **Debug Startup**: Add `--loud` to any `manage_loadout.py` command to show server windows.
 
 ## [Section] : Testing Workflow
-- **Quick Verification**: `python tests/run_health_check.py` (Checks STT-Base, TTS-Eng, and S2S-Default. Always use this for normal checks)
+- **Quick Verification**: `python tests/run_health_check.py` (Checks STT-Base, TTS-Eng, and sts-Default. Always use this for normal checks)
 - **Full Benchmark**: `python tests/run_extensive_comparison.py` (Full sweep of all model sizes and loadouts. Only on explicit user request)
 - **Isolated Testing**: 
     - Domain: `tests/[stt|tts]/whisper|chatterbox/isolated_[variant].py`
-    - Pipeline: `tests/s2s/isolated_[loadout].py`
+    - Pipeline: `tests/sts/isolated_[loadout].py`
     - These scripts probe for existing services before attempting a transient lifecycle.
 
-## [Section] : S2S Server Usage
-- **Manual Start**: `python servers/s2s_server.py --loadout default`
-- **Warmup Logic**: The S2S server remains in `STARTUP` (503) state until STT, TTS, and LLM are fully initialized and warmed up with dummy requests.
+## [Section] : sts Server Usage
+- **Manual Start**: `python servers/sts_server.py --loadout default`
+- **Warmup Logic**: The sts server remains in `STARTUP` (503) state until STT, TTS, and LLM are fully initialized and warmed up with dummy requests.
 
 ## [Section] : Naming Conventions
 - **STT**: `faster-whisper-[size]` (e.g., `faster-whisper-tiny`)
