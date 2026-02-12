@@ -5,48 +5,98 @@
             {
                 "name": "bunny",
                 "status": "PASSED",
-                "ttft": 0.31410789999063127,
-                "ttfr": 0.31410789999063127,
-                "tps": 132.70231372490247,
+                "ttft": 0.3308330999861937,
+                "ttfr": 0.3308330999861937,
+                "tps": 130.19662057016143,
                 "text": "The animal in the video is a large, white, anthropomorphic rabbit. It is shown in a series of scenes in a lush, green field.\n\n- In the first scene, the rabbit is lying on its back on the grass, with a large, pink butterfly resting on its belly.\n- In the second scene, the rabbit is sitting up, looking down at the butterfly, which is now perched on its head.\n- In the final scene, the rabbit is standing in a field, looking down at a small, red, round object on the ground, possibly a flower or a ball.",
-                "duration": 0.9118153000017628
+                "duration": 0.9293635999929393,
+                "input_file": "C:\\Users\\chojn\\jarvis\\tests\\vlm\\input_data\\bunny.mp4",
+                "input_text": "What animal is in this video and what is it doing?"
             },
             {
                 "name": "jarvis_logo",
                 "status": "PASSED",
-                "ttft": 0.15738960000453517,
-                "ttfr": 0.15738960000453517,
-                "tps": 176.26603076626833,
+                "ttft": 0.1585967000137316,
+                "ttfr": 0.1585967000137316,
+                "tps": 175.701963130567,
                 "text": "This image features a stylized, futuristic robot head, which appears to be a representation of Iron Man's helmet. The helmet is centrally positioned within a circular, high-tech interface that resembles a heads-up display (HUD) or targeting system.\n\nKey visual elements include:\n- A glowing blue, metallic helmet with a sleek, angular design.\n- Bright, glowing green eyes that give it an intense, focused look.\n- Red accents on the sides of the helmet, possibly representing earpieces or sensors.\n- A circular frame surrounding the helmet, composed of concentric rings with glowing blue lines and markings, suggesting a digital or scanning interface.\n- The overall color scheme is dominated by shades of blue and black, creating a dark, high-tech, and cybernetic atmosphere.\n\nThe image is likely a logo or icon for a game, app, or digital platform related to Iron Man or a similar sci-fi theme.",
-                "duration": 1.0325301999982912
+                "duration": 1.0358450000057928,
+                "input_file": "C:\\Users\\chojn\\jarvis\\tests\\vlm\\input_data\\jarvis_logo.png",
+                "input_text": "What is in this image?"
             },
             {
                 "name": "three_objects",
                 "status": "PASSED",
-                "ttft": 0.12876380000670906,
-                "ttfr": 0.12876380000670906,
-                "tps": 147.29952699024273,
+                "ttft": 0.13096819999918807,
+                "ttfr": 0.13096819999918807,
+                "tps": 147.0194225824608,
                 "text": "Based on the image provided, we can identify the following:\n\n- There is one red circle in the upper left.\n- There is one blue circle in the upper right.\n- There is one green circle in the lower center.\n\nEach of these is a distinct, colored circle.\n\nTherefore, there are 3 colored circles in the photo.",
-                "duration": 0.4548555000073975
+                "duration": 0.45572209999954794,
+                "input_file": "C:\\Users\\chojn\\jarvis\\tests\\vlm\\input_data\\three_objects.png",
+                "input_text": "How many colored circles do you see in this photo?"
             },
             {
                 "name": "traffic",
                 "status": "PASSED",
-                "ttft": 1.0183288999978686,
-                "ttfr": 1.0183288999978686,
-                "tps": 39.67767722195795,
+                "ttft": 1.0404707999987295,
+                "ttfr": 1.0404707999987295,
+                "tps": 38.993055566100026,
                 "text": "Based on the video frames provided, the following types of vehicles are visible:\n\n- **Car**: A white car is seen driving into the parking lot and then parking.\n- **Bicycle**: A person is seen riding a bicycle across the parking lot.",
-                "duration": 1.2853575000044657
+                "duration": 1.3079252000025008,
+                "input_file": "C:\\Users\\chojn\\jarvis\\tests\\vlm\\input_data\\traffic.mp4",
+                "input_text": "List all the types of vehicles you see in this video."
             }
         ],
-        "vram": {
-            "model": "qwen3-vl:30b-a3b-instruct",
-            "baseline_gb": 23.3896484375,
-            "peak_gb": 23.357421875,
-            "is_ok": true,
-            "vram_used_gb": 22.01561689376831,
-            "total_size_gb": 22.01561689376831
-        },
+        "status": "PASSED"
+    },
+    {
+        "loadout": "tiny-gpt20-turbo",
+        "scenarios": [
+            {
+                "name": "bunny",
+                "status": "PASSED",
+                "ttft": 1.7854409999999916,
+                "ttfr": 1.7854409999999916,
+                "tps": 219.4343201621075,
+                "text": "I\u2019m not able to view the images directly. Could you describe what\u2019s happening in the frames? That will help me identify the animal and what it\u2019s doing.",
+                "duration": 1.9231266999995569,
+                "input_file": "C:\\Users\\chojn\\jarvis\\tests\\vlm\\input_data\\bunny.mp4",
+                "input_text": "What animal is in this video and what is it doing?"
+            },
+            {
+                "name": "jarvis_logo",
+                "status": "PASSED",
+                "ttft": 1.1639559999894118,
+                "ttfr": 1.1639559999894118,
+                "tps": 210.9681664277418,
+                "text": "I\u2019m sorry, but I can\u2019t view images. If you describe what\u2019s in the picture, I\u2019ll do my best to help you with any questions you have about it!",
+                "duration": 1.312994299994898,
+                "input_file": "C:\\Users\\chojn\\jarvis\\tests\\vlm\\input_data\\jarvis_logo.png",
+                "input_text": "What is in this image?"
+            },
+            {
+                "name": "three_objects",
+                "status": "PASSED",
+                "ttft": 1.2598982000054093,
+                "ttfr": 1.2598982000054093,
+                "tps": 213.49485744296865,
+                "text": "I\u2019m sorry, but I can\u2019t view the image you referenced. Could you describe what\u2019s in the photo, or let me know how many colored circles you\u2019re seeing? That way I can help you count them.",
+                "duration": 1.4426576999976533,
+                "input_file": "C:\\Users\\chojn\\jarvis\\tests\\vlm\\input_data\\three_objects.png",
+                "input_text": "How many colored circles do you see in this photo?"
+            },
+            {
+                "name": "traffic",
+                "status": "PASSED",
+                "ttft": 0.47322550001263153,
+                "ttfr": 0.47322550001263153,
+                "tps": 182.07782375825323,
+                "text": "I\u2019m sorry, but I can\u2019t view the images or video you referenced. If you can describe the vehicles you see (e.g., \u201cthere\u2019s a red sedan, a blue truck, a yellow bicycle, etc.\u201d), I\u2019ll gladly help you list and categorize them.",
+                "duration": 0.702996100008022,
+                "input_file": "C:\\Users\\chojn\\jarvis\\tests\\vlm\\input_data\\traffic.mp4",
+                "input_text": "List all the types of vehicles you see in this video."
+            }
+        ],
         "status": "PASSED"
     }
 ]

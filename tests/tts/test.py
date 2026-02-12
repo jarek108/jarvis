@@ -60,10 +60,12 @@ def run_test_suite(variant_id, trim_length=80):
                     "name": s['name'], 
                     "status": "PASSED", 
                     "duration": duration, 
-                    "result": display_path
+                    "result": display_path,
+                    "output_file": out_path,
+                    "input_text": s['text']
                 }
             else:
-                res_obj = {"name": s['name'], "status": "FAILED", "duration": duration, "result": f"HTTP {response.status_code}"}
+                res_obj = {"name": s['name'], "status": "FAILED", "duration": duration, "result": f"HTTP {response.status_code}", "input_text": s['text']}
         except Exception as e:
             res_obj = {"name": s['name'], "status": "FAILED", "duration": 0, "result": str(e)}
 

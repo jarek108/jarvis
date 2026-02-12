@@ -93,10 +93,12 @@ def run_test_suite(loadout_id, stream=False, trim_length=80):
                                 "mode": "STREAM", "metrics": metrics,
                                 "stt_model": response.headers.get("X-Model-STT"),
                                 "llm_model": response.headers.get("X-Model-LLM"),
-                                "tts_model": response.headers.get("X-Model-TTS")
+                                "tts_model": response.headers.get("X-Model-TTS"),
+                                "input_file": audio_path,
+                                "output_file": output_path
                             }
                         else:
-                            res_obj = {"name": s['name'], "status": "FAILED", "duration": duration, "result": f"HTTP {response.status_code}", "mode": "STREAM"}
+                            res_obj = {"name": s['name'], "status": "FAILED", "duration": duration, "result": f"HTTP {response.status_code}", "mode": "STREAM", "input_file": audio_path}
                     else:
                         response = requests.post(url, files=files, data=data)
                         duration = time.perf_counter() - start_time
@@ -115,10 +117,12 @@ def run_test_suite(loadout_id, stream=False, trim_length=80):
                                 "llm_text": response.headers.get("X-Result-LLM"),
                                 "stt_model": response.headers.get("X-Model-STT"),
                                 "llm_model": response.headers.get("X-Model-LLM"),
-                                "tts_model": response.headers.get("X-Model-TTS")
+                                "tts_model": response.headers.get("X-Model-TTS"),
+                                "input_file": audio_path,
+                                "output_file": output_path
                             }
                         else:
-                            res_obj = {"name": s['name'], "status": "FAILED", "duration": duration, "result": f"HTTP {response.status_code}", "mode": "WAV"}
+                            res_obj = {"name": s['name'], "status": "FAILED", "duration": duration, "result": f"HTTP {response.status_code}", "mode": "WAV", "input_file": audio_path}
             except Exception as e:
                 res_obj = {"name": s['name'], "status": "FAILED", "duration": 0, "result": str(e), "mode": "STREAM" if stream else "WAV"}
 

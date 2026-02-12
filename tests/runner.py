@@ -5,6 +5,7 @@ import time
 import json
 import yaml
 import importlib
+import utils
 
 # Add project root and tests root to sys.path
 script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -68,10 +69,9 @@ def run_domain_tests(domain, loadout_name, purge=False, full=False, benchmark_mo
         original_report_llm(res)
 
     # Patch the reporting functions in the domain module's namespace
-    # This is a bit "hacky" but ensures we capture the data without changing 10 files
-    import utils
-    utils.report_scenario_result = capture_result
-    utils.report_llm_result = capture_llm_result
+    # This ensures we capture the data even if the module imported the functions before we patched utils
+    setattr(module, "report_scenario_result", capture_result)
+    setattr(module, "report_llm_result", capture_llm_result)
 
     # 4. Run Lifecycle
     run_test_lifecycle(

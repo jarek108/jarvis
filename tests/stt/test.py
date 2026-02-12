@@ -72,10 +72,13 @@ def run_test_suite(model_id, trim_length=80):
                         "name": scenario_name,
                         "status": "PASSED",
                         "duration": duration,
-                        "result": f"Match: {similarity:.1%} | [{ascii_text}]"
+                        "result": f"Match: {similarity:.1%} | [{ascii_text}]",
+                        "input_file": audio_path,
+                        "input_text": ground_truth,
+                        "output_text": transcription
                     }
                 else:
-                    res_obj = { "name": scenario_name, "status": "FAILED", "duration": duration, "result": f"HTTP {response.status_code}" }
+                    res_obj = { "name": scenario_name, "status": "FAILED", "duration": duration, "result": f"HTTP {response.status_code}", "input_file": audio_path }
             except Exception as e:
                 res_obj = { "name": scenario_name, "status": "FAILED", "duration": 0, "result": str(e) }
             

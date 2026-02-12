@@ -155,12 +155,14 @@ def run_test_suite(model_name):
                 "ttfr": ttft, # Same for VLM in this simplified reporter
                 "tps": tps,
                 "text": full_text,
-                "duration": total_dur
+                "duration": total_dur,
+                "input_file": file_path,
+                "input_text": s['text']
             }
             report_llm_result(res_obj)
 
         except Exception as e:
-            report_llm_result({"name": s['name'], "status": "FAILED", "text": str(e)})
+            report_llm_result({"name": s['name'], "status": "FAILED", "text": str(e), "input_file": file_path, "input_text": s['text']})
 
     # Audit End
     vram_peak = get_gpu_vram_usage()

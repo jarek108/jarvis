@@ -15,12 +15,8 @@ def report_llm_result(res_obj):
     """Lean reporting: Status and Name only."""
     status_fmt = format_status(res_obj['status'])
     name = res_obj['name']
-    
-    # Minimal console row
     row = f"  - {status_fmt} {name}\n"
     sys.stdout.write(row)
-    
-    # Still write machine JSON for the orchestrator to capture
     sys.stdout.write(f"SCENARIO_RESULT: {json.dumps(res_obj)}\n")
     sys.stdout.flush()
 
@@ -28,17 +24,12 @@ def report_scenario_result(res_obj):
     """Lean reporting: Status and Name only."""
     status_fmt = format_status(res_obj['status'])
     name = res_obj['name']
-    
-    # Minimal console row
     row = f"  - {status_fmt} {name}\n"
     sys.stdout.write(row)
-
-    # Still write machine JSON for the orchestrator to capture
     sys.stdout.write(f"SCENARIO_RESULT: {json.dumps(res_obj)}\n")
     sys.stdout.flush()
 
 def save_artifact(domain, data):
-    # reporting.py is in tests/utils/reporting.py, so parent of parent of parent is project root
     utils_dir = os.path.dirname(os.path.abspath(__file__))
     project_root = os.path.dirname(os.path.dirname(utils_dir))
     artifacts_dir = os.path.join(project_root, "tests", "artifacts")
@@ -52,16 +43,60 @@ def trigger_report_generation(upload=True):
     print("\n" + "-"*40)
     print("🔄 TRIGGERING AUTO-REPORT GENERATION...")
     try:
-        # reporting.py is in tests/utils/reporting.py, so parent is tests/
         utils_dir = os.path.dirname(os.path.abspath(__file__))
         tests_dir = os.path.dirname(utils_dir)
         if tests_dir not in sys.path:
             sys.path.append(tests_dir)
-        
         from generate_report import generate_excel, upload_to_gdrive
-        path = generate_excel()
+        path = generate_excel(sync_artifacts=upload)
         if upload and path:
             upload_to_gdrive(path)
     except Exception as e:
         print(f"⚠️ Auto-report failed: {e}")
     print("-" * 40 + "\n")
+
+class GDriveAssetManager:
+    def __init__(self, service):
+        self.service = service
+        self.folders = {} # Name -> ID cache
+
+    def get_folder_id(self, name, parent_id=None):
+        if name in self.folders: return self.folders[name]
+        query = f"name = '{name}' and mimeType = 'application/vnd.google-apps.folder' and trashed = false"
+        if parent_id: query += f" and '{parent_id}' in parents"
+        results = self.service.files().list(q=query, fields='files(id)').execute()
+        files = results.get('files', [])
+        if not files:
+            meta = {'name': name, 'mimeType': 'application/vnd.google-apps.folder'}
+            if parent_id: meta['parents'] = [parent_id]
+            folder = self.service.files().create(body=meta, fields='id').execute()
+            fid = folder.get('id')
+        else:
+            fid = files[0].get('id')
+        self.folders[name] = fid
+        return fid
+
+    def sync_file(self, local_path, folder_id, overwrite=True):
+        """Uploads or updates a file and returns its webViewLink."""
+        if not local_path or not os.path.exists(local_path): return None
+        file_name = os.path.basename(local_path)
+        query = f"name = '{file_name}' and '{folder_id}' in parents and trashed = false"
+        results = self.service.files().list(q=query, fields='files(id, webViewLink)').execute()
+        files = results.get('files', [])
+        from googleapiclient.http import MediaFileUpload
+        ext = os.path.splitext(file_name)[1].lower()
+        mimetype = 'application/octet-stream'
+        if ext in ['.wav', '.mp3']: mimetype = 'audio/mpeg' if ext == '.mp3' else 'audio/wav'
+        elif ext in ['.png', '.jpg', '.jpeg']: mimetype = 'image/png' if ext == '.png' else 'image/jpeg'
+        elif ext in ['.mp4']: mimetype = 'video/mp4'
+        media = MediaFileUpload(local_path, mimetype=mimetype, resumable=True)
+        if files and overwrite:
+            file_id = files[0].get('id')
+            updated = self.service.files().update(fileId=file_id, media_body=media, fields='webViewLink').execute()
+            return updated.get('webViewLink')
+        elif not files:
+            meta = {'name': file_name, 'parents': [folder_id]}
+            created = self.service.files().create(body=meta, media_body=media, fields='webViewLink').execute()
+            return created.get('webViewLink')
+        else:
+            return files[0].get('webViewLink')
