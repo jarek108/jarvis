@@ -85,11 +85,14 @@ def generate_excel(sync_artifacts=True):
     sheets = {}
     has_any_data = False
 
-    def link_file(local_path, folder_id, overwrite=True):
+    def link_file(local_path, folder_id, overwrite=True, label="Open"):
         if not asset_mgr or not local_path: return local_path
         if not os.path.isabs(local_path):
             local_path = os.path.join(project_root, local_path)
-        return asset_mgr.sync_file(local_path, folder_id, overwrite=overwrite)
+        url = asset_mgr.sync_file(local_path, folder_id, overwrite=overwrite)
+        if url and url.startswith("http"):
+            return f'=HYPERLINK("{url}", "{label}")'
+        return url
 
     # 1. STT / TTS
     for domain in ["stt", "tts"]:
