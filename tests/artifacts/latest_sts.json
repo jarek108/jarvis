@@ -1,0 +1,140 @@
+[
+    {
+        "loadout": "base-qwen30-multi",
+        "scenarios": [
+            {
+                "name": "english_std",
+                "status": "PASSED",
+                "duration": 2.81736980000278,
+                "result": "tests\\sts\\results\\base-qwen30-multi_english_std.wav",
+                "mode": "WAV",
+                "stt_inf": 0.12726249999832362,
+                "llm_tot": 0.21244269999442622,
+                "tts_inf": 2.4634204999892972,
+                "stt_text": "Hello, this is a test of Tatterbox TTS.",
+                "llm_text": "Hello! This is a test of Tatterbox TTS. How can I assist you today?",
+                "stt_model": "faster-whisper-base",
+                "llm_model": "qwen3-vl:30b-a3b-instruct",
+                "tts_model": "chatterbox-multilingual",
+                "input_file": "C:\\Users\\chojn\\jarvis\\tests\\sts\\input_data\\english_std.wav",
+                "output_file": "C:\\Users\\chojn\\jarvis\\tests\\sts\\results\\base-qwen30-multi_english_std.wav"
+            },
+            {
+                "name": "polish_explicit",
+                "status": "FAILED",
+                "duration": 0,
+                "result": "('Connection aborted.', RemoteDisconnected('Remote end closed connection without response'))",
+                "mode": "WAV"
+            },
+            {
+                "name": "short2long",
+                "status": "PASSED",
+                "duration": 14.81649360001029,
+                "result": "tests\\sts\\results\\base-qwen30-multi_short2long.wav",
+                "mode": "WAV",
+                "stt_inf": 0.1278710000042338,
+                "llm_tot": 0.6822174999979325,
+                "tts_inf": 13.992091000007349,
+                "stt_text": "Tell me a 4-5 sentence story about a dog.",
+                "llm_text": "Buddy, a scruffy golden retriever with one floppy ear, loved chasing squirrels in the park every afternoon. One day, while zooming after a particularly fast squirrel, he tripped and tumbled into a hidden creek, tumbling down a small waterfall. Struggling in the cold water, he barked for help, but no one was arounduntil a kind little girl named Mia heard his cries and pulled him to safety. From that day on, Buddy no longer chases squirrels, but he runs straight to Mia every time she comes to the park, grateful for her heroism.",
+                "stt_model": "faster-whisper-base",
+                "llm_model": "qwen3-vl:30b-a3b-instruct",
+                "tts_model": "chatterbox-multilingual",
+                "input_file": "C:\\Users\\chojn\\jarvis\\tests\\sts\\input_data\\short_dog_story.wav",
+                "output_file": "C:\\Users\\chojn\\jarvis\\tests\\sts\\results\\base-qwen30-multi_short2long.wav"
+            },
+            {
+                "name": "long2short",
+                "status": "PASSED",
+                "duration": 1.4963878999988083,
+                "result": "tests\\sts\\results\\base-qwen30-multi_long2short.wav",
+                "mode": "WAV",
+                "stt_inf": 0.26710509999247734,
+                "llm_tot": 0.13674209998862352,
+                "tts_inf": 1.079591799993068,
+                "stt_text": "It is a truth universally acknowledged that a single man in possession of a good fortune must be in want of a wife. However, little known, the feelings or views of such a man may be on his first entering a neighborhood, this truth is so well fixed in the minds of the surrounding families that he is considered the rightful property of someone or other of their daughters. What is the title of this book? Respond with title only.",
+                "llm_text": "Pride and Prejudice",
+                "stt_model": "faster-whisper-base",
+                "llm_model": "qwen3-vl:30b-a3b-instruct",
+                "tts_model": "chatterbox-multilingual",
+                "input_file": "C:\\Users\\chojn\\jarvis\\tests\\sts\\input_data\\long_book_quote.wav",
+                "output_file": "C:\\Users\\chojn\\jarvis\\tests\\sts\\results\\base-qwen30-multi_long2short.wav"
+            }
+        ],
+        "status": "PASSED"
+    },
+    {
+        "loadout": "tiny-gpt20-turbo",
+        "scenarios": [
+            {
+                "name": "english_std",
+                "status": "PASSED",
+                "duration": 2.0817610999947647,
+                "result": "tests\\sts\\results\\tiny-gpt20-turbo_english_std.wav",
+                "mode": "WAV",
+                "stt_inf": 0.09927170000446495,
+                "llm_tot": 0.4849443999992218,
+                "tts_inf": 1.483884900007979,
+                "stt_text": "Hello, this is a test of Tatarbox TTS.",
+                "llm_text": "Hello! It looks like your Tatarbox texttospeech system is up and running. How can I help you today?",
+                "stt_model": "faster-whisper-tiny",
+                "llm_model": "gpt-oss:20b",
+                "tts_model": "chatterbox-turbo",
+                "input_file": "C:\\Users\\chojn\\jarvis\\tests\\sts\\input_data\\english_std.wav",
+                "output_file": "C:\\Users\\chojn\\jarvis\\tests\\sts\\results\\tiny-gpt20-turbo_english_std.wav"
+            },
+            {
+                "name": "polish_explicit",
+                "status": "PASSED",
+                "duration": 4.165772099993774,
+                "result": "tests\\sts\\results\\tiny-gpt20-turbo_polish_explicit.wav",
+                "mode": "WAV",
+                "stt_inf": 0.12580259999958798,
+                "llm_tot": 1.3487163999961922,
+                "tts_inf": 2.6805810000078054,
+                "stt_text": "Cze, nazywam si Jarbyz, jedmog ci dzisiaj pomd.",
+                "llm_text": "Cze Jarbyz! Mio mi Ci pozna    W czym mog dzisiaj pomc? Jeli masz pytanie lub potrzebujesz wsparcia, daj zna!",
+                "stt_model": "faster-whisper-tiny",
+                "llm_model": "gpt-oss:20b",
+                "tts_model": "chatterbox-turbo",
+                "input_file": "C:\\Users\\chojn\\jarvis\\tests\\sts\\input_data\\polish_std.wav",
+                "output_file": "C:\\Users\\chojn\\jarvis\\tests\\sts\\results\\tiny-gpt20-turbo_polish_explicit.wav"
+            },
+            {
+                "name": "short2long",
+                "status": "PASSED",
+                "duration": 7.844158499996411,
+                "result": "tests\\sts\\results\\tiny-gpt20-turbo_short2long.wav",
+                "mode": "WAV",
+                "stt_inf": 0.11587560000771191,
+                "llm_tot": 0.8210277000034694,
+                "tts_inf": 6.891862100004801,
+                "stt_text": "Tell me a four to five sentence story about a dog.",
+                "llm_text": "Milo, a scruffy terrier with a penchant for adventure, discovered a dusty attic filled with forgotten treasures. While chasing a moth, he knocked over a tin of old letters, revealing a map marked \"Secret Buried Treat.\" Determined, Milo followed the trail under the old oak tree, where a buried biscuit awaited his nose. As he dug up the treasure, the wind whispered thanks from a nearby sparrow, and Milo realized some greatest finds were the crumbs of joy shared with a new friend. And from that day, Milo guarded the attics secrets, ensuring that every curious heart could uncover a hidden treat.",
+                "stt_model": "faster-whisper-tiny",
+                "llm_model": "gpt-oss:20b",
+                "tts_model": "chatterbox-turbo",
+                "input_file": "C:\\Users\\chojn\\jarvis\\tests\\sts\\input_data\\short_dog_story.wav",
+                "output_file": "C:\\Users\\chojn\\jarvis\\tests\\sts\\results\\tiny-gpt20-turbo_short2long.wav"
+            },
+            {
+                "name": "long2short",
+                "status": "PASSED",
+                "duration": 1.682785099998,
+                "result": "tests\\sts\\results\\tiny-gpt20-turbo_long2short.wav",
+                "mode": "WAV",
+                "stt_inf": 0.23324529999808874,
+                "llm_tot": 1.0481012999953236,
+                "tts_inf": 0.38811810000333935,
+                "stt_text": "It is a truth universally acknowledged that a single man in possession of a good fortune must be in want of a wife. However, little known the feelings or views of such a man may be on his first entering a neighborhood, this truth is so well fixed in the minds of the surrounding families that he has considered the rightful property of someone or other of their daughters. What is the title of this book? Respond with title only.",
+                "llm_text": "Pride and Prejudice",
+                "stt_model": "faster-whisper-tiny",
+                "llm_model": "gpt-oss:20b",
+                "tts_model": "chatterbox-turbo",
+                "input_file": "C:\\Users\\chojn\\jarvis\\tests\\sts\\input_data\\long_book_quote.wav",
+                "output_file": "C:\\Users\\chojn\\jarvis\\tests\\sts\\results\\tiny-gpt20-turbo_long2short.wav"
+            }
+        ],
+        "status": "PASSED"
+    }
+]

@@ -91,7 +91,14 @@ class LifecycleManager:
                 proc = start_server(s['cmd'])
                 self.owned_processes.append((s['port'], proc))
                 if not wait_for_port(s['port'], process=proc):
-                    print(f"❌ FAILED to start {s['id']}"); sys.exit(1)
+                    print(f"❌ FAILED to start {s['id']}")
+                    if proc.poll() is not None:
+                        # Process died, try to get some output if possible
+                        stdout, stderr = proc.communicate(timeout=1)
+                        print(f"  ↳ Process exited with code {proc.returncode}")
+                        if stdout: print(f"  ↳ STDOUT: {stdout[:200]}")
+                        if stderr: print(f"  ↳ STDERR: {stderr[:200]}")
+                    sys.exit(1)
         if domain in ["llm", "vlm"] or self.full or domain == "sts":
             target_llm = self.loadout.get('llm')
             if target_llm: check_and_pull_model(target_llm); warmup_llm(target_llm, visual=(domain == "vlm"))

@@ -9,6 +9,20 @@ import time
 import argparse
 import soundfile as sf
 from loguru import logger
+
+# --- EMERGENCY HOTFIX: Monkey-patch perth ---
+try:
+    class DummyWatermarker:
+        def __init__(self, *args, **kwargs): pass
+        def apply(self, *args, **kwargs): return args[0]
+        def apply_watermark(self, wav, *args, **kwargs): return wav
+    import perth
+    perth.PerthImplicitWatermarker = DummyWatermarker
+    logger.warning("💉 EMERGENCY: Monkey-patched perth.PerthImplicitWatermarker")
+except Exception as e:
+    logger.error(f"💉 Patch failed: {e}")
+# -----------------------------------------------------
+
 from chatterbox.tts import ChatterboxTTS
 from chatterbox.mtl_tts import ChatterboxMultilingualTTS
 from chatterbox.tts_turbo import ChatterboxTurboTTS

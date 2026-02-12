@@ -125,13 +125,18 @@ def main():
     for domain in target_domains:
         domain_results = []
         for lid in target_loadouts:
-            res = run_domain_tests(domain, lid, purge=args.purge, full=args.full, benchmark_mode=args.benchmark_mode)
-            if res:
-                domain_results.append({
-                    "loadout": lid,
-                    "scenarios": res,
-                    "status": "PASSED" # Simplified for now
-                })
+            try:
+                res = run_domain_tests(domain, lid, purge=args.purge, full=args.full, benchmark_mode=args.benchmark_mode)
+                if res:
+                    domain_results.append({
+                        "loadout": lid,
+                        "scenarios": res,
+                        "status": "PASSED"
+                    })
+            except Exception as e:
+                print(f"❌ CRITICAL SUITE ERROR for {domain}/{lid}: {e}")
+                import traceback
+                traceback.print_exc()
         
         # Save artifact for this domain if we have results
         if domain_results:

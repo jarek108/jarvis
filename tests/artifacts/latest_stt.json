@@ -5,61 +5,61 @@
             {
                 "name": "Polish, implicit",
                 "status": "PASSED",
-                "duration": 0.6378125999908661,
-                "result": "Match: 87.3% | [Cze??, nazywam si? Jarbis, jedymiu mog? ci dzisiaj pom?c.]",
+                "duration": 0.1372492000082275,
+                "result": "Match: 90.6% | [Cze??, nazywam si? Jarbis, jed mog? ci dzisiaj pom?c.]",
                 "input_file": "C:\\Users\\chojn\\jarvis\\tests\\stt\\whisper\\input_data\\polish.wav",
                 "input_text": "Cze\u015b\u0107, nazywam si\u0119 Jarvis. Jak mog\u0119 Ci dzisiaj pom\u00f3c?",
-                "output_text": "Cze\u015b\u0107, nazywam si\u0119 Jarbis, jedymiu mog\u0119 ci dzisiaj pom\u00f3c."
+                "output_text": "Cze\u015b\u0107, nazywam si\u0119 Jarbis, jed mog\u0119 ci dzisiaj pom\u00f3c."
             },
             {
                 "name": "Polish, explicit",
                 "status": "PASSED",
-                "duration": 0.37839520000852644,
-                "result": "Match: 87.3% | [Cze??, nazywam si? Jarbis, jedymiu mog? ci dzisiaj pom?c.]",
+                "duration": 0.10423479999008123,
+                "result": "Match: 90.6% | [Cze??, nazywam si? Jarbis, jed mog? ci dzisiaj pom?c.]",
                 "input_file": "C:\\Users\\chojn\\jarvis\\tests\\stt\\whisper\\input_data\\polish.wav",
                 "input_text": "Cze\u015b\u0107, nazywam si\u0119 Jarvis. Jak mog\u0119 Ci dzisiaj pom\u00f3c?",
-                "output_text": "Cze\u015b\u0107, nazywam si\u0119 Jarbis, jedymiu mog\u0119 ci dzisiaj pom\u00f3c."
+                "output_text": "Cze\u015b\u0107, nazywam si\u0119 Jarbis, jed mog\u0119 ci dzisiaj pom\u00f3c."
             },
             {
                 "name": "Polish, misleading",
                 "status": "PASSED",
-                "duration": 0.3790965999942273,
-                "result": "Match: 41.6% | [Hi, I'm Zywam Sijarbis and I can help you today.]",
+                "duration": 0.09782959999574814,
+                "result": "Match: 26.4% | [Hi, I'm Rbys and I can help you today.]",
                 "input_file": "C:\\Users\\chojn\\jarvis\\tests\\stt\\whisper\\input_data\\polish.wav",
                 "input_text": "Cze\u015b\u0107, nazywam si\u0119 Jarvis. Jak mog\u0119 Ci dzisiaj pom\u00f3c?",
-                "output_text": "Hi, I'm Zywam Sijarbis and I can help you today."
+                "output_text": "Hi, I'm Rbys and I can help you today."
             },
             {
                 "name": "French, implicit",
                 "status": "PASSED",
-                "duration": 1.6762678000086453,
-                "result": "Match: 45.5% | [Oh, sure, so my bad Jarvis, come up here with it, eh?]",
+                "duration": 0.6363822999992408,
+                "result": "Match: 50.5% | [Oh, sure, so my bad Jarvis, come on, push with it, eh?]",
                 "input_file": "C:\\Users\\chojn\\jarvis\\tests\\stt\\whisper\\input_data\\french.wav",
                 "input_text": "Bonjour, je m'appelle Jarvis. Comment puis-je vous aider?",
-                "output_text": "Oh, sure, so my bad Jarvis, come up here with it, eh?"
+                "output_text": "Oh, sure, so my bad Jarvis, come on, push with it, eh?"
             },
             {
                 "name": "French, explicit",
                 "status": "PASSED",
-                "duration": 0.6314939000003505,
-                "result": "Match: 80.7% | [Bonjour, je m'appelle Jarvis. Come on, Pugeou, Zid?.]",
+                "duration": 0.20736700000998098,
+                "result": "Match: 74.1% | [Bonjour, je m'appelle Jarvis. C'est pas un peu plus d'id?e.]",
                 "input_file": "C:\\Users\\chojn\\jarvis\\tests\\stt\\whisper\\input_data\\french.wav",
                 "input_text": "Bonjour, je m'appelle Jarvis. Comment puis-je vous aider?",
-                "output_text": "Bonjour, je m'appelle Jarvis. Come on, Pugeou, Zid\u00e9."
+                "output_text": "Bonjour, je m'appelle Jarvis. C'est pas un peu plus d'id\u00e9e."
             },
             {
                 "name": "French, misleading",
                 "status": "PASSED",
-                "duration": 2.0472737999953097,
-                "result": "Match: 66.7% | [Bonjour, je m'appelle Jarvis, come up here with me today.]",
+                "duration": 0.293062299999292,
+                "result": "Match: 34.5% | [Hello George, I'm a bad jar beast. Come up here with a day.]",
                 "input_file": "C:\\Users\\chojn\\jarvis\\tests\\stt\\whisper\\input_data\\french.wav",
                 "input_text": "Bonjour, je m'appelle Jarvis. Comment puis-je vous aider?",
-                "output_text": "Bonjour, je m'appelle Jarvis, come up here with me today."
+                "output_text": "Hello George, I'm a bad jar beast. Come up here with a day."
             },
             {
                 "name": "Chinese, implicit",
                 "status": "PASSED",
-                "duration": 0.6315380000014557,
+                "duration": 0.11582990000897553,
                 "result": "Match: 73.7% | [??,?????,??????????]",
                 "input_file": "C:\\Users\\chojn\\jarvis\\tests\\stt\\whisper\\input_data\\chinese.wav",
                 "input_text": "\u4f60\u597d\uff0c\u6211\u53eb\u8d3e\u7ef4\u65af\u3002\u6211\u4eca\u5929\u80fd\u4e3a\u60a8\u505a\u4ec0\u4e48\uff1f",
@@ -68,7 +68,7 @@
             {
                 "name": "Chinese, explicit",
                 "status": "PASSED",
-                "duration": 0.37871109999832697,
+                "duration": 0.11027849999663886,
                 "result": "Match: 73.7% | [??,?????,??????????]",
                 "input_file": "C:\\Users\\chojn\\jarvis\\tests\\stt\\whisper\\input_data\\chinese.wav",
                 "input_text": "\u4f60\u597d\uff0c\u6211\u53eb\u8d3e\u7ef4\u65af\u3002\u6211\u4eca\u5929\u80fd\u4e3a\u60a8\u505a\u4ec0\u4e48\uff1f",
@@ -77,7 +77,7 @@
             {
                 "name": "Chinese, misleading",
                 "status": "PASSED",
-                "duration": 0.37761150000733323,
+                "duration": 0.11784229999466334,
                 "result": "Match: 0.0% | [Hello, my name is Jia Wei Si, what can I do for you today?]",
                 "input_file": "C:\\Users\\chojn\\jarvis\\tests\\stt\\whisper\\input_data\\chinese.wav",
                 "input_text": "\u4f60\u597d\uff0c\u6211\u53eb\u8d3e\u7ef4\u65af\u3002\u6211\u4eca\u5929\u80fd\u4e3a\u60a8\u505a\u4ec0\u4e48\uff1f",
@@ -86,7 +86,7 @@
             {
                 "name": "English, implicit",
                 "status": "PASSED",
-                "duration": 0.6219965000054799,
+                "duration": 0.10627519999979995,
                 "result": "Match: 100.0% | [Hello, this is a test of Tatterbox TTS.]",
                 "input_file": "C:\\Users\\chojn\\jarvis\\tests\\stt\\whisper\\input_data\\input.wav",
                 "input_text": "Hello, this is a test of Tatterbox TTS.",
@@ -95,7 +95,7 @@
             {
                 "name": "English, explicit",
                 "status": "PASSED",
-                "duration": 0.36220269999466836,
+                "duration": 0.11268960000597872,
                 "result": "Match: 100.0% | [Hello, this is a test of Tatterbox TTS.]",
                 "input_file": "C:\\Users\\chojn\\jarvis\\tests\\stt\\whisper\\input_data\\input.wav",
                 "input_text": "Hello, this is a test of Tatterbox TTS.",
@@ -104,7 +104,7 @@
             {
                 "name": "English, misleading",
                 "status": "PASSED",
-                "duration": 0.3528548000031151,
+                "duration": 0.10298850000253879,
                 "result": "Match: 100.0% | [Hello, this is a test of Tatterbox TTS.]",
                 "input_file": "C:\\Users\\chojn\\jarvis\\tests\\stt\\whisper\\input_data\\input.wav",
                 "input_text": "Hello, this is a test of Tatterbox TTS.",
@@ -119,43 +119,43 @@
             {
                 "name": "Polish, implicit",
                 "status": "PASSED",
-                "duration": 0.3638372999994317,
-                "result": "Match: 89.7% | [Cze??, nazywam si? Jarbyz, i ja mog? ci dzisiaj pom?c.]",
+                "duration": 0.12291520000144374,
+                "result": "Match: 83.8% | [Cze??, nazywam si? Jarbyz, jedmog? ci dzisiaj pom?d.]",
                 "input_file": "C:\\Users\\chojn\\jarvis\\tests\\stt\\whisper\\input_data\\polish.wav",
                 "input_text": "Cze\u015b\u0107, nazywam si\u0119 Jarvis. Jak mog\u0119 Ci dzisiaj pom\u00f3c?",
-                "output_text": "Cze\u015b\u0107, nazywam si\u0119 Jarbyz, i ja mog\u0119 ci dzisiaj pom\u00f3c."
+                "output_text": "Cze\u015b\u0107, nazywam si\u0119 Jarbyz, jedmog\u0119 ci dzisiaj pom\u00f3d."
             },
             {
                 "name": "Polish, explicit",
                 "status": "PASSED",
-                "duration": 0.22114809999766294,
-                "result": "Match: 89.7% | [Cze??, nazywam si? Jarbyz, i ja mog? ci dzisiaj pom?c.]",
+                "duration": 0.09221129999787081,
+                "result": "Match: 83.8% | [Cze??, nazywam si? Jarbyz, jedmog? ci dzisiaj pom?d.]",
                 "input_file": "C:\\Users\\chojn\\jarvis\\tests\\stt\\whisper\\input_data\\polish.wav",
                 "input_text": "Cze\u015b\u0107, nazywam si\u0119 Jarvis. Jak mog\u0119 Ci dzisiaj pom\u00f3c?",
-                "output_text": "Cze\u015b\u0107, nazywam si\u0119 Jarbyz, i ja mog\u0119 ci dzisiaj pom\u00f3c."
+                "output_text": "Cze\u015b\u0107, nazywam si\u0119 Jarbyz, jedmog\u0119 ci dzisiaj pom\u00f3d."
             },
             {
                 "name": "Polish, misleading",
                 "status": "PASSED",
-                "duration": 0.37888260000909213,
-                "result": "Match: 19.8% | [Bye. I'll see you soon. Bye.]",
+                "duration": 0.4299777999985963,
+                "result": "Match: 22.5% | [Bye! See you soon!]",
                 "input_file": "C:\\Users\\chojn\\jarvis\\tests\\stt\\whisper\\input_data\\polish.wav",
                 "input_text": "Cze\u015b\u0107, nazywam si\u0119 Jarvis. Jak mog\u0119 Ci dzisiaj pom\u00f3c?",
-                "output_text": "Bye. I'll see you soon. Bye."
+                "output_text": "Bye! See you soon!"
             },
             {
                 "name": "French, implicit",
                 "status": "PASSED",
-                "duration": 0.9256797999987612,
-                "result": "Match: 49.5% | [No juror, so my best Jarvis, come up with a day!]",
+                "duration": 0.16166030000022147,
+                "result": "Match: 41.1% | [No jewelry, so my best job is, come up with a day.]",
                 "input_file": "C:\\Users\\chojn\\jarvis\\tests\\stt\\whisper\\input_data\\french.wav",
                 "input_text": "Bonjour, je m'appelle Jarvis. Comment puis-je vous aider?",
-                "output_text": "No juror, so my best Jarvis, come up with a day!"
+                "output_text": "No jewelry, so my best job is, come up with a day."
             },
             {
                 "name": "French, explicit",
                 "status": "PASSED",
-                "duration": 0.28587430001061875,
+                "duration": 0.0996785000024829,
                 "result": "Match: 86.0% | [Bonjour, je m'appelle Jarvis, comme un pujouz-vous aider.]",
                 "input_file": "C:\\Users\\chojn\\jarvis\\tests\\stt\\whisper\\input_data\\french.wav",
                 "input_text": "Bonjour, je m'appelle Jarvis. Comment puis-je vous aider?",
@@ -164,16 +164,16 @@
             {
                 "name": "French, misleading",
                 "status": "PASSED",
-                "duration": 1.1764567000063835,
-                "result": "Match: 39.7% | [No jewelry, so my best jar of yeast. Come up with your day!]",
+                "duration": 0.4683116000087466,
+                "result": "Match: 39.7% | [No jewelry, so my best jar of yeast. Come up with your day.]",
                 "input_file": "C:\\Users\\chojn\\jarvis\\tests\\stt\\whisper\\input_data\\french.wav",
                 "input_text": "Bonjour, je m'appelle Jarvis. Comment puis-je vous aider?",
-                "output_text": "No jewelry, so my best jar of yeast. Come up with your day!"
+                "output_text": "No jewelry, so my best jar of yeast. Come up with your day."
             },
             {
                 "name": "Chinese, implicit",
                 "status": "PASSED",
-                "duration": 0.4543153999984497,
+                "duration": 0.11985039999126457,
                 "result": "Match: 81.1% | [??,?????,?????????]",
                 "input_file": "C:\\Users\\chojn\\jarvis\\tests\\stt\\whisper\\input_data\\chinese.wav",
                 "input_text": "\u4f60\u597d\uff0c\u6211\u53eb\u8d3e\u7ef4\u65af\u3002\u6211\u4eca\u5929\u80fd\u4e3a\u60a8\u505a\u4ec0\u4e48\uff1f",
@@ -182,7 +182,7 @@
             {
                 "name": "Chinese, explicit",
                 "status": "PASSED",
-                "duration": 0.28357309999410063,
+                "duration": 0.09977420000359416,
                 "result": "Match: 81.1% | [??,?????,?????????]",
                 "input_file": "C:\\Users\\chojn\\jarvis\\tests\\stt\\whisper\\input_data\\chinese.wav",
                 "input_text": "\u4f60\u597d\uff0c\u6211\u53eb\u8d3e\u7ef4\u65af\u3002\u6211\u4eca\u5929\u80fd\u4e3a\u60a8\u505a\u4ec0\u4e48\uff1f",
@@ -191,7 +191,7 @@
             {
                 "name": "Chinese, misleading",
                 "status": "PASSED",
-                "duration": 0.2772296000039205,
+                "duration": 0.11460780000197701,
                 "result": "Match: 0.0% | [Hello, I'm Jjavay Si, I can do what you do today.]",
                 "input_file": "C:\\Users\\chojn\\jarvis\\tests\\stt\\whisper\\input_data\\chinese.wav",
                 "input_text": "\u4f60\u597d\uff0c\u6211\u53eb\u8d3e\u7ef4\u65af\u3002\u6211\u4eca\u5929\u80fd\u4e3a\u60a8\u505a\u4ec0\u4e48\uff1f",
@@ -200,7 +200,7 @@
             {
                 "name": "English, implicit",
                 "status": "PASSED",
-                "duration": 0.4792414999974426,
+                "duration": 0.11591559999214951,
                 "result": "Match: 96.1% | [Hello, this is a test of Tatarbox TTS.]",
                 "input_file": "C:\\Users\\chojn\\jarvis\\tests\\stt\\whisper\\input_data\\input.wav",
                 "input_text": "Hello, this is a test of Tatterbox TTS.",
@@ -209,7 +209,7 @@
             {
                 "name": "English, explicit",
                 "status": "PASSED",
-                "duration": 0.26582739999867044,
+                "duration": 0.09820789999503177,
                 "result": "Match: 96.1% | [Hello, this is a test of Tatarbox TTS.]",
                 "input_file": "C:\\Users\\chojn\\jarvis\\tests\\stt\\whisper\\input_data\\input.wav",
                 "input_text": "Hello, this is a test of Tatterbox TTS.",
@@ -218,11 +218,11 @@
             {
                 "name": "English, misleading",
                 "status": "PASSED",
-                "duration": 0.2713882999960333,
-                "result": "Match: 63.2% | [Alors, c'est un test de Tadorbox TTS.]",
+                "duration": 0.11727869999594986,
+                "result": "Match: 63.2% | [Alors, c'est un test de Tadurbox TTS.]",
                 "input_file": "C:\\Users\\chojn\\jarvis\\tests\\stt\\whisper\\input_data\\input.wav",
                 "input_text": "Hello, this is a test of Tatterbox TTS.",
-                "output_text": "Alors, c'est un test de Tadorbox TTS."
+                "output_text": "Alors, c'est un test de Tadurbox TTS."
             }
         ],
         "status": "PASSED"
