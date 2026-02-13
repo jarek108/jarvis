@@ -19,7 +19,21 @@ from utils import (
 )
 
 def run_domain_tests(domain, setup_name, models, purge=False, full=False, benchmark_mode=False, force_download=False):
-    """Orchestrates the lifecycle and suite execution for a single domain/setup."""
+    """
+    Orchestrates the lifecycle and suite execution for a single domain/setup.
+
+    Args:
+        domain (str): The test domain to run (e.g., 'stt', 'tts', 'llm', 'vlm', 'sts').
+        setup_name (str): The specific setup identifier defined in the domain's test_setups.yaml.
+        models (list): A list of model strings/IDs required for this specific test setup.
+        purge (bool): If True, performs a global cleanup of orphaned Jarvis services before and after the test.
+        full (bool): If True, ensures all services listed in the setup are started, even if not strictly required by the domain.
+        benchmark_mode (bool): If True, enables extra telemetry and deterministic behavior for performance analysis.
+        force_download (bool): If True, allows the system to automatically pull missing models from Ollama/vLLM providers.
+
+    Returns:
+        list: A list of result dictionaries for each scenario executed in the test suite.
+    """
     # 1. Resolve the module and function
     try:
         module_path = f"{domain}.test"
@@ -94,6 +108,13 @@ def run_domain_tests(domain, setup_name, models, purge=False, full=False, benchm
     return results_accumulator
 
 def main():
+    """
+    Main entry point for the Jarvis Unified Test Runner.
+
+    Handles CLI argument parsing, environment setup, stale artifact cleanup, 
+    and iterative execution of test domains. Triggers final report generation 
+    and optional cloud upload upon completion.
+    """
     parser = argparse.ArgumentParser(description="Jarvis Unified Test Runner")
     parser.add_argument("--domain", type=str, help="Comma-separated list of domains (stt,tts,llm,vlm,sts). Defaults to all.")
     parser.add_argument("--setup", type=str, help="Specific setup name from test_setups.yaml to test.")
@@ -104,6 +125,16 @@ def main():
     parser.add_argument("--force-download", action="store_true", help="Allow model downloads if missing")
     
     args = parser.parse_args()
+
+    # 0. Clean up stale "latest" artifacts to ensure the report only contains current run data
+    artifacts_dir = os.path.join(script_dir, "artifacts")
+    if os.path.exists(artifacts_dir):
+        for f in os.listdir(artifacts_dir):
+            if f.startswith("latest_") and f.endswith(".json"):
+                try:
+                    os.remove(os.path.join(artifacts_dir, f))
+                except Exception as e:
+                    print(f"⚠️ Failed to remove old artifact {f}: {e}")
 
     # 1. Resolve Domains
     all_possible_domains = ["llm", "vlm", "stt", "tts", "sts"]
