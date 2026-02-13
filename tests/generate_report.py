@@ -187,6 +187,7 @@ def generate_excel(sync_artifacts=True):
                         "Input Text": s.get('input_text', 'N/A'),
                         "Output Text": s.get('text') or s.get('raw_text', 'N/A'),
                         "Status": s.get('status'),
+                        "Result": s.get('result', 'N/A'),
                         "Streaming": "Yes" if s.get('streaming') else "No",
                         "Peak VRAM (GB)": s.get('vram_peak', 0),
                         "TTFT (s)": s.get('ttft'),
@@ -218,6 +219,7 @@ def generate_excel(sync_artifacts=True):
                         "Input Media": link_file(s.get('input_file'), input_folder_id, overwrite=False, label=label),
                         "Output Text": s.get('text') or s.get('raw_text', 'N/A'),
                         "Status": s.get('status'),
+                        "Result": s.get('result', 'N/A'),
                         "Streaming": "Yes" if s.get('streaming') else "No",
                         "Peak VRAM (GB)": s.get('vram_peak', 0),
                         "TTFT (s)": s.get('ttft'),
@@ -248,9 +250,11 @@ def generate_excel(sync_artifacts=True):
                         "TTS Model": s.get('tts_model', 'N/A'),
                         "Scenario": s.get('name'), 
                         "Input wav": link_file(s.get('input_file'), input_folder_id, overwrite=False, label="▶️ Play wav"),
+                        "Input Text": s.get('stt_text', 'N/A'),
                         "Output wav": link_file(s.get('output_file'), output_folder_id, overwrite=True, label="▶️ Play wav"),
+                        "Output Text": s.get('llm_text', 'N/A'),
                         "Status": s.get('status'),
-                        "Result": s.get('result'),
+                        "Result": s.get('result', 'N/A'),
                         "Streaming": "Yes" if s.get('streaming') else "No",
                         "Peak VRAM (GB)": s.get('vram_peak', 0),
                         "STT Time": s.get('stt_inf') or m.get('stt', [0,0])[1],
@@ -331,14 +335,12 @@ def generate_excel(sync_artifacts=True):
                         worksheet.conditional_formatting.add(range_str, FormulaRule(formula=[f'{col_letter}2="No"'], stopIfTrue=True, fill=gray_fill))
 
                     elif "(s)" in col or "Time" in col:
-                        # Heatmap for timings (Lower is Greener)
                         rule = ColorScaleRule(start_type='min', start_color='C6EFCE', 
                                               mid_type='percentile', mid_value=50, mid_color='FFEB9C',
                                               end_type='max', end_color='FFC7CE')
                         worksheet.conditional_formatting.add(range_str, rule)
                     
                     elif "VRAM" in col:
-                        # Heatmap for VRAM (Higher is Redder - optional preference)
                         rule = ColorScaleRule(start_type='min', start_color='C6EFCE', 
                                               mid_type='percentile', mid_value=50, mid_color='FFEB9C',
                                               end_type='max', end_color='FFC7CE')
