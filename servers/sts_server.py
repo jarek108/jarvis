@@ -115,7 +115,7 @@ async def lifespan(app: FastAPI):
     active_llm = args.llm
     
     selected_loadout = args.loadout or DEFAULT_LOADOUT
-    loadout_path = os.path.join(project_root, "tests", "loadouts", f"{selected_loadout}.yaml")
+    loadout_path = os.path.join(project_root, "loadouts", f"{selected_loadout}.yaml")
     
     if os.path.exists(loadout_path):
         with open(loadout_path, "r") as f:

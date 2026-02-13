@@ -109,9 +109,11 @@ if __name__ == "__main__":
             sys.exit(1)
         target_model = stt_val[0] if isinstance(stt_val, list) else stt_val
 
+    # Standalone support
     run_test_lifecycle(
         domain="stt",
-        loadout_name=args.loadout,
+        setup_name=args.loadout,
+        models=[target_model],
         purge=args.purge,
         full=args.full,
         test_func=lambda: run_test_suite(target_model),

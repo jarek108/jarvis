@@ -1,0 +1,5 @@
+# LLM Test Setups
+qwen_0.5b: ["qwen2.5:0.5b"]
+llama_3_8b: ["llama3:8b"]
+vllm_qwen_0.5b: ["vllm:Qwen/Qwen2.5-0.5B-Instruct"]
+missing_test: ["non-existent-llm:latest"]

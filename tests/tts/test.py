@@ -96,9 +96,11 @@ if __name__ == "__main__":
             sys.exit(1)
         target_variant = tts_val[0] if isinstance(tts_val, list) else tts_val
 
+    # Standalone support
     run_test_lifecycle(
         domain="tts",
-        loadout_name=args.loadout,
+        setup_name=args.loadout,
+        models=[target_variant],
         purge=args.purge,
         full=args.full,
         test_func=lambda: run_test_suite(target_variant),

@@ -1,0 +1,7 @@
+# Named test setups for Speech-to-Speech pipeline
+# Format: setup_name: [model1, model2, ...]
+
+tiny_ol_qwen_0.5: ["faster-whisper-tiny", "qwen2.5:0.5b", "chatterbox-turbo"]
+base_ol_qwen_0.5: ["faster-whisper-base", "qwen2.5:0.5b", "chatterbox-multilingual"]
+vllm_test_qwen: ["faster-whisper-tiny", "vllm:Qwen/Qwen2.5-0.5B-Instruct", "chatterbox-turbo"]
+missing_model_test: ["faster-whisper-tiny", "non-existent-model:latest", "chatterbox-turbo"]

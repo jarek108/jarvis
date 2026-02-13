@@ -1,12 +1,21 @@
 import requests
 import subprocess
 
-def check_and_pull_model(model_name):
+def is_model_local(model_name):
     try:
         resp = requests.get("http://127.0.0.1:11434/api/tags")
         if resp.status_code == 200:
             models = [m['name'] for m in resp.json().get('models', [])]
-            if any(model_name in m for m in models): return True
+            return any(model_name in m for m in models)
+    except: pass
+    return False
+
+def check_and_pull_model(model_name, force_pull=False):
+    if is_model_local(model_name): return True
+    if not force_pull:
+        return False
+    
+    try:
         print(f"Model {model_name} not found. Pulling (this may take a while)...")
         subprocess.run(["ollama", "pull", model_name], check=True)
         return True

@@ -9,19 +9,16 @@ def load_config():
 
 def list_all_loadouts(include_experimental=False):
     project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-    loadout_dir = os.path.join(project_root, "tests", "loadouts")
+    loadout_dir = os.path.join(project_root, "loadouts")
     if not os.path.exists(loadout_dir): return []
-    all_f = [f.replace(".yaml", "") for f in os.listdir(loadout_dir) if f.endswith(".yaml")]
-    if include_experimental:
-        return all_f
-    return [f for f in all_f if not f.startswith("_")]
+    return [f.replace(".yaml", "") for f in os.listdir(loadout_dir) if f.endswith(".yaml")]
 
 def list_all_llm_models():
     loadouts = list_all_loadouts(include_experimental=True)
     project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     models = set()
     for lid in loadouts:
-        path = os.path.join(project_root, "tests", "loadouts", f"{lid}.yaml")
+        path = os.path.join(project_root, "loadouts", f"{lid}.yaml")
         try:
             with open(path, "r") as f:
                 data = yaml.safe_load(f)

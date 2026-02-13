@@ -80,9 +80,9 @@ def print_status():
 
 def apply_loadout(name, loud=False):
     cfg = load_config()
-    loadout_path = os.path.join(os.getcwd(), "tests", "loadouts", f"{name}.yaml")
+    loadout_path = os.path.join(os.getcwd(), "loadouts", f"{name}.yaml")
     if not os.path.exists(loadout_path):
-        loadout_path = os.path.join(os.getcwd(), "tests", "loadouts", f"{name}")
+        loadout_path = os.path.join(os.getcwd(), "loadouts", f"{name}")
         if not os.path.exists(loadout_path):
             logger.error(f"Loadout '{name}' not found.")
             return

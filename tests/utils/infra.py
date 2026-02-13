@@ -46,6 +46,17 @@ def is_vllm_docker_running():
         return "vllm-server" in res.stdout
     except: return False
 
+def is_vllm_model_local(model_name):
+    # Check in HF cache
+    hf_cache = os.path.join(os.path.expanduser("~"), ".cache", "huggingface", "hub")
+    if not os.path.exists(hf_cache): return False
+    
+    # Model name usually looks like "org/model"
+    # HF cache folder looks like "models--org--model"
+    safe_name = f"models--{model_name.replace('/', '--')}"
+    model_path = os.path.join(hf_cache, safe_name)
+    return os.path.exists(model_path)
+
 def kill_process_on_port(port: int):
     try:
         cfg = load_config()

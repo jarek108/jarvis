@@ -6,39 +6,71 @@ import json
 from contextlib import redirect_stdout
 from .config import load_config
 from .ui import ensure_utf8_output, LiveFilter, BOLD, CYAN, RESET, LINE_LEN
-from .infra import is_port_in_use, start_server, wait_for_port, kill_process_on_port, get_jarvis_ports, kill_all_jarvis_services
+from .infra import is_port_in_use, start_server, wait_for_port, kill_process_on_port, get_jarvis_ports, kill_all_jarvis_services, is_vllm_model_local
 from .vram import get_service_status, get_loaded_ollama_models, get_system_health
-from .ollama import check_and_pull_model, warmup_llm
+from .ollama import check_and_pull_model, warmup_llm, is_model_local
 
 class LifecycleManager:
-    def __init__(self, loadout_name, purge=False, full=False, benchmark_mode=False):
-        self.loadout_name = loadout_name
+    def __init__(self, setup_name, models=None, purge=False, full=False, benchmark_mode=False, force_download=False):
+        self.setup_name = setup_name
+        self.models = models or [] # List of model strings
         self.purge = purge
         self.full = full
         self.benchmark_mode = benchmark_mode
+        self.force_download = force_download
         self.cfg = load_config()
         self.project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
         self.python_exe = sys.executable
-        loadout_path = os.path.join(self.project_root, "tests", "loadouts", f"{loadout_name}.yaml")
-        if not os.path.exists(loadout_path):
-            raise FileNotFoundError(f"Loadout YAML not found: {loadout_path}")
-        with open(loadout_path, "r") as f:
-            self.loadout = yaml.safe_load(f)
         self.owned_processes = []
+        self.missing_models = []
+
+    def identify_models(self):
+        """Categorizes list of strings into STT, TTS, and LLM components."""
+        categorized = {"stt": None, "tts": None, "llm": None}
+        for m in self.models:
+            if m in self.cfg['stt_loadout']:
+                categorized['stt'] = m
+            elif m in self.cfg['tts_loadout']:
+                categorized['tts'] = m
+            else:
+                # Assume LLM
+                engine = "ollama"
+                model_id = m
+                if m.startswith("vllm:"):
+                    engine = "vllm"
+                    model_id = m[5:]
+                elif ":" in m or "/" in m: # Heuristic for org/model or model:tag
+                    engine = "ollama" # default
+                
+                categorized['llm'] = {"engine": engine, "model": model_id, "original": m}
+        return categorized
+
+    def check_availability(self):
+        cat = self.identify_models()
+        self.missing_models = []
+        
+        if cat['llm']:
+            engine = cat['llm']['engine']
+            model = cat['llm']['model']
+            if engine == "ollama":
+                if not is_model_local(model) and not self.force_download:
+                    self.missing_models.append(cat['llm']['original'])
+            elif engine == "vllm":
+                if not is_vllm_model_local(model) and not self.force_download:
+                    self.missing_models.append(cat['llm']['original'])
+        
+        # Note: STT and TTS models are currently local scripts/files
+        # and don't require external downloads in the same way LLMs do.
+        return len(self.missing_models) == 0
 
     def get_required_services(self, domain=None):
         required = []
-        llm_data = self.loadout.get('llm')
-        if llm_data and (domain in ["llm", "vlm"] or self.full or domain == "sts"):
-            engine = "ollama"
-            model = llm_data
-            if isinstance(llm_data, dict):
-                engine = llm_data.get("engine", "ollama")
-                model = llm_data.get("model")
-            elif isinstance(llm_data, str) and llm_data.startswith("vllm:"):
-                engine = "vllm"
-                model = llm_data[5:]
-
+        cat = self.identify_models()
+        
+        # 1. LLM
+        if cat['llm'] and (domain in ["llm", "vlm", "sts"] or self.full):
+            engine = cat['llm']['engine']
+            model = cat['llm']['model']
             if engine == "ollama":
                 required.append({
                     "type": "llm", "id": model, "port": self.cfg['ports']['ollama'],
@@ -47,65 +79,78 @@ class LifecycleManager:
             elif engine == "vllm":
                 vllm_port = self.cfg['ports'].get('vllm', 8300)
                 hf_cache = os.path.join(os.path.expanduser("~"), ".cache", "huggingface")
-                # Using Docker to run vLLM on Windows
-                cmd = [
-                    "docker", "run", "--gpus", "all", "-d", 
-                    "--name", "vllm-server",
-                    "-p", f"{vllm_port}:8000",
-                    "-v", f"{hf_cache}:/root/.cache/huggingface",
-                    "vllm/vllm-openai",
-                    "--model", model
-                ]
+                cmd = ["docker", "run", "--gpus", "all", "-d", "--name", "vllm-server", "-p", f"{vllm_port}:8000", "-v", f"{hf_cache}:/root/.cache/huggingface", "vllm/vllm-openai", "--model", model]
                 required.append({
                     "type": "llm", "id": model, "port": vllm_port,
-                    "cmd": cmd, "health": f"http://127.0.0.1:{vllm_port}/v1/models",
-                    "is_docker": True
+                    "cmd": cmd, "health": f"http://127.0.0.1:{vllm_port}/v1/models"
                 })
-        stt_val = self.loadout.get('stt')
-        if stt_val and (domain == "stt" or self.full or domain == "sts"):
-            stt_id = stt_val[0] if isinstance(stt_val, list) else stt_val
+
+        # 2. STT
+        if cat['stt'] and (domain in ["stt", "sts"] or self.full):
+            stt_id = cat['stt']
             stt_port = self.cfg['stt_loadout'][stt_id]
             stt_script = os.path.join(self.project_root, "servers", "stt_server.py")
             cmd = [self.python_exe, stt_script, "--port", str(stt_port), "--model", stt_id]
             if self.benchmark_mode: cmd.append("--benchmark-mode")
             required.append({"type": "stt", "id": stt_id, "port": stt_port, "cmd": cmd, "health": f"http://127.0.0.1:{stt_port}/health"})
-        tts_val = self.loadout.get('tts')
-        if tts_val and (domain == "tts" or self.full or domain == "sts"):
-            tts_id = tts_val[0] if isinstance(tts_val, list) else tts_val
+
+        # 3. TTS
+        if cat['tts'] and (domain in ["tts", "sts"] or self.full):
+            tts_id = cat['tts']
             tts_port = self.cfg['tts_loadout'][tts_id]
             tts_script = os.path.join(self.project_root, "servers", "tts_server.py")
             cmd = [self.python_exe, tts_script, "--port", str(tts_port), "--variant", tts_id]
             if self.benchmark_mode: cmd.append("--benchmark-mode")
             required.append({"type": "tts", "id": tts_id, "port": tts_port, "cmd": cmd, "health": f"http://127.0.0.1:{tts_port}/health"})
+
+        # 4. STS
         if domain == "sts":
             sts_port = self.cfg['ports']['sts']
             sts_script = os.path.join(self.project_root, "servers", "sts_server.py")
-            cmd = [self.python_exe, sts_script, "--loadout", self.loadout_name]
+            # PASS EXPLICIT OVERRIDES to sts_server
+            cmd = [self.python_exe, sts_script, "--port", str(sts_port)]
+            if cat['stt']: cmd.extend(["--stt", cat['stt']])
+            if cat['tts']: cmd.extend(["--tts", cat['tts']])
+            if cat['llm']: 
+                llm_val = cat['llm']['original']
+                cmd.extend(["--llm", llm_val])
             if self.benchmark_mode: cmd.append("--benchmark-mode")
+            
             required.append({
-                "type": "sts", "id": self.loadout_name, "port": sts_port, "cmd": cmd, 
+                "type": "sts", "id": self.setup_name, "port": sts_port, "cmd": cmd, 
                 "health": f"http://127.0.0.1:{sts_port}/health"
             })
         return required
 
     def reconcile(self, domain):
         ensure_utf8_output()
-        print(f"\n--- JARVIS LIFECYCLE RECONCILER [Loadout: {self.loadout_name.upper()}] ---")
+        print(f"\n--- JARVIS LIFECYCLE RECONCILER [Setup: {self.setup_name.upper()}] ---")
+        
+        if not self.check_availability():
+            print(f"❌ MISSING MODELS: {', '.join(self.missing_models)}")
+            return -1 # Sentinel for missing
+
         required_services = self.get_required_services(domain)
         required_ports = {s['port'] for s in required_services}
+        
         if self.purge:
             print("🧹 PURGE ENABLED: Cleaning up foreign Jarvis services...")
             for port in get_jarvis_ports():
                 if port not in required_ports and is_port_in_use(port):
                     print(f"  ↳ Killing orphaned service on port {port}")
                     kill_process_on_port(port)
-            if self.cfg['ports']['ollama'] in required_ports:
-                loaded = get_loaded_ollama_models()
-                target_llm = self.loadout.get('llm')
-                if loaded and not any(target_llm in m for m in loaded):
-                    print(f"  ↳ ☢️ OLLAMA PURGE: Mismatched models loaded ({loaded}). Restarting Ollama...")
-                    start_p = time.perf_counter(); kill_process_on_port(self.cfg['ports']['ollama'])
-                    print(f"    ✅ Purge complete ({time.perf_counter() - start_p:.2f}s)")
+            
+            # Special check for Ollama model mismatch
+            ollama_port = self.cfg['ports']['ollama']
+            if ollama_port in required_ports:
+                cat = self.identify_models()
+                if cat['llm'] and cat['llm']['engine'] == "ollama":
+                    target_llm = cat['llm']['model']
+                    loaded = get_loaded_ollama_models()
+                    if loaded and not any(target_llm in m for m in loaded):
+                        print(f"  ↳ ☢️ OLLAMA PURGE: Mismatched models loaded ({loaded}). Restarting Ollama...")
+                        kill_process_on_port(ollama_port)
+
         setup_start = time.perf_counter()
         for s in required_services:
             status, info = get_service_status(s['port'])
@@ -119,30 +164,18 @@ class LifecycleManager:
                 self.owned_processes.append((s['port'], proc))
                 if not wait_for_port(s['port'], process=proc):
                     print(f"❌ FAILED to start {s['id']}")
-                    if proc.poll() is not None:
-                        # Process died, try to get some output if possible
-                        stdout, stderr = proc.communicate(timeout=1)
-                        print(f"  ↳ Process exited with code {proc.returncode}")
-                        if stdout: print(f"  ↳ STDOUT: {stdout[:200]}")
-                        if stderr: print(f"  ↳ STDERR: {stderr[:200]}")
                     sys.exit(1)
-        if domain in ["llm", "vlm"] or self.full or domain == "sts":
-            llm_data = self.loadout.get('llm')
-            if llm_data:
-                engine = "ollama"
-                model = llm_data
-                if isinstance(llm_data, dict):
-                    engine = llm_data.get("engine", "ollama")
-                    model = llm_data.get("model")
-                elif isinstance(llm_data, str) and llm_data.startswith("vllm:"):
-                    engine = "vllm"
-                    model = llm_data[5:]
-                
+        
+        # Warmup LLM
+        if domain in ["llm", "vlm", "sts"] or self.full:
+            cat = self.identify_models()
+            if cat['llm']:
+                engine = cat['llm']['engine']
+                model = cat['llm']['model']
                 if engine == "ollama":
-                    check_and_pull_model(model)
+                    check_and_pull_model(model, force_pull=self.force_download)
                     warmup_llm(model, visual=(domain == "vlm"))
-                # vLLM models are typically pre-loaded or downloaded on startup
-                # We could add a generic warmup here if needed
+        
         return time.perf_counter() - setup_start
 
     def cleanup(self):
@@ -153,7 +186,6 @@ class LifecycleManager:
             return time.perf_counter() - start_c
             
         if not self.owned_processes:
-            print("\nINFO: Skipping cleanup (No services were spawned by this test).")
             return 0
             
         print(f"\nCleaning up {len(self.owned_processes)} spawned services...")
@@ -161,16 +193,20 @@ class LifecycleManager:
         for port, _ in self.owned_processes: kill_process_on_port(port)
         return time.perf_counter() - start_c
 
-def run_test_lifecycle(domain, loadout_name, purge, full, test_func, benchmark_mode=False):
+def run_test_lifecycle(domain, setup_name, models, purge, full, test_func, benchmark_mode=False, force_download=False):
     ensure_utf8_output()
-    manager = LifecycleManager(loadout_name, purge=purge, full=full, benchmark_mode=benchmark_mode)
-    required = manager.loadout.get(domain)
-    if not required and domain == "vlm": required = manager.loadout.get("llm")
-    if not required and domain != "sts":
-        print(f"❌ ERROR: Loadout '{loadout_name}' does not define a component for domain '{domain}'."); sys.exit(1)
+    manager = LifecycleManager(setup_name, models=models, purge=purge, full=full, benchmark_mode=benchmark_mode, force_download=force_download)
+    
     setup_time = manager.reconcile(domain)
+    if setup_time == -1:
+        # Report MISSING
+        from .reporting import report_scenario_result
+        res_obj = {"name": "SETUP", "status": "MISSING", "duration": 0, "result": f"Missing models: {', '.join(manager.missing_models)}", "mode": domain.upper()}
+        report_scenario_result(res_obj)
+        return
+
     print("\n" + "="*LINE_LEN)
-    print(f"{BOLD}{CYAN}{domain.upper() + ' [' + loadout_name.upper() + '] TEST SUITE':^120}{RESET}")
+    print(f"{BOLD}{CYAN}{domain.upper() + ' [' + setup_name.upper() + '] TEST SUITE':^120}{RESET}")
     print("="*LINE_LEN)
     f = LiveFilter(); proc_start = time.perf_counter()
     with redirect_stdout(f): test_func()

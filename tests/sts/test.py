@@ -144,26 +144,20 @@ if __name__ == "__main__":
         run_test_suite(args.loadout, stream=True)
         
         vram_peak = get_gpu_vram_usage()
-        # Get active LLM from loadout for audit
-        script_dir = os.path.dirname(os.path.abspath(__file__))
-        project_root = os.path.dirname(os.path.dirname(script_dir))
-        loadout_path = os.path.join(project_root, "tests", "loadouts", f"{args.loadout}.yaml")
-        with open(loadout_path, "r") as f:
-            l_data = yaml.safe_load(f)
-            active_llm = l_data.get('llm', 'gpt-oss:20b')
-            
-        is_ok, vram_used, total_size = check_ollama_offload(active_llm)
+        # We don't read from loadout file anymore, we just audit if it was Ollama
+        # Ideally we'd pass this info through, but for now we skip detailed audit if not easily available
         print("\n" + "-"*40)
         print(f"VRAM AUDIT: {args.loadout.upper()}")
         print(f"  Peak Total Usage: {vram_peak:.1f} GB")
-        if total_size > 0:
-            status_txt = "FULL VRAM" if is_ok else "🚨 RAM SWAP"
-            print(f"  Model Placement: {status_txt} ({vram_used:.1f}GB / {total_size:.1f}GB in VRAM)")
         print("-"*40 + "\n")
 
+    # Note: we need to handle the models list here if we want to run this script standalone,
+    # but normally it's called via runner.py which handles lifecycle.
+    # For now, we just pass dummy values to avoid crash if run directly.
     run_test_lifecycle(
         domain="sts",
-        loadout_name=args.loadout,
+        setup_name=args.loadout,
+        models=[], # In standalone, we don't have the list
         purge=args.purge,
         full=args.full,
         test_func=test_wrapper,

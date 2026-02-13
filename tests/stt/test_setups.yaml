@@ -1,0 +1,6 @@
+# STT Test Setups
+whisper_tiny: ["faster-whisper-tiny"]
+whisper_base: ["faster-whisper-base"]
+whisper_small: ["faster-whisper-small"]
+whisper_medium: ["faster-whisper-medium"]
+whisper_large: ["faster-whisper-large"]

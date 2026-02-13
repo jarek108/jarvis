@@ -155,9 +155,11 @@ if __name__ == "__main__":
             print(f"❌ ERROR: Loadout '{args.loadout}' defines no LLM component.")
             sys.exit(1)
 
+    # Standalone support
     run_test_lifecycle(
         domain="llm",
-        loadout_name=args.loadout,
+        setup_name=args.loadout,
+        models=[target_model],
         purge=args.purge,
         full=args.full,
         test_func=lambda: run_test_suite(target_model),

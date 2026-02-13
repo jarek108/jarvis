@@ -15,11 +15,11 @@ sys.path.append(project_root)
 
 from utils import (
     CYAN, BOLD, RESET, LINE_LEN, 
-    list_all_loadouts, run_test_lifecycle, save_artifact, trigger_report_generation
+    run_test_lifecycle, save_artifact, trigger_report_generation
 )
 
-def run_domain_tests(domain, loadout_name, purge=False, full=False, benchmark_mode=False):
-    """Orchestrates the lifecycle and suite execution for a single domain/loadout."""
+def run_domain_tests(domain, setup_name, models, purge=False, full=False, benchmark_mode=False, force_download=False):
+    """Orchestrates the lifecycle and suite execution for a single domain/setup."""
     # 1. Resolve the module and function
     try:
         module_path = f"{domain}.test"
@@ -29,31 +29,7 @@ def run_domain_tests(domain, loadout_name, purge=False, full=False, benchmark_mo
         print(f"❌ ERROR: Could not load test suite for domain '{domain}': {e}")
         return None
 
-    # 2. Extract the target model from loadout for the lifecycle helper
-    loadout_path = os.path.join(script_dir, "loadouts", f"{loadout_name}.yaml")
-    if not os.path.exists(loadout_path):
-        print(f"❌ ERROR: Loadout '{loadout_name}' not found.")
-        return None
-        
-    with open(loadout_path, "r") as f:
-        l_data = yaml.safe_load(f)
-        
-    # Validation and target mapping
-    target_id = None
-    if domain in ["stt", "tts"]:
-        val = l_data.get(domain)
-        if val:
-            target_id = val[0] if isinstance(val, list) else val
-    elif domain in ["llm", "vlm"]:
-        target_id = l_data.get("llm")
-    elif domain == "sts":
-        target_id = loadout_name # sts uses the loadout ID directly
-
-    if not target_id and domain != "sts":
-        print(f"⚠️ Skipping '{domain}' for loadout '{loadout_name}': Component not defined.")
-        return None
-
-    # 3. Execution container for results capturing
+    # 2. Execution container for results capturing
     results_accumulator = []
     
     # We wrap the domain's reporter to capture results locally for artifacts
@@ -69,21 +45,22 @@ def run_domain_tests(domain, loadout_name, purge=False, full=False, benchmark_mo
         original_report_llm(res)
 
     # Patch the reporting functions in the domain module's namespace
-    # This ensures we capture the data even if the module imported the functions before we patched utils
     setattr(module, "report_scenario_result", capture_result)
     setattr(module, "report_llm_result", capture_llm_result)
 
-    # 4. Run Lifecycle
+    # 3. Run Lifecycle
     run_test_lifecycle(
         domain=domain,
-        loadout_name=loadout_name,
+        setup_name=setup_name,
+        models=models,
         purge=purge,
         full=full,
-        test_func=lambda: test_func_to_run(target_id) if domain != "sts" else test_func_to_run(target_id),
-        benchmark_mode=benchmark_mode
+        test_func=lambda: test_func_to_run(setup_name), # Pass setup_name as target_id/loadout_id
+        benchmark_mode=benchmark_mode,
+        force_download=force_download
     )
     
-    # Restore original reporters
+    # Restore original reporters (optional but good practice)
     utils.report_scenario_result = original_report_scenario
     utils.report_llm_result = original_report_llm
     
@@ -92,11 +69,12 @@ def run_domain_tests(domain, loadout_name, purge=False, full=False, benchmark_mo
 def main():
     parser = argparse.ArgumentParser(description="Jarvis Unified Test Runner")
     parser.add_argument("--domain", type=str, help="Comma-separated list of domains (stt,tts,llm,vlm,sts). Defaults to all.")
-    parser.add_argument("--loadout", type=str, help="Loadout name to test. If omitted, runs against all non-experimental loadouts.")
+    parser.add_argument("--setup", type=str, help="Specific setup name from test_setups.yaml to test.")
     parser.add_argument("--purge", action="store_true", help="Kill extra services before/after")
-    parser.add_argument("--full", action="store_true", help="Ensure all loadout services are running")
+    parser.add_argument("--full", action="store_true", help="Ensure all setup services are running")
     parser.add_argument("--benchmark-mode", action="store_true", help="Deterministic output")
     parser.add_argument("--local", action="store_true", help="Skip cloud upload")
+    parser.add_argument("--force-download", action="store_true", help="Allow model downloads if missing")
     
     args = parser.parse_args()
 
@@ -107,34 +85,57 @@ def main():
     else:
         target_domains = all_possible_domains
 
-    # 2. Resolve Loadouts
-    if args.loadout:
-        target_loadouts = [args.loadout]
-    else:
-        target_loadouts = list_all_loadouts(include_experimental=False)
-
     print("#"*LINE_LEN)
     print(f"{BOLD}{CYAN}{'JARVIS UNIFIED TEST RUNNER':^120}{RESET}")
     print(f"{'Domains: ' + ', '.join(target_domains):^120}")
-    print(f"{'Loadouts: ' + ', '.join(target_loadouts):^120}")
     print("#"*LINE_LEN)
 
     global_start = time.perf_counter()
     
-    # 3. Iterative Execution
+    # 2. Iterative Execution
     for domain in target_domains:
         domain_results = []
-        for lid in target_loadouts:
+        
+        # Load test_setups.yaml for this domain
+        setup_path = os.path.join(script_dir, domain, "test_setups.yaml")
+        if not os.path.exists(setup_path):
+            print(f"⚠️ Skipping domain '{domain}': test_setups.yaml not found at {setup_path}")
+            continue
+            
+        with open(setup_path, "r") as f:
+            setups = yaml.safe_load(f)
+            
+        if not setups:
+            print(f"⚠️ Skipping domain '{domain}': No setups defined in test_setups.yaml")
+            continue
+
+        # Filter by specific setup if requested
+        if args.setup:
+            if args.setup in setups:
+                target_setups = {args.setup: setups[args.setup]}
+            else:
+                print(f"❌ ERROR: Setup '{args.setup}' not found in {domain}/test_setups.yaml")
+                continue
+        else:
+            target_setups = setups
+
+        for s_name, models in target_setups.items():
             try:
-                res = run_domain_tests(domain, lid, purge=args.purge, full=args.full, benchmark_mode=args.benchmark_mode)
+                res = run_domain_tests(
+                    domain, s_name, models, 
+                    purge=args.purge, 
+                    full=args.full, 
+                    benchmark_mode=args.benchmark_mode,
+                    force_download=args.force_download
+                )
                 if res:
                     domain_results.append({
-                        "loadout": lid,
+                        "loadout": s_name, # We still use 'loadout' key for artifact compatibility
                         "scenarios": res,
                         "status": "PASSED"
                     })
             except Exception as e:
-                print(f"❌ CRITICAL SUITE ERROR for {domain}/{lid}: {e}")
+                print(f"❌ CRITICAL SUITE ERROR for {domain}/{s_name}: {e}")
                 import traceback
                 traceback.print_exc()
         
@@ -147,7 +148,7 @@ def main():
     print(f"{'Total Time: ' + str(round(time.perf_counter() - global_start, 2)) + 's':^120}")
     print("#"*LINE_LEN + "\n")
 
-    # 4. Final Reporting
+    # 3. Final Reporting
     trigger_report_generation(upload=not args.local)
 
 if __name__ == "__main__":

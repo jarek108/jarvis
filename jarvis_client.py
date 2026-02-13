@@ -405,7 +405,7 @@ class JarvisApp(ctk.CTk):
         loaded_ollama = self.controller.loaded_ollama_models
         active_ports = set(); active_llm = None
         if self.controller.current_loadout != "None":
-            path = os.path.join(self.controller.project_root, "tests", "loadouts", f"{self.controller.current_loadout}.yaml")
+            path = os.path.join(self.controller.project_root, "loadouts", f"{self.controller.current_loadout}.yaml")
             if os.path.exists(path):
                 with open(path, "r") as f:
                     l = yaml.safe_load(f)
