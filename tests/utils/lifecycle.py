@@ -126,12 +126,29 @@ class LifecycleManager:
         ensure_utf8_output()
         print(f"\n--- JARVIS LIFECYCLE RECONCILER [Setup: {self.setup_name.upper()}] ---")
         
+        required_services = self.get_required_services(domain)
+        required_ports = {s['port'] for s in required_services}
+
+        # 1. Start LLM Engine FIRST if it's Ollama, so we can check availability
+        ollama_port = self.cfg['ports']['ollama']
+        if ollama_port in required_ports:
+            cat = self.identify_models()
+            if cat['llm'] and cat['llm']['engine'] == "ollama":
+                status, _ = get_service_status(ollama_port)
+                if status != "ON":
+                    print(f"🚀 Starting Ollama (required for availability check)...")
+                    # Find the ollama service config
+                    ollama_service = next(s for s in required_services if s['port'] == ollama_port)
+                    proc = start_server(ollama_service['cmd'])
+                    self.owned_processes.append((ollama_port, proc))
+                    if not wait_for_port(ollama_port, process=proc):
+                        print(f"❌ FAILED to start Ollama")
+                        return -1
+
+        # 2. Now check availability
         if not self.check_availability():
             print(f"❌ MISSING MODELS: {', '.join(self.missing_models)}")
             return -1 # Sentinel for missing
-
-        required_services = self.get_required_services(domain)
-        required_ports = {s['port'] for s in required_services}
         
         if self.purge:
             print("🧹 PURGE ENABLED: Cleaning up foreign Jarvis services...")

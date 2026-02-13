@@ -48,14 +48,28 @@ def run_domain_tests(domain, setup_name, models, purge=False, full=False, benchm
     setattr(module, "report_scenario_result", capture_result)
     setattr(module, "report_llm_result", capture_llm_result)
 
-    # 3. Run Lifecycle
+    # 3. Resolve the relevant model for this domain from the list
+    # LifecycleManager has this logic, let's use a helper or local logic
+    target_id = setup_name # default fallback
+    for m in models:
+        if domain == "stt" and m in utils.load_config()['stt_loadout']:
+            target_id = m
+            break
+        if domain == "tts" and m in utils.load_config()['tts_loadout']:
+            target_id = m
+            break
+        if domain in ["llm", "vlm"] and (":" in m or "/" in m or m.startswith("vllm:")):
+            target_id = m.replace("vllm:", "") # Pass clean model ID to test suite
+            break
+
+    # 4. Run Lifecycle
     run_test_lifecycle(
         domain=domain,
         setup_name=setup_name,
         models=models,
         purge=purge,
         full=full,
-        test_func=lambda: test_func_to_run(setup_name), # Pass setup_name as target_id/loadout_id
+        test_func=lambda: test_func_to_run(target_id), 
         benchmark_mode=benchmark_mode,
         force_download=force_download
     )

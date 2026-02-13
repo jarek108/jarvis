@@ -73,6 +73,7 @@ def run_test_suite(model_id, trim_length=80):
                         "status": "PASSED",
                         "duration": duration,
                         "result": f"Match: {similarity:.1%} | [{ascii_text}]",
+                        "stt_model": model_id,
                         "input_file": audio_path,
                         "input_text": ground_truth,
                         "output_text": transcription

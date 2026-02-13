@@ -1,7 +1,11 @@
-# Named test setups for Speech-to-Speech pipeline
-# Format: setup_name: [model1, model2, ...]
+# Legacy Mixture (Original Loadouts)
+legacy_tiny_gpt20: ["faster-whisper-tiny", "gpt-oss:20b", "chatterbox-turbo"]
+legacy_base_gpt20: ["faster-whisper-base", "gpt-oss:20b", "chatterbox-multilingual"]
+legacy_base_qwen30: ["faster-whisper-base", "qwen3-vl:30b-a3b-instruct", "chatterbox-multilingual"]
 
+# New Engine Tests
 tiny_ol_qwen_0.5: ["faster-whisper-tiny", "qwen2.5:0.5b", "chatterbox-turbo"]
-base_ol_qwen_0.5: ["faster-whisper-base", "qwen2.5:0.5b", "chatterbox-multilingual"]
-vllm_test_qwen: ["faster-whisper-tiny", "vllm:Qwen/Qwen2.5-0.5B-Instruct", "chatterbox-turbo"]
-missing_model_test: ["faster-whisper-tiny", "non-existent-model:latest", "chatterbox-turbo"]
+tiny_vl_qwen_0.5: ["faster-whisper-tiny", "vllm:Qwen/Qwen2.5-0.5B-Instruct", "chatterbox-turbo"]
+
+# Sanity / Failure Cases
+missing_model_test: ["faster-whisper-tiny", "non-existent-llm:latest", "chatterbox-turbo"]

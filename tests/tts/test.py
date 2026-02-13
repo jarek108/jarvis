@@ -61,6 +61,7 @@ def run_test_suite(variant_id, trim_length=80):
                     "status": "PASSED", 
                     "duration": duration, 
                     "result": display_path,
+                    "tts_model": variant_id,
                     "output_file": out_path,
                     "input_text": s['text']
                 }

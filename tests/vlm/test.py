@@ -156,6 +156,7 @@ def run_test_suite(model_name):
                 "tps": tps,
                 "text": full_text,
                 "duration": total_dur,
+                "llm_model": model_name,
                 "input_file": file_path,
                 "input_text": s['text']
             }

@@ -100,7 +100,8 @@ def run_test_suite(model_name):
                 "raw_text": full_text,
                 "thought": thought_text.strip(),
                 "chunks": chunks,
-                "duration": total_dur
+                "duration": total_dur,
+                "llm_model": model_name
             }
             report_llm_result(res_obj)
 

@@ -100,10 +100,11 @@ def generate_excel(sync_artifacts=True):
         if not data: continue
         rows = []
         for entry in data:
-            loadout = entry.get('loadout', 'unknown')
+            setup = entry.get('loadout', 'unknown')
             for s in entry.get('scenarios', []):
                 rows.append({
-                    "Loadout": loadout,
+                    "Setup": setup,
+                    "Model": s.get(f"{domain}_model", "N/A"),
                     "Scenario": s.get('name'),
                     "Status": s.get('status'),
                     "Input Text": s.get('input_text', 'N/A'),
@@ -122,11 +123,12 @@ def generate_excel(sync_artifacts=True):
         if not data: continue
         rows = []
         for entry in data:
-            loadout = entry.get('loadout', 'unknown')
+            setup = entry.get('loadout', 'unknown')
             vram = entry.get('vram', {}).get('peak_gb', 0)
             for s in entry.get('scenarios', []):
                 rows.append({
-                    "Loadout": loadout,
+                    "Setup": setup,
+                    "Model": s.get("llm_model") or entry.get("model") or "N/A",
                     "Scenario": s.get('name'),
                     "Status": s.get('status'),
                     "Input Text": s.get('input_text', 'N/A'),
@@ -145,12 +147,15 @@ def generate_excel(sync_artifacts=True):
     if data:
         rows = []
         for entry in data:
-            loadout = entry.get('loadout', 'unknown')
+            setup = entry.get('loadout', 'unknown')
             vram = entry.get('vram', {}).get('peak_gb', 0)
             for s in entry.get('scenarios', []):
                 m = s.get('metrics', {})
                 rows.append({
-                    "Loadout": loadout, 
+                    "Setup": setup, 
+                    "STT Model": s.get('stt_model', 'N/A'),
+                    "LLM Model": s.get('llm_model', 'N/A'),
+                    "TTS Model": s.get('tts_model', 'N/A'),
                     "Scenario": s.get('name'), 
                     "Mode": s.get('mode'),
                     "Status": s.get('status'),
