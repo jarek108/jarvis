@@ -8,7 +8,7 @@ from .config import load_config
 from .ui import ensure_utf8_output, LiveFilter, BOLD, CYAN, RESET, LINE_LEN
 from .infra import is_port_in_use, start_server, wait_for_port, kill_process_on_port, get_jarvis_ports, kill_all_jarvis_services, is_vllm_model_local
 from .vram import get_service_status, get_loaded_ollama_models, get_system_health
-from .ollama import check_and_pull_model, warmup_llm, is_model_local
+from .llm import check_and_pull_model, warmup_llm, is_model_local
 
 class LifecycleManager:
     def __init__(self, setup_name, models=None, purge_on_entry=True, purge_on_exit=False, full=False, benchmark_mode=False, force_download=False):

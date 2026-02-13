@@ -16,7 +16,7 @@ from .vram import (
     get_service_status, get_system_health, get_gpu_vram_usage,
     check_ollama_offload
 )
-from .ollama import check_and_pull_model, warmup_llm, is_model_local
+from .llm import check_and_pull_model, warmup_llm, is_model_local
 from .reporting import (
     format_status, fmt_with_chunks, report_llm_result, 
     report_scenario_result, save_artifact, trigger_report_generation
