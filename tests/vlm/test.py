@@ -206,7 +206,8 @@ def run_test_suite(model_name):
                 "llm_model": model_name,
                 "input_file": file_path,
                 "input_text": s['text'],
-                "vram_peak": get_gpu_vram_usage()
+                "vram_peak": get_gpu_vram_usage(),
+                "streaming": True
             }
             report_llm_result(res_obj)
 

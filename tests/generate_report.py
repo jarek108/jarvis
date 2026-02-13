@@ -134,10 +134,10 @@ def generate_excel(sync_artifacts=True):
                         "Output Text": s.get('output_text', 'N/A'),
                         "Status": s.get('status'),
                         "Result": s.get('result'),
+                        "Peak VRAM (GB)": s.get('vram_peak', 0),
                         "Execution (s)": s.get('duration'),
                         "Setup (s)": s.get('setup_time', 0),
-                        "Cleanup (s)": s.get('cleanup_time', 0),
-                        "Peak VRAM (GB)": s.get('vram_peak', 0)
+                        "Cleanup (s)": s.get('cleanup_time', 0)
                     })
             if rows:
                 df = pd.DataFrame(rows)
@@ -161,10 +161,10 @@ def generate_excel(sync_artifacts=True):
                         "Output wav": link_file(s.get('output_file'), output_folder_id, overwrite=True, label="▶️ Play wav"),
                         "Status": s.get('status'),
                         "Result": s.get('result'),
+                        "Peak VRAM (GB)": s.get('vram_peak', 0),
                         "Execution (s)": s.get('duration'),
                         "Setup (s)": s.get('setup_time', 0),
-                        "Cleanup (s)": s.get('cleanup_time', 0),
-                        "Peak VRAM (GB)": s.get('vram_peak', 0)
+                        "Cleanup (s)": s.get('cleanup_time', 0)
                     })
             if rows:
                 df = pd.DataFrame(rows)
@@ -173,53 +173,72 @@ def generate_excel(sync_artifacts=True):
                 sheets["TTS"] = df
                 has_any_data = True
 
-        # 3. LLM / VLM
-        for domain in ["llm", "vlm"]:
-            data = load_json(os.path.join(artifacts_dir, f"latest_{domain}.json"))
-            if not data: continue
+        # 3. LLM
+        data = load_json(os.path.join(artifacts_dir, "latest_llm.json"))
+        if data:
             rows = []
             for entry in data:
                 setup = entry.get('loadout', 'unknown')
-                vram = entry.get('vram', {}).get('peak_gb', 0)
                 for s in entry.get('scenarios', []):
-                    # Unify output text key (LLM uses raw_text, VLM uses text)
-                    out_text = s.get('text') or s.get('raw_text', 'N/A')
-                    
-                    row = {
+                    rows.append({
                         "Setup": setup,
-                        "Model": s.get("llm_model") or entry.get("model") or "N/A",
+                        "Model": s.get("llm_model", "N/A"),
                         "Scenario": s.get('name'),
                         "Input Text": s.get('input_text', 'N/A'),
-                        "Output Text": out_text,
+                        "Output Text": s.get('text') or s.get('raw_text', 'N/A'),
                         "Status": s.get('status'),
                         "Streaming": "Yes" if s.get('streaming') else "No",
+                        "Peak VRAM (GB)": s.get('vram_peak', 0),
                         "TTFT (s)": s.get('ttft'),
                         "TPS": s.get('tps'),
                         "Execution (s)": s.get('duration'),
                         "Setup (s)": s.get('setup_time', 0),
-                        "Cleanup (s)": s.get('cleanup_time', 0),
-                        "Peak VRAM (GB)": s.get('vram_peak', 0)
-                    }
-                    # Keep Input Link only for VLM
-                    if domain == "vlm":
-                        label = get_link_label(s.get('input_file'), "👁️ View")
-                        row["Input Media"] = link_file(s.get('input_file'), input_folder_id, overwrite=False, label=label)
-                    
-                    rows.append(row)
+                        "Cleanup (s)": s.get('cleanup_time', 0)
+                    })
             if rows:
                 df = pd.DataFrame(rows)
                 df.sort_values(by=["Setup", "Scenario"], inplace=True)
                 df = append_total_row(df)
-                sheets[domain.upper()] = df
+                sheets["LLM"] = df
                 has_any_data = True
 
-        # 4. STS
+        # 4. VLM
+        data = load_json(os.path.join(artifacts_dir, "latest_vlm.json"))
+        if data:
+            rows = []
+            for entry in data:
+                setup = entry.get('loadout', 'unknown')
+                for s in entry.get('scenarios', []):
+                    label = get_link_label(s.get('input_file'), "👁️ View")
+                    rows.append({
+                        "Setup": setup,
+                        "Model": s.get("llm_model", "N/A"),
+                        "Scenario": s.get('name'),
+                        "Input Text": s.get('input_text', 'N/A'),
+                        "Input Media": link_file(s.get('input_file'), input_folder_id, overwrite=False, label=label),
+                        "Output Text": s.get('text') or s.get('raw_text', 'N/A'),
+                        "Status": s.get('status'),
+                        "Streaming": "Yes" if s.get('streaming') else "No",
+                        "Peak VRAM (GB)": s.get('vram_peak', 0),
+                        "TTFT (s)": s.get('ttft'),
+                        "TPS": s.get('tps'),
+                        "Execution (s)": s.get('duration'),
+                        "Setup (s)": s.get('setup_time', 0),
+                        "Cleanup (s)": s.get('cleanup_time', 0)
+                    })
+            if rows:
+                df = pd.DataFrame(rows)
+                df.sort_values(by=["Setup", "Scenario"], inplace=True)
+                df = append_total_row(df)
+                sheets["VLM"] = df
+                has_any_data = True
+
+        # 5. STS
         data = load_json(os.path.join(artifacts_dir, "latest_sts.json"))
         if data:
             rows = []
             for entry in data:
                 setup = entry.get('loadout', 'unknown')
-                vram = entry.get('vram', {}).get('peak_gb', 0)
                 for s in entry.get('scenarios', []):
                     m = s.get('metrics', {})
                     rows.append({
@@ -233,13 +252,13 @@ def generate_excel(sync_artifacts=True):
                         "Status": s.get('status'),
                         "Result": s.get('result'),
                         "Streaming": "Yes" if s.get('streaming') else "No",
+                        "Peak VRAM (GB)": s.get('vram_peak', 0),
                         "STT Time": s.get('stt_inf') or m.get('stt', [0,0])[1],
                         "LLM Time": s.get('llm_tot') or (m.get('llm', [0,0])[1] - m.get('llm', [0,0])[0]),
                         "TTS Time": s.get('tts_inf') or (m.get('tts', [0,0])[1] - m.get('tts', [0,0])[0]),
                         "Execution (s)": s.get('duration'),
                         "Setup (s)": s.get('setup_time', 0),
-                        "Cleanup (s)": s.get('cleanup_time', 0),
-                        "Peak VRAM (GB)": s.get('vram_peak', 0)
+                        "Cleanup (s)": s.get('cleanup_time', 0)
                     })
         if rows:
             df = pd.DataFrame(rows)
@@ -253,7 +272,7 @@ def generate_excel(sync_artifacts=True):
             return None
 
         from openpyxl.styles import Font, PatternFill, Alignment
-        from openpyxl.formatting.rule import FormulaRule
+        from openpyxl.formatting.rule import FormulaRule, ColorScaleRule
 
         with pd.ExcelWriter(output_path, engine='openpyxl') as writer:
             for name, df in sheets.items():
@@ -272,39 +291,58 @@ def generate_excel(sync_artifacts=True):
 
                 # 3. Column Widths
                 for idx, col in enumerate(df.columns):
-                    if "wav" in col.lower() or "video" in col.lower() or "media" in col.lower() or "Link" in col:
-                        worksheet.column_dimensions[chr(65 + idx)].width = 15
-                        for row in worksheet.iter_rows(min_row=2, max_col=idx+1, min_col=idx+1):
-                            for cell in row:
-                                cell.alignment = Alignment(horizontal='center')
+                    col_letter = chr(65 + idx)
+                    if any(x in col.lower() for x in ["wav", "video", "media", "link"]):
+                        worksheet.column_dimensions[col_letter].width = 15
+                        for row_idx in range(2, len(df) + 2):
+                            worksheet.cell(row=row_idx, column=idx+1).alignment = Alignment(horizontal='center')
                     elif col == "Setup":
-                        worksheet.column_dimensions[chr(65 + idx)].width = 25
+                        worksheet.column_dimensions[col_letter].width = 25
                     elif col == "Status":
-                        worksheet.column_dimensions[chr(65 + idx)].width = 15
+                        worksheet.column_dimensions[col_letter].width = 15
+                    elif col == "Streaming":
+                        worksheet.column_dimensions[col_letter].width = 15
                     elif "VRAM" in col:
-                        worksheet.column_dimensions[chr(65 + idx)].width = 18
+                        worksheet.column_dimensions[col_letter].width = 18
                     else:
                         series = df[col]
                         valid_series = series[:-1] if len(series) > 1 else series
                         max_len = max((valid_series.astype(str).map(len).max(), len(str(series.name)))) + 2
                         max_len = min(max_len, 80)
-                        worksheet.column_dimensions[chr(65 + idx)].width = max_len
+                        worksheet.column_dimensions[col_letter].width = max_len
 
-                # 4. Conditional Formatting for Status
-                status_col_idx = None
+                # 4. Conditional Formatting
+                green_fill = PatternFill(start_color="C6EFCE", end_color="C6EFCE", fill_type="solid")
+                red_fill = PatternFill(start_color="FFC7CE", end_color="FFC7CE", fill_type="solid")
+                yellow_fill = PatternFill(start_color="FFEB9C", end_color="FFEB9C", fill_type="solid")
+                gray_fill = PatternFill(start_color="D9D9D9", end_color="D9D9D9", fill_type="solid")
+
                 for idx, col in enumerate(df.columns):
+                    col_letter = chr(65 + idx)
+                    range_str = f"{col_letter}2:{col_letter}{len(df)+1}"
+                    
                     if col == "Status":
-                        status_col_idx = chr(65 + idx)
-                        break
-                
-                if status_col_idx:
-                    green_fill = PatternFill(start_color="C6EFCE", end_color="C6EFCE", fill_type="solid")
-                    red_fill = PatternFill(start_color="FFC7CE", end_color="FFC7CE", fill_type="solid")
-                    yellow_fill = PatternFill(start_color="FFEB9C", end_color="FFEB9C", fill_type="solid")
-                    range_str = f"{status_col_idx}2:{status_col_idx}{len(df)+1}"
-                    worksheet.conditional_formatting.add(range_str, FormulaRule(formula=[f'{status_col_idx}2="PASSED"'], stopIfTrue=True, fill=green_fill))
-                    worksheet.conditional_formatting.add(range_str, FormulaRule(formula=[f'{status_col_idx}2="FAILED"'], stopIfTrue=True, fill=red_fill))
-                    worksheet.conditional_formatting.add(range_str, FormulaRule(formula=[f'{status_col_idx}2="MISSING"'], stopIfTrue=True, fill=yellow_fill))
+                        worksheet.conditional_formatting.add(range_str, FormulaRule(formula=[f'{col_letter}2="PASSED"'], stopIfTrue=True, fill=green_fill))
+                        worksheet.conditional_formatting.add(range_str, FormulaRule(formula=[f'{col_letter}2="FAILED"'], stopIfTrue=True, fill=red_fill))
+                        worksheet.conditional_formatting.add(range_str, FormulaRule(formula=[f'{col_letter}2="MISSING"'], stopIfTrue=True, fill=yellow_fill))
+                    
+                    elif col == "Streaming":
+                        worksheet.conditional_formatting.add(range_str, FormulaRule(formula=[f'{col_letter}2="Yes"'], stopIfTrue=True, fill=green_fill))
+                        worksheet.conditional_formatting.add(range_str, FormulaRule(formula=[f'{col_letter}2="No"'], stopIfTrue=True, fill=gray_fill))
+
+                    elif "(s)" in col or "Time" in col:
+                        # Heatmap for timings (Lower is Greener)
+                        rule = ColorScaleRule(start_type='min', start_color='C6EFCE', 
+                                              mid_type='percentile', mid_value=50, mid_color='FFEB9C',
+                                              end_type='max', end_color='FFC7CE')
+                        worksheet.conditional_formatting.add(range_str, rule)
+                    
+                    elif "VRAM" in col:
+                        # Heatmap for VRAM (Higher is Redder - optional preference)
+                        rule = ColorScaleRule(start_type='min', start_color='C6EFCE', 
+                                              mid_type='percentile', mid_value=50, mid_color='FFEB9C',
+                                              end_type='max', end_color='FFC7CE')
+                        worksheet.conditional_formatting.add(range_str, rule)
 
                 # 5. Bold Total Row
                 total_row_idx = len(df) + 1
