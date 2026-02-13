@@ -33,7 +33,7 @@ if "HF_TOKEN" not in os.environ:
 
 # 1. Parse CLI arguments
 parser = argparse.ArgumentParser(description="Chatterbox TTS Server")
-parser.add_argument("--port", type=int, default=8020, help="Port to run on")
+parser.add_argument("--port", type=int, default=8200, help="Port to run on")
 parser.add_argument("--variant", type=str, default="chatterbox-eng", help="chatterbox-eng, chatterbox-multilingual, or chatterbox-turbo")
 parser.add_argument("--benchmark-mode", action="store_true", help="Enable deterministic output for benchmarking")
 args, unknown = parser.parse_known_args()

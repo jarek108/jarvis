@@ -28,12 +28,39 @@ class LifecycleManager:
 
     def get_required_services(self, domain=None):
         required = []
-        llm_model = self.loadout.get('llm')
-        if llm_model and (domain in ["llm", "vlm"] or self.full or domain == "sts"):
-            required.append({
-                "type": "llm", "id": llm_model, "port": self.cfg['ports']['llm'],
-                "cmd": ["ollama", "serve"], "health": f"http://127.0.0.1:{self.cfg['ports']['llm']}/api/tags"
-            })
+        llm_data = self.loadout.get('llm')
+        if llm_data and (domain in ["llm", "vlm"] or self.full or domain == "sts"):
+            engine = "ollama"
+            model = llm_data
+            if isinstance(llm_data, dict):
+                engine = llm_data.get("engine", "ollama")
+                model = llm_data.get("model")
+            elif isinstance(llm_data, str) and llm_data.startswith("vllm:"):
+                engine = "vllm"
+                model = llm_data[5:]
+
+            if engine == "ollama":
+                required.append({
+                    "type": "llm", "id": model, "port": self.cfg['ports']['ollama'],
+                    "cmd": ["ollama", "serve"], "health": f"http://127.0.0.1:{self.cfg['ports']['ollama']}/api/tags"
+                })
+            elif engine == "vllm":
+                vllm_port = self.cfg['ports'].get('vllm', 8300)
+                hf_cache = os.path.join(os.path.expanduser("~"), ".cache", "huggingface")
+                # Using Docker to run vLLM on Windows
+                cmd = [
+                    "docker", "run", "--gpus", "all", "-d", 
+                    "--name", "vllm-server",
+                    "-p", f"{vllm_port}:8000",
+                    "-v", f"{hf_cache}:/root/.cache/huggingface",
+                    "vllm/vllm-openai",
+                    "--model", model
+                ]
+                required.append({
+                    "type": "llm", "id": model, "port": vllm_port,
+                    "cmd": cmd, "health": f"http://127.0.0.1:{vllm_port}/v1/models",
+                    "is_docker": True
+                })
         stt_val = self.loadout.get('stt')
         if stt_val and (domain == "stt" or self.full or domain == "sts"):
             stt_id = stt_val[0] if isinstance(stt_val, list) else stt_val
@@ -72,12 +99,12 @@ class LifecycleManager:
                 if port not in required_ports and is_port_in_use(port):
                     print(f"  ↳ Killing orphaned service on port {port}")
                     kill_process_on_port(port)
-            if self.cfg['ports']['llm'] in required_ports:
+            if self.cfg['ports']['ollama'] in required_ports:
                 loaded = get_loaded_ollama_models()
                 target_llm = self.loadout.get('llm')
                 if loaded and not any(target_llm in m for m in loaded):
                     print(f"  ↳ ☢️ OLLAMA PURGE: Mismatched models loaded ({loaded}). Restarting Ollama...")
-                    start_p = time.perf_counter(); kill_process_on_port(self.cfg['ports']['llm'])
+                    start_p = time.perf_counter(); kill_process_on_port(self.cfg['ports']['ollama'])
                     print(f"    ✅ Purge complete ({time.perf_counter() - start_p:.2f}s)")
         setup_start = time.perf_counter()
         for s in required_services:
@@ -100,8 +127,22 @@ class LifecycleManager:
                         if stderr: print(f"  ↳ STDERR: {stderr[:200]}")
                     sys.exit(1)
         if domain in ["llm", "vlm"] or self.full or domain == "sts":
-            target_llm = self.loadout.get('llm')
-            if target_llm: check_and_pull_model(target_llm); warmup_llm(target_llm, visual=(domain == "vlm"))
+            llm_data = self.loadout.get('llm')
+            if llm_data:
+                engine = "ollama"
+                model = llm_data
+                if isinstance(llm_data, dict):
+                    engine = llm_data.get("engine", "ollama")
+                    model = llm_data.get("model")
+                elif isinstance(llm_data, str) and llm_data.startswith("vllm:"):
+                    engine = "vllm"
+                    model = llm_data[5:]
+                
+                if engine == "ollama":
+                    check_and_pull_model(model)
+                    warmup_llm(model, visual=(domain == "vlm"))
+                # vLLM models are typically pre-loaded or downloaded on startup
+                # We could add a generic warmup here if needed
         return time.perf_counter() - setup_start
 
     def cleanup(self):

@@ -40,7 +40,7 @@ from loguru import logger
 
 # Ensure we can import from tests/
 sys.path.append(os.path.join(os.getcwd(), "tests"))
-from utils import get_system_health, load_config, kill_process_on_port, wait_for_port, start_server
+from utils import get_system_health, load_config, kill_process_on_port, wait_for_port, start_server, is_vllm_docker_running, stop_vllm_docker
 
 # ANSI Colors
 GREEN = "\033[92m"
@@ -96,14 +96,44 @@ def apply_loadout(name, loud=False):
     stt_script = os.path.join(os.getcwd(), "servers", "stt_server.py")
     tts_script = os.path.join(os.getcwd(), "servers", "tts_server.py")
 
-    # 1. Start Ollama if needed
-    llm_port = cfg['ports']['llm']
-    if not os.system(f"netstat -ano | findstr :{llm_port} > nul"):
-        logger.info("ℹ️ Ollama already running.")
-    else:
-        logger.info("🚀 Starting Ollama...")
-        start_server(["ollama", "serve"], loud=loud)
-        wait_for_port(llm_port)
+    # 1. Start LLM Engine if needed
+    llm_config = target.get('llm')
+    if llm_config:
+        engine = "ollama"
+        model = llm_config
+        if isinstance(llm_config, dict):
+            engine = llm_config.get("engine", "ollama")
+            model = llm_config.get("model")
+        elif isinstance(llm_config, str) and llm_config.startswith("vllm:"):
+            engine = "vllm"
+            model = llm_config[5:]
+
+        if engine == "ollama":
+            llm_port = cfg['ports']['ollama']
+            if not os.system(f"netstat -ano | findstr :{llm_port} > nul"):
+                logger.info("ℹ️ Ollama already running.")
+            else:
+                logger.info("🚀 Starting Ollama...")
+                start_server(["ollama", "serve"], loud=loud)
+                wait_for_port(llm_port)
+        elif engine == "vllm":
+            vllm_port = cfg['ports'].get('vllm', 8300)
+            if not os.system(f"netstat -ano | findstr :{vllm_port} > nul"):
+                logger.info(f"ℹ️ vLLM already running on port {vllm_port}.")
+            else:
+                logger.info(f"🚀 Starting vLLM [{model}] on port {vllm_port} (Docker)...")
+                hf_cache = os.path.join(os.path.expanduser("~"), ".cache", "huggingface")
+                cmd = [
+                    "docker", "run", "--gpus", "all", "-d", 
+                    "--name", "vllm-server",
+                    "-p", f"{vllm_port}:8000",
+                    "-v", f"{hf_cache}:/root/.cache/huggingface",
+                    "vllm/vllm-openai",
+                    "--model", model
+                ]
+                # We use subprocess.run for docker -d as it returns immediately
+                subprocess.run(cmd, capture_output=True)
+                wait_for_port(vllm_port, timeout=300) # vLLM can take a while to pull/load
 
     # 2. STT Models
     for model in target.get('stt', []):
@@ -138,7 +168,7 @@ def apply_loadout(name, loud=False):
 def kill_loadout(target):
     cfg = load_config()
     if target == "all":
-        ports = [cfg['ports']['llm'], cfg['ports']['sts']] + list(cfg['stt_loadout'].values()) + list(cfg['tts_loadout'].values())
+        ports = [cfg['ports']['ollama'], cfg['ports']['sts']] + list(cfg['stt_loadout'].values()) + list(cfg['tts_loadout'].values())
         for p in ports:
             kill_process_on_port(p)
     else:

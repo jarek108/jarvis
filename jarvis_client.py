@@ -409,7 +409,7 @@ class JarvisApp(ctk.CTk):
             if os.path.exists(path):
                 with open(path, "r") as f:
                     l = yaml.safe_load(f)
-                    active_llm = l.get('llm'); active_ports.add(self.controller.cfg['ports']['sts']); active_ports.add(self.controller.cfg['ports']['llm'])
+                    active_llm = l.get('llm'); active_ports.add(self.controller.cfg['ports']['sts']); active_ports.add(self.controller.cfg['ports']['ollama'])
                     stt_val = l.get('stt')
                     if stt_val:
                         stt_id = stt_val[0] if isinstance(stt_val, list) else stt_val

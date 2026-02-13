@@ -16,7 +16,7 @@ from tests.utils import load_config
 
 # 1. Parse CLI arguments
 parser = argparse.ArgumentParser(description="Faster Whisper STT Server")
-parser.add_argument("--port", type=int, default=8011, help="Port to run on")
+parser.add_argument("--port", type=int, default=8100, help="Port to run on")
 parser.add_argument("--model", type=str, default="faster-whisper-base", help="Model size (faster-whisper-tiny, etc)")
 parser.add_argument("--benchmark-mode", action="store_true", help="Enable deterministic output for benchmarking")
 args, unknown = parser.parse_known_args()

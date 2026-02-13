@@ -39,20 +39,28 @@ def get_loaded_ollama_models():
 
 def get_service_status(port: int):
     if not is_port_in_use(port): return "OFF", None
+    cfg = load_config()
     try:
         url = f"http://127.0.0.1:{port}/health"
-        if port == 11434: url = f"http://127.0.0.1:{port}/api/tags"
+        if port == cfg['ports']['ollama']: url = f"http://127.0.0.1:{port}/api/tags"
+        elif port == cfg['ports'].get('vllm'): url = f"http://127.0.0.1:{port}/v1/models"
+        
         response = requests.get(url, timeout=2)
         
         if response.status_code == 200:
             data = response.json()
-            if port == 11434:
+            if port == cfg['ports']['ollama']:
                 vram = get_ollama_vram()
                 loaded = get_loaded_ollama_models()
                 model_info = loaded[0] if loaded else "Ollama Core"
                 v_str = f"({vram:.1f}GB)" if vram > 0 else ""
                 return "ON", f"{model_info} {v_str}".strip()
             
+            if port == cfg['ports'].get('vllm'):
+                models = data.get("data", [])
+                model_name = models[0]["id"] if models else "vLLM Core"
+                return "ON", f"{model_name}"
+
             name = data.get("model") or data.get("variant") or "Ready"
             vram = get_vram_estimation(data.get("type", ""), name)
             v_str = f"({vram:.1f}GB)" if vram > 0 else ""
@@ -68,8 +76,14 @@ def get_system_health():
     health = {}
     sts_status, sts_info = get_service_status(cfg['ports']['sts'])
     health[cfg['ports']['sts']] = {"status": sts_status, "info": sts_info, "label": "sts", "type": "sts"}
-    llm_status, llm_info = get_service_status(cfg['ports']['llm'])
-    health[cfg['ports']['llm']] = {"status": llm_status, "info": llm_info, "label": "LLM", "type": "llm"}
+    
+    ollama_status, ollama_info = get_service_status(cfg['ports']['ollama'])
+    health[cfg['ports']['ollama']] = {"status": ollama_status, "info": ollama_info, "label": "Ollama", "type": "llm"}
+    
+    if 'vllm' in cfg['ports']:
+        vllm_status, vllm_info = get_service_status(cfg['ports']['vllm'])
+        health[cfg['ports']['vllm']] = {"status": vllm_status, "info": vllm_info, "label": "vLLM", "type": "llm"}
+
     for name, port in cfg['stt_loadout'].items():
         status, info = get_service_status(port)
         health[port] = {"status": status, "info": info, "label": name, "type": "stt"}

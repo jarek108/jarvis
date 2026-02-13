@@ -3,27 +3,22 @@ device: cuda
 # --- Fixed Infrastructure Ports ---
 # Every model variant lives on its own port
 stt_loadout:
-  faster-whisper-tiny: 8010
-  faster-whisper-base: 8011
-  faster-whisper-small: 8012
-  faster-whisper-medium: 8013
-  faster-whisper-large: 8014
+  faster-whisper-tiny: 8100
+  faster-whisper-base: 8101
+  faster-whisper-small: 8102
+  faster-whisper-medium: 8103
+  faster-whisper-large: 8104
 
 tts_loadout:
-  chatterbox-eng: 8020
-  chatterbox-multilingual: 8021
-  chatterbox-turbo: 8022
+  chatterbox-eng: 8200
+  chatterbox-multilingual: 8201
+  chatterbox-turbo: 8202
 
 # System Services
-
 ports:
-
-  llm: 11434
-
+  ollama: 11434
+  vllm: 8300
   sts: 8002
 
-
-
 system:
-
   health_check_interval: 1.0

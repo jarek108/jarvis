@@ -28,15 +28,42 @@ def wait_for_port(port: int, timeout: int = 120, process=None) -> bool:
         time.sleep(1)
     return False
 
+def stop_vllm_docker():
+    """Stops the vLLM docker container if it is running."""
+    try:
+        # Check if container exists
+        res = subprocess.run(["docker", "ps", "-a", "--filter", "name=vllm-server", "--format", "{{.Names}}"], capture_output=True, text=True)
+        if "vllm-server" in res.stdout:
+            subprocess.run(["docker", "stop", "vllm-server"], capture_output=True)
+            subprocess.run(["docker", "rm", "vllm-server"], capture_output=True)
+            return True
+    except: pass
+    return False
+
+def is_vllm_docker_running():
+    try:
+        res = subprocess.run(["docker", "ps", "--filter", "name=vllm-server", "--format", "{{.Names}}"], capture_output=True, text=True)
+        return "vllm-server" in res.stdout
+    except: return False
+
 def kill_process_on_port(port: int):
     try:
-        if port == 11434 and os.name == 'nt':
+        cfg = load_config()
+        if port == cfg['ports']['ollama'] and os.name == 'nt':
             os.system("taskkill /F /IM ollama* /T > nul 2>&1")
             time.sleep(0.5)
+        
+        # If port is vLLM port, try to stop docker container
+        if port == cfg['ports'].get('vllm'):
+            stop_vllm_docker()
+
+        # Kill python processes if it's a vLLM or custom server port
         pids = {conn.pid for conn in psutil.net_connections(kind='inet') if conn.laddr.port == port and conn.pid}
         for pid in pids:
             try:
                 proc = psutil.Process(pid)
+                # If it's a vLLM process, we might want to be more aggressive or specific
+                # but general kill usually works.
                 for child in proc.children(recursive=True):
                     try: child.kill()
                     except: pass
@@ -49,7 +76,7 @@ def kill_process_on_port(port: int):
 def get_jarvis_ports():
     """Returns a set of all ports defined in config.yaml for Jarvis services."""
     cfg = load_config()
-    ports = {cfg['ports']['sts'], cfg['ports']['llm']}
+    ports = {cfg['ports']['sts'], cfg['ports']['ollama']}
     ports.update(cfg['stt_loadout'].values())
     ports.update(cfg['tts_loadout'].values())
     return ports

@@ -8,7 +8,8 @@ from .config import (
 )
 from .infra import (
     is_port_in_use, start_server, wait_for_port, 
-    kill_process_on_port, get_jarvis_ports, kill_all_jarvis_services
+    kill_process_on_port, get_jarvis_ports, kill_all_jarvis_services,
+    is_vllm_docker_running, stop_vllm_docker
 )
 from .vram import (
     get_vram_estimation, get_ollama_vram, get_loaded_ollama_models,
