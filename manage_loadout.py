@@ -118,10 +118,11 @@ def apply_loadout(name, loud=False):
                 wait_for_port(llm_port)
         elif engine == "vllm":
             vllm_port = cfg['ports'].get('vllm', 8300)
+            vllm_util = cfg.get('vllm', {}).get('gpu_memory_utilization', 0.9)
             if not os.system(f"netstat -ano | findstr :{vllm_port} > nul"):
                 logger.info(f"ℹ️ vLLM already running on port {vllm_port}.")
             else:
-                logger.info(f"🚀 Starting vLLM [{model}] on port {vllm_port} (Docker)...")
+                logger.info(f"🚀 Starting vLLM [{model}] on port {vllm_port} (util: {vllm_util})...")
                 hf_cache = os.path.join(os.path.expanduser("~"), ".cache", "huggingface")
                 cmd = [
                     "docker", "run", "--gpus", "all", "-d", 
@@ -129,7 +130,8 @@ def apply_loadout(name, loud=False):
                     "-p", f"{vllm_port}:8000",
                     "-v", f"{hf_cache}:/root/.cache/huggingface",
                     "vllm/vllm-openai",
-                    "--model", model
+                    "--model", model,
+                    "--gpu-memory-utilization", str(vllm_util)
                 ]
                 # We use subprocess.run for docker -d as it returns immediately
                 subprocess.run(cmd, capture_output=True)

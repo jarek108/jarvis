@@ -20,5 +20,8 @@ ports:
   vllm: 8300
   sts: 8002
 
+vllm:
+  gpu_memory_utilization: 0.5
+
 system:
   health_check_interval: 1.0

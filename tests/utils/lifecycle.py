@@ -80,8 +80,17 @@ class LifecycleManager:
                 })
             elif engine == "vllm":
                 vllm_port = self.cfg['ports'].get('vllm', 8300)
+                vllm_util = self.cfg.get('vllm', {}).get('gpu_memory_utilization', 0.9)
                 hf_cache = os.path.join(os.path.expanduser("~"), ".cache", "huggingface")
-                cmd = ["docker", "run", "--gpus", "all", "-d", "--name", "vllm-server", "-p", f"{vllm_port}:8000", "-v", f"{hf_cache}:/root/.cache/huggingface", "vllm/vllm-openai", "--model", model]
+                cmd = [
+                    "docker", "run", "--gpus", "all", "-d", 
+                    "--name", "vllm-server", 
+                    "-p", f"{vllm_port}:8000", 
+                    "-v", f"{hf_cache}:/root/.cache/huggingface", 
+                    "vllm/vllm-openai", 
+                    "--model", model,
+                    "--gpu-memory-utilization", str(vllm_util)
+                ]
                 required.append({
                     "type": "llm", "id": original_id, "port": vllm_port,
                     "cmd": cmd, "health": f"http://127.0.0.1:{vllm_port}/v1/models"
