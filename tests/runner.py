@@ -59,7 +59,8 @@ def run_domain_tests(domain, setup_name, models, purge=False, full=False, benchm
             target_id = m
             break
         if domain in ["llm", "vlm"] and (":" in m or "/" in m or m.startswith("vllm:")):
-            target_id = m.replace("vllm:", "") # Pass clean model ID to test suite
+            # We keep the prefix so test.py knows which engine to use
+            target_id = m
             break
 
     # 4. Run Lifecycle

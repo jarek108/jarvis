@@ -8,13 +8,25 @@ import yaml
 
 # Allow importing utils from parent levels
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from utils import report_llm_result, ensure_utf8_output, run_test_lifecycle, get_gpu_vram_usage, check_ollama_offload
+from utils import report_llm_result, ensure_utf8_output, run_test_lifecycle, get_gpu_vram_usage, check_ollama_offload, load_config
 
 # Ensure UTF-8 output
 ensure_utf8_output()
 
 def run_test_suite(model_name):
-    url = "http://127.0.0.1:11434/api/chat"
+    cfg = load_config()
+    is_vllm = False
+    clean_model_name = model_name
+    
+    if model_name.startswith("vl_") or model_name.startswith("vllm:"):
+        is_vllm = True
+        clean_model_name = model_name[3:] if model_name.startswith("vl_") else model_name[5:]
+        url = f"http://127.0.0.1:{cfg['ports']['vllm']}/v1/chat/completions"
+    else:
+        # Default to Ollama native API
+        if model_name.startswith("ol_"):
+            clean_model_name = model_name[3:]
+        url = f"http://127.0.0.1:{cfg['ports']['ollama']}/api/chat"
     
     scenarios = [
         {"name": "english_std", "text": "Hello, this is a test of Tatterbox TTS."},
@@ -27,12 +39,21 @@ def run_test_suite(model_name):
     vram_baseline = get_gpu_vram_usage()
 
     for s in scenarios:
-        payload = {
-            "model": model_name,
-            "messages": [{"role": "user", "content": s['text']}],
-            "stream": True,
-            "options": {"temperature": 0, "seed": 42}
-        }
+        if is_vllm:
+            payload = {
+                "model": clean_model_name,
+                "messages": [{"role": "user", "content": s['text']}],
+                "stream": True,
+                "temperature": 0,
+                "seed": 42
+            }
+        else:
+            payload = {
+                "model": clean_model_name,
+                "messages": [{"role": "user", "content": s['text']}],
+                "stream": True,
+                "options": {"temperature": 0, "seed": 42}
+            }
 
         try:
             start_time = time.perf_counter()
@@ -52,9 +73,19 @@ def run_test_suite(model_name):
 
                 for line in resp.iter_lines():
                     if line:
-                        data = json.loads(line.decode())
-                        token = data.get("message", {}).get("content", "")
+                        line_text = line.decode('utf-8').strip()
+                        if is_vllm:
+                            if not line_text.startswith("data: "): continue
+                            data_str = line_text[6:]
+                            if data_str == "[DONE]": break
+                            data = json.loads(data_str)
+                            token = data['choices'][0]['delta'].get('content', '')
+                        else:
+                            data = json.loads(line_text)
+                            token = data.get("message", {}).get("content", "")
                         
+                        if not token: continue
+
                         if first_token_time is None:
                             first_token_time = time.perf_counter()
 
