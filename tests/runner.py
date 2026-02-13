@@ -185,10 +185,14 @@ def main():
 
         # Filter by specific setup if requested
         if args.setup:
-            if args.setup in setups:
-                target_setups = {args.setup: setups[args.setup]}
-            else:
-                print(f"❌ ERROR: Setup '{args.setup}' not found in {domain}/test_setups.yaml")
+            target_setups = {}
+            requested_setups = [s.strip() for s in args.setup.split(",")]
+            for rs in requested_setups:
+                if rs in setups:
+                    target_setups[rs] = setups[rs]
+            
+            if not target_setups:
+                print(f"⚠️ Skipping domain '{domain}': None of the requested setups {requested_setups} found.")
                 continue
         else:
             target_setups = setups

@@ -22,18 +22,29 @@ def check_and_pull_model(model_name, force_pull=False):
     except:
         return False
 
-def warmup_llm(model_name, visual=False):
+def warmup_llm(model_name, visual=False, engine="ollama"):
     print(f"🔥 Warming up {model_name} (Hot-loading weights)...")
-    payload = {
-        "model": model_name,
-        "messages": [{"role": "user", "content": "hi"}],
-        "stream": False
-    }
-    if visual:
-        tiny_img = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII="
-        payload["messages"][0]["images"] = [tiny_img]
-        print("  ↳ 👁️ Performing Visual Encoder Warmup...")
+    
+    if engine == "vllm":
+        url = "http://127.0.0.1:8300/v1/chat/completions"
+        payload = {
+            "model": model_name,
+            "messages": [{"role": "user", "content": "hi"}],
+            "stream": False
+        }
+    else:
+        url = "http://127.0.0.1:11434/api/chat"
+        payload = {
+            "model": model_name,
+            "messages": [{"role": "user", "content": "hi"}],
+            "stream": False
+        }
+        if visual:
+            tiny_img = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII="
+            payload["messages"][0]["images"] = [tiny_img]
+            print("  ↳ 👁️ Performing Visual Encoder Warmup...")
+            
     try:
-        requests.post("http://127.0.0.1:11434/api/chat", json=payload, timeout=120)
+        requests.post(url, json=payload, timeout=180)
     except Exception as e:
         print(f"⚠️ Warmup failed: {e}")

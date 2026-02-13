@@ -198,7 +198,8 @@ class LifecycleManager:
                 model = cat['llm']['model']
                 if engine == "ollama":
                     check_and_pull_model(model, force_pull=self.force_download)
-                    warmup_llm(model, visual=(domain == "vlm"))
+                
+                warmup_llm(model, visual=(domain == "vlm"), engine=engine)
         
         return time.perf_counter() - setup_start
 
