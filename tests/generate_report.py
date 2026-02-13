@@ -13,6 +13,7 @@ from googleapiclient.http import MediaFileUpload
 
 # Use the consolidated manager from utils
 from utils.reporting import GDriveAssetManager
+from utils.ui import fmt_with_chunks
 
 # If modifying these scopes, delete the file token.pickle.
 SCOPES = ['https://www.googleapis.com/auth/drive.file']
@@ -131,7 +132,7 @@ def generate_excel(sync_artifacts=True):
                         "Scenario": s.get('name'),
                         "Input wav": link_file(s.get('input_file'), input_folder_id, overwrite=False, label="▶️ Play wav"),
                         "Input Text (GT)": s.get('input_text', 'N/A'),
-                        "Output Text": s.get('output_text', 'N/A'),
+                        "Output Text": f"{s.get('output_text', 'N/A')} ({s.get('duration', 0):.2f}s)",
                         "Status": s.get('status'),
                         "Result": s.get('result'),
                         "Peak VRAM (GB)": s.get('vram_peak', 0),
@@ -180,12 +181,18 @@ def generate_excel(sync_artifacts=True):
             for entry in data:
                 setup = entry.get('loadout', 'unknown')
                 for s in entry.get('scenarios', []):
+                    out_text = s.get('text') or s.get('raw_text', 'N/A')
+                    if s.get('streaming') and s.get('chunks'):
+                        out_text = fmt_with_chunks(out_text, s['chunks'])
+                    else:
+                        out_text = f"{out_text} ({s.get('duration', 0):.2f}s)"
+
                     rows.append({
                         "Setup": setup,
                         "Model": s.get("llm_model", "N/A"),
                         "Scenario": s.get('name'),
                         "Input Text": s.get('input_text', 'N/A'),
-                        "Output Text": s.get('text') or s.get('raw_text', 'N/A'),
+                        "Output Text": out_text,
                         "Status": s.get('status'),
                         "Result": s.get('result', 'N/A'),
                         "Streaming": "Yes" if s.get('streaming') else "No",
@@ -211,13 +218,19 @@ def generate_excel(sync_artifacts=True):
                 setup = entry.get('loadout', 'unknown')
                 for s in entry.get('scenarios', []):
                     label = get_link_label(s.get('input_file'), "👁️ View")
+                    out_text = s.get('text') or s.get('raw_text', 'N/A')
+                    if s.get('streaming') and s.get('chunks'):
+                        out_text = fmt_with_chunks(out_text, s['chunks'])
+                    else:
+                        out_text = f"{out_text} ({s.get('duration', 0):.2f}s)"
+
                     rows.append({
                         "Setup": setup,
                         "Model": s.get("llm_model", "N/A"),
                         "Scenario": s.get('name'),
                         "Input Text": s.get('input_text', 'N/A'),
                         "Input Media": link_file(s.get('input_file'), input_folder_id, overwrite=False, label=label),
-                        "Output Text": s.get('text') or s.get('raw_text', 'N/A'),
+                        "Output Text": out_text,
                         "Status": s.get('status'),
                         "Result": s.get('result', 'N/A'),
                         "Streaming": "Yes" if s.get('streaming') else "No",
@@ -243,6 +256,12 @@ def generate_excel(sync_artifacts=True):
                 setup = entry.get('loadout', 'unknown')
                 for s in entry.get('scenarios', []):
                     m = s.get('metrics', {})
+                    out_text = s.get('llm_text', 'N/A')
+                    if s.get('streaming') and s.get('chunks'):
+                        out_text = fmt_with_chunks(out_text, s['chunks'])
+                    else:
+                        out_text = f"{out_text} ({s.get('duration', 0):.2f}s)"
+
                     rows.append({
                         "Setup": setup, 
                         "STT Model": s.get('stt_model', 'N/A'),
@@ -252,7 +271,7 @@ def generate_excel(sync_artifacts=True):
                         "Input wav": link_file(s.get('input_file'), input_folder_id, overwrite=False, label="▶️ Play wav"),
                         "Input Text": s.get('stt_text', 'N/A'),
                         "Output wav": link_file(s.get('output_file'), output_folder_id, overwrite=True, label="▶️ Play wav"),
-                        "Output Text": s.get('llm_text', 'N/A'),
+                        "Output Text": out_text,
                         "Status": s.get('status'),
                         "Result": s.get('result', 'N/A'),
                         "Streaming": "Yes" if s.get('streaming') else "No",

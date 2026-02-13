@@ -18,7 +18,7 @@ from utils import (
     run_test_lifecycle, save_artifact, trigger_report_generation
 )
 
-def run_domain_tests(domain, setup_name, models, purge=False, full=False, benchmark_mode=False, force_download=False):
+def run_domain_tests(domain, setup_name, models, purge_on_entry=True, purge_on_exit=False, full=False, benchmark_mode=False, force_download=False):
     """
     Orchestrates the lifecycle and suite execution for a single domain/setup.
 
@@ -26,7 +26,8 @@ def run_domain_tests(domain, setup_name, models, purge=False, full=False, benchm
         domain (str): The test domain to run (e.g., 'stt', 'tts', 'llm', 'vlm', 'sts').
         setup_name (str): The specific setup identifier defined in the domain's test_setups.yaml.
         models (list): A list of model strings/IDs required for this specific test setup.
-        purge (bool): If True, performs a global cleanup of orphaned Jarvis services before and after the test.
+        purge_on_entry (bool): If True, performs a targeted cleanup of foreign Jarvis services before the test.
+        purge_on_exit (bool): If True, performs a global cleanup of all Jarvis services after the test.
         full (bool): If True, ensures all services listed in the setup are started, even if not strictly required by the domain.
         benchmark_mode (bool): If True, enables extra telemetry and deterministic behavior for performance analysis.
         force_download (bool): If True, allows the system to automatically pull missing models from Ollama/vLLM providers.
@@ -83,7 +84,8 @@ def run_domain_tests(domain, setup_name, models, purge=False, full=False, benchm
             domain=domain,
             setup_name=setup_name,
             models=models,
-            purge=purge,
+            purge_on_entry=purge_on_entry,
+            purge_on_exit=purge_on_exit,
             full=full,
             test_func=lambda: test_func_to_run(target_id), 
             benchmark_mode=benchmark_mode,
@@ -118,7 +120,9 @@ def main():
     parser = argparse.ArgumentParser(description="Jarvis Unified Test Runner")
     parser.add_argument("--domain", type=str, help="Comma-separated list of domains (stt,tts,llm,vlm,sts). Defaults to all.")
     parser.add_argument("--setup", type=str, help="Specific setup name from test_setups.yaml to test.")
-    parser.add_argument("--purge", action="store_true", help="Kill extra services before/after")
+    parser.add_argument("--purge", action="store_true", help="Enable both entry and exit purge")
+    parser.add_argument("--no-purge-entry", action="store_true", help="Disable default targeted purge on entry")
+    parser.add_argument("--purge-exit", action="store_true", help="Enable global purge on exit")
     parser.add_argument("--full", action="store_true", help="Ensure all setup services are running")
     parser.add_argument("--benchmark-mode", action="store_true", help="Deterministic output")
     parser.add_argument("--local", action="store_true", help="Skip cloud upload")
@@ -126,13 +130,23 @@ def main():
     
     args = parser.parse_args()
 
+    # Resolve purge logic
+    # Default: purge_on_entry=True, purge_on_exit=False
+    p_entry = not args.no_purge_entry
+    p_exit = args.purge_exit
+    if args.purge:
+        p_entry = True
+        p_exit = True
+
     # 0. Clean up stale "latest" artifacts to ensure the report only contains current run data
     artifacts_dir = os.path.join(script_dir, "artifacts")
     if os.path.exists(artifacts_dir):
         for f in os.listdir(artifacts_dir):
             if f.startswith("latest_") and f.endswith(".json"):
                 try:
-                    os.remove(os.path.join(artifacts_dir, f))
+                    p = os.path.join(artifacts_dir, f)
+                    os.remove(p)
+                    print(f"🧹 Removed stale artifact: {f}")
                 except Exception as e:
                     print(f"⚠️ Failed to remove old artifact {f}: {e}")
 
@@ -181,7 +195,8 @@ def main():
             try:
                 res = run_domain_tests(
                     domain, s_name, models, 
-                    purge=args.purge, 
+                    purge_on_entry=p_entry,
+                    purge_on_exit=p_exit,
                     full=args.full, 
                     benchmark_mode=args.benchmark_mode,
                     force_download=args.force_download
