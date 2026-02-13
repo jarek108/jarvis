@@ -294,6 +294,12 @@ def generate_excel(sync_artifacts=True):
                         for row in worksheet.iter_rows(min_row=2, max_col=idx+1, min_col=idx+1):
                             for cell in row:
                                 cell.alignment = Alignment(horizontal='center')
+                    elif col == "Setup":
+                        worksheet.column_dimensions[chr(65 + idx)].width = 25
+                    elif col == "Status":
+                        worksheet.column_dimensions[chr(65 + idx)].width = 15
+                    elif "VRAM" in col:
+                        worksheet.column_dimensions[chr(65 + idx)].width = 18
                     else:
                         series = df[col]
                         valid_series = series[:-1] if len(series) > 1 else series
