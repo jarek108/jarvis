@@ -58,6 +58,8 @@ def get_service_status(port: int):
             
             if port == cfg['ports'].get('vllm'):
                 models = data.get("data", [])
+                if not models:
+                    return "STARTUP", "Initializing..."
                 model_name = models[0]["id"] if models else "vLLM Core"
                 return "ON", f"{model_name}"
 
@@ -68,6 +70,11 @@ def get_service_status(port: int):
         elif response.status_code == 503 and response.json().get("status") == "STARTUP":
             return "STARTUP", "Loading..."
         return "UNHEALTHY", None
+    except requests.exceptions.ConnectionError:
+        # If it's an LLM port, treat connection error as STARTUP (container might be booting)
+        if port == cfg['ports']['ollama'] or port == cfg['ports'].get('vllm'):
+            return "STARTUP", "Connecting..."
+        return "OFF", None
     except:
         return "UNHEALTHY", None
 

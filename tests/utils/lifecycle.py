@@ -11,10 +11,11 @@ from .vram import get_service_status, get_loaded_ollama_models, get_system_healt
 from .ollama import check_and_pull_model, warmup_llm, is_model_local
 
 class LifecycleManager:
-    def __init__(self, setup_name, models=None, purge=False, full=False, benchmark_mode=False, force_download=False):
+    def __init__(self, setup_name, models=None, purge_on_entry=True, purge_on_exit=False, full=False, benchmark_mode=False, force_download=False):
         self.setup_name = setup_name
         self.models = models or [] # List of model strings
-        self.purge = purge
+        self.purge_on_entry = purge_on_entry
+        self.purge_on_exit = purge_on_exit
         self.full = full
         self.benchmark_mode = benchmark_mode
         self.force_download = force_download
@@ -151,8 +152,8 @@ class LifecycleManager:
             print(f"❌ MISSING MODELS: {', '.join(self.missing_models)}")
             return -1 # Sentinel for missing
         
-        if self.purge:
-            print("🧹 PURGE ENABLED: Cleaning up foreign Jarvis services...")
+        if self.purge_on_entry:
+            print("🧹 PURGE ON ENTRY: Cleaning up foreign Jarvis services...")
             for port in get_jarvis_ports():
                 if port not in required_ports and is_port_in_use(port):
                     print(f"  ↳ Killing orphaned service on port {port}")
@@ -180,7 +181,13 @@ class LifecycleManager:
                 print(f"🚀 Starting {s['type'].upper()} [{s['id']}]...")
                 proc = start_server(s['cmd'])
                 self.owned_processes.append((s['port'], proc))
-                if not wait_for_port(s['port'], process=proc):
+                
+                # For vLLM (docker -d), the process exits immediately, so don't pass it to wait_for_port
+                is_vllm = 'docker' in str(s['cmd'])
+                wait_proc = None if is_vllm else proc
+                
+                timeout = 300 if is_vllm else 120
+                if not wait_for_port(s['port'], process=wait_proc, timeout=timeout):
                     raise RuntimeError(f"FAILED to start {s['id']} on port {s['port']}")
         
         # Warmup LLM
@@ -196,8 +203,8 @@ class LifecycleManager:
         return time.perf_counter() - setup_start
 
     def cleanup(self):
-        if self.purge:
-            print("\n🧹 PURGE ENABLED: Performing final global cleanup...")
+        if self.purge_on_exit:
+            print("\n🧹 PURGE ON EXIT: Performing final global cleanup...")
             start_c = time.perf_counter()
             kill_all_jarvis_services()
             return time.perf_counter() - start_c
@@ -210,9 +217,9 @@ class LifecycleManager:
         for port, _ in self.owned_processes: kill_process_on_port(port)
         return time.perf_counter() - start_c
 
-def run_test_lifecycle(domain, setup_name, models, purge, full, test_func, benchmark_mode=False, force_download=False):
+def run_test_lifecycle(domain, setup_name, models, purge_on_entry, purge_on_exit, full, test_func, benchmark_mode=False, force_download=False):
     ensure_utf8_output()
-    manager = LifecycleManager(setup_name, models=models, purge=purge, full=full, benchmark_mode=benchmark_mode, force_download=force_download)
+    manager = LifecycleManager(setup_name, models=models, purge_on_entry=purge_on_entry, purge_on_exit=purge_on_exit, full=full, benchmark_mode=benchmark_mode, force_download=force_download)
     
     setup_time = manager.reconcile(domain)
     if setup_time == -1:

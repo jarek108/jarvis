@@ -35,8 +35,22 @@ def save_artifact(domain, data):
     artifacts_dir = os.path.join(project_root, "tests", "artifacts")
     os.makedirs(artifacts_dir, exist_ok=True)
     file_path = os.path.join(artifacts_dir, f"latest_{domain}.json")
+    
+    existing_data = []
+    if os.path.exists(file_path):
+        try:
+            with open(file_path, "r", encoding="utf-8") as f:
+                existing_data = json.load(f)
+        except:
+            existing_data = []
+    
+    # Check if this loadout already exists in existing_data to avoid duplicates if re-run
+    new_loadouts = [d['loadout'] for d in data]
+    combined_data = [d for d in existing_data if d['loadout'] not in new_loadouts]
+    combined_data.extend(data)
+    
     with open(file_path, "w", encoding="utf-8") as f:
-        json.dump(data, f, indent=4, ensure_ascii=False)
+        json.dump(combined_data, f, indent=4, ensure_ascii=False)
     print(f"✅ Artifact saved: {os.path.relpath(file_path, project_root)}")
 
 def trigger_report_generation(upload=True):

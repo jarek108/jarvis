@@ -123,6 +123,7 @@ def main():
     parser.add_argument("--purge", action="store_true", help="Enable both entry and exit purge")
     parser.add_argument("--no-purge-entry", action="store_true", help="Disable default targeted purge on entry")
     parser.add_argument("--purge-exit", action="store_true", help="Enable global purge on exit")
+    parser.add_argument("--no-cleanup", action="store_true", help="Skip stale artifact cleanup at start")
     parser.add_argument("--full", action="store_true", help="Ensure all setup services are running")
     parser.add_argument("--benchmark-mode", action="store_true", help="Deterministic output")
     parser.add_argument("--local", action="store_true", help="Skip cloud upload")
@@ -139,16 +140,17 @@ def main():
         p_exit = True
 
     # 0. Clean up stale "latest" artifacts to ensure the report only contains current run data
-    artifacts_dir = os.path.join(script_dir, "artifacts")
-    if os.path.exists(artifacts_dir):
-        for f in os.listdir(artifacts_dir):
-            if f.startswith("latest_") and f.endswith(".json"):
-                try:
-                    p = os.path.join(artifacts_dir, f)
-                    os.remove(p)
-                    print(f"🧹 Removed stale artifact: {f}")
-                except Exception as e:
-                    print(f"⚠️ Failed to remove old artifact {f}: {e}")
+    if not args.no_cleanup:
+        artifacts_dir = os.path.join(script_dir, "artifacts")
+        if os.path.exists(artifacts_dir):
+            for f in os.listdir(artifacts_dir):
+                if f.startswith("latest_") and f.endswith(".json"):
+                    try:
+                        p = os.path.join(artifacts_dir, f)
+                        os.remove(p)
+                        print(f"🧹 Removed stale artifact: {f}")
+                    except Exception as e:
+                        print(f"⚠️ Failed to remove old artifact {f}: {e}")
 
     # 1. Resolve Domains
     all_possible_domains = ["llm", "vlm", "stt", "tts", "sts"]
