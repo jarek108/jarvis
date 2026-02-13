@@ -120,8 +120,10 @@ def generate_excel(sync_artifacts=True):
             return base
 
         # 1. STT
-        data = load_json(os.path.join(artifacts_dir, "latest_stt.json"))
+        stt_path = os.path.join(artifacts_dir, "latest_stt.json")
+        data = load_json(stt_path)
         if data:
+            print(f"📁 Loading STT data from {stt_path}...")
             rows = []
             for entry in data:
                 setup = entry.get('loadout', 'unknown')
@@ -148,8 +150,10 @@ def generate_excel(sync_artifacts=True):
                 has_any_data = True
 
         # 2. TTS
-        data = load_json(os.path.join(artifacts_dir, "latest_tts.json"))
+        tts_path = os.path.join(artifacts_dir, "latest_tts.json")
+        data = load_json(tts_path)
         if data:
+            print(f"📁 Loading TTS data from {tts_path}...")
             rows = []
             for entry in data:
                 setup = entry.get('loadout', 'unknown')
@@ -175,8 +179,10 @@ def generate_excel(sync_artifacts=True):
                 has_any_data = True
 
         # 3. LLM
-        data = load_json(os.path.join(artifacts_dir, "latest_llm.json"))
+        llm_path = os.path.join(artifacts_dir, "latest_llm.json")
+        data = load_json(llm_path)
         if data:
+            print(f"📁 Loading LLM data from {llm_path}...")
             rows = []
             for entry in data:
                 setup = entry.get('loadout', 'unknown')
@@ -211,8 +217,10 @@ def generate_excel(sync_artifacts=True):
                 has_any_data = True
 
         # 4. VLM
-        data = load_json(os.path.join(artifacts_dir, "latest_vlm.json"))
+        vlm_path = os.path.join(artifacts_dir, "latest_vlm.json")
+        data = load_json(vlm_path)
         if data:
+            print(f"📁 Loading VLM data from {vlm_path}...")
             rows = []
             for entry in data:
                 setup = entry.get('loadout', 'unknown')
@@ -249,8 +257,10 @@ def generate_excel(sync_artifacts=True):
                 has_any_data = True
 
         # 5. STS
-        data = load_json(os.path.join(artifacts_dir, "latest_sts.json"))
+        sts_path = os.path.join(artifacts_dir, "latest_sts.json")
+        data = load_json(sts_path)
         if data:
+            print(f"📁 Loading STS data from {sts_path}...")
             rows = []
             for entry in data:
                 setup = entry.get('loadout', 'unknown')
@@ -283,12 +293,12 @@ def generate_excel(sync_artifacts=True):
                         "Setup (s)": s.get('setup_time', 0),
                         "Cleanup (s)": s.get('cleanup_time', 0)
                     })
-        if rows:
-            df = pd.DataFrame(rows)
-            df.sort_values(by=["Setup", "Scenario"], inplace=True)
-            df = append_total_row(df, duration_cols=["Execution (s)", "Setup (s)", "Cleanup (s)"])
-            sheets["STS"] = df
-            has_any_data = True
+            if rows:
+                df = pd.DataFrame(rows)
+                df.sort_values(by=["Setup", "Scenario"], inplace=True)
+                df = append_total_row(df, duration_cols=["Execution (s)", "Setup (s)", "Cleanup (s)"])
+                sheets["STS"] = df
+                has_any_data = True
 
         if not has_any_data:
             print("⚠️ No artifact data found. Excel generation skipped.")
