@@ -23,19 +23,25 @@ def extract_frames(video_path, max_frames=8):
     frames = []
     try:
         container = av.open(video_path)
-        # Get total stream frames if available, else estimate
-        stream = container.streams.video[0]
+        # Find video stream explicitly
+        video_stream = next(s for s in container.streams if s.type == 'video')
         
-        # We want to sample max_frames throughout the video
-        total_frames = stream.frames
+        # Robust frame count estimation
+        total_frames = video_stream.frames
         if total_frames <= 0:
-            # Estimate from duration and rate
-            total_frames = int(stream.duration * stream.time_base * stream.average_rate)
+            duration = video_stream.duration if video_stream.duration else 0
+            time_base = video_stream.time_base if video_stream.time_base else 1
+            rate = video_stream.average_rate if video_stream.average_rate else 30
+            total_frames = int(duration * time_base * rate)
+        
+        if total_frames <= 0:
+            total_frames = 300 # Fallback estimate for 10s @ 30fps
         
         indices = np.linspace(0, total_frames - 1, max_frames, dtype=int)
         
         count = 0
-        for frame in container.decode(video=0):
+        decoded_count = 0
+        for frame in container.decode(video_stream):
             if count in indices:
                 img = frame.to_image()
                 # Resize to save bandwidth/context
@@ -43,8 +49,10 @@ def extract_frames(video_path, max_frames=8):
                 buffered = io.BytesIO()
                 img.save(buffered, format="JPEG")
                 frames.append(base64.b64encode(buffered.getvalue()).decode('utf-8'))
+            
             count += 1
-            if len(frames) >= max_frames:
+            decoded_count += 1
+            if len(frames) >= max_frames or decoded_count > total_frames + 1000:
                 break
         container.close()
     except Exception as e:
@@ -112,45 +120,46 @@ def run_test_suite(model_name):
     vram_baseline = get_gpu_vram_usage()
 
     for s in scenarios:
-        file_path = os.path.join(input_base, s['file'])
-        
-        if s['type'] == "image":
-            with open(file_path, "rb") as bf:
-                b64_frames = [base64.b64encode(bf.read()).decode('utf-8')]
-        else:
-            b64_frames = extract_frames(file_path, max_frames=s['max_frames'])
-
-        if not b64_frames:
-            report_llm_result({"name": s['name'], "status": "FAILED", "text": "Failed to load media frames."})
-            continue
-
-        if is_vllm:
-            payload = {
-                "model": clean_model_name,
-                "messages": [{
-                    "role": "user", 
-                    "content": [
-                        {"type": "text", "text": s['text']},
-                        *[{"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{img}"}} for img in b64_frames]
-                    ]
-                }],
-                "stream": True,
-                "temperature": 0,
-                "seed": 42
-            }
-        else:
-            payload = {
-                "model": clean_model_name,
-                "messages": [{
-                    "role": "user", 
-                    "content": s['text'],
-                    "images": b64_frames
-                }],
-                "stream": True,
-                "options": {"temperature": 0, "seed": 42}
-            }
-
         try:
+            file_path = os.path.join(input_base, s['file'])
+            
+            if s['type'] == "image":
+                with open(file_path, "rb") as bf:
+                    b64_frames = [base64.b64encode(bf.read()).decode('utf-8')]
+            else:
+                b64_frames = extract_frames(file_path, max_frames=s['max_frames'])
+
+            if not b64_frames:
+                report_llm_result({"name": s['name'], "status": "FAILED", "text": "Failed to load media frames.", "input_file": file_path, "input_text": s['text']})
+                continue
+
+            # Request construction
+            if is_vllm:
+                payload = {
+                    "model": clean_model_name,
+                    "messages": [{
+                        "role": "user", 
+                        "content": [
+                            {"type": "text", "text": s['text']},
+                            *[{"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{img}"}} for img in b64_frames]
+                        ]
+                    }],
+                    "stream": True,
+                    "temperature": 0,
+                    "seed": 42
+                }
+            else:
+                payload = {
+                    "model": clean_model_name,
+                    "messages": [{
+                        "role": "user", 
+                        "content": s['text'],
+                        "images": b64_frames
+                    }],
+                    "stream": True,
+                    "options": {"temperature": 0, "seed": 42}
+                }
+
             start_time = time.perf_counter()
             first_token_time = None
             full_text = ""
@@ -158,7 +167,7 @@ def run_test_suite(model_name):
 
             with requests.post(url, json=payload, stream=True) as resp:
                 if resp.status_code != 200:
-                    report_llm_result({"name": s['name'], "status": "FAILED", "text": f"HTTP {resp.status_code}"})
+                    report_llm_result({"name": s['name'], "status": "FAILED", "text": f"HTTP {resp.status_code}", "input_file": file_path, "input_text": s['text']})
                     continue
 
                 for line in resp.iter_lines():
@@ -190,7 +199,7 @@ def run_test_suite(model_name):
                 "name": s['name'],
                 "status": "PASSED",
                 "ttft": ttft,
-                "ttfr": ttft, # Same for VLM in this simplified reporter
+                "ttfr": ttft, 
                 "tps": tps,
                 "text": full_text,
                 "duration": total_dur,
@@ -233,7 +242,7 @@ if __name__ == "__main__":
     # Load loadout
     script_dir = os.path.dirname(os.path.abspath(__file__))
     project_root = os.path.dirname(os.path.dirname(script_dir))
-    loadout_path = os.path.join(project_root, "tests", "loadouts", f"{args.loadout}.yaml")
+    loadout_path = os.path.join(project_root, "loadouts", f"{args.loadout}.yaml")
     
     if not os.path.exists(loadout_path):
         print(f"❌ ERROR: Loadout '{args.loadout}' not found.")

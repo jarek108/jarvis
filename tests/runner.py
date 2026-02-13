@@ -143,12 +143,18 @@ def main():
                     benchmark_mode=args.benchmark_mode,
                     force_download=args.force_download
                 )
-                if res:
-                    domain_results.append({
-                        "loadout": s_name, # We still use 'loadout' key for artifact compatibility
-                        "scenarios": res,
-                        "status": "PASSED"
-                    })
+                
+                status = "PASSED"
+                if not res:
+                    status = "FAILED"
+                elif any(isinstance(r, dict) and r.get('status') == "MISSING" for r in res):
+                    status = "MISSING"
+
+                domain_results.append({
+                    "loadout": s_name, 
+                    "scenarios": res or [],
+                    "status": status
+                })
             except Exception as e:
                 print(f"❌ CRITICAL SUITE ERROR for {domain}/{s_name}: {e}")
                 import traceback

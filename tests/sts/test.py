@@ -144,11 +144,34 @@ if __name__ == "__main__":
         run_test_suite(args.loadout, stream=True)
         
         vram_peak = get_gpu_vram_usage()
-        # We don't read from loadout file anymore, we just audit if it was Ollama
-        # Ideally we'd pass this info through, but for now we skip detailed audit if not easily available
+        
+        # Try to find the active LLM for a more detailed audit
+        active_llm = None
+        engine = "ollama"
+        setup_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "sts", "test_setups.yaml")
+        if os.path.exists(setup_path):
+            with open(setup_path, "r") as f:
+                setups = yaml.safe_load(f)
+                if setups and args.loadout in setups:
+                    for m in setups[args.loadout]:
+                        if ":" in m or "/" in m: # Heuristic
+                            if m.startswith("vllm:"):
+                                engine = "vllm"
+                                active_llm = m[5:]
+                            else:
+                                active_llm = m
+                            break
+
         print("\n" + "-"*40)
         print(f"VRAM AUDIT: {args.loadout.upper()}")
         print(f"  Peak Total Usage: {vram_peak:.1f} GB")
+        if active_llm and engine == "ollama":
+            is_ok, vram_used, total_size = check_ollama_offload(active_llm)
+            if total_size > 0:
+                status_txt = "FULL VRAM" if is_ok else "🚨 RAM SWAP"
+                print(f"  Placement: {status_txt} ({vram_used:.1f}GB / {total_size:.1f}GB in VRAM)")
+        elif active_llm and engine == "vllm":
+            print(f"  Active Engine: vLLM [{active_llm}]")
         print("-"*40 + "\n")
 
     # Note: we need to handle the models list here if we want to run this script standalone,
