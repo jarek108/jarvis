@@ -133,11 +133,11 @@ def generate_excel(sync_artifacts=True):
                         "Input Text (GT)": s.get('input_text', 'N/A'),
                         "Output Text": s.get('output_text', 'N/A'),
                         "Status": s.get('status'),
+                        "Result": s.get('result'),
                         "Execution (s)": s.get('duration'),
                         "Setup (s)": s.get('setup_time', 0),
                         "Cleanup (s)": s.get('cleanup_time', 0),
-                        "Peak VRAM (GB)": s.get('vram_peak', 0),
-                        "Result": s.get('result')
+                        "Peak VRAM (GB)": s.get('vram_peak', 0)
                     })
             if rows:
                 df = pd.DataFrame(rows)
@@ -160,11 +160,11 @@ def generate_excel(sync_artifacts=True):
                         "Input Text": s.get('input_text', 'N/A'),
                         "Output wav": link_file(s.get('output_file'), output_folder_id, overwrite=True, label="▶️ Play wav"),
                         "Status": s.get('status'),
+                        "Result": s.get('result'),
                         "Execution (s)": s.get('duration'),
                         "Setup (s)": s.get('setup_time', 0),
                         "Cleanup (s)": s.get('cleanup_time', 0),
-                        "Peak VRAM (GB)": s.get('vram_peak', 0),
-                        "Result": s.get('result')
+                        "Peak VRAM (GB)": s.get('vram_peak', 0)
                     })
             if rows:
                 df = pd.DataFrame(rows)
@@ -173,19 +173,24 @@ def generate_excel(sync_artifacts=True):
                 sheets["TTS"] = df
                 has_any_data = True
 
-        # 3. LLM
-        data = load_json(os.path.join(artifacts_dir, "latest_llm.json"))
-        if data:
+        # 3. LLM / VLM
+        for domain in ["llm", "vlm"]:
+            data = load_json(os.path.join(artifacts_dir, f"latest_{domain}.json"))
+            if not data: continue
             rows = []
             for entry in data:
                 setup = entry.get('loadout', 'unknown')
+                vram = entry.get('vram', {}).get('peak_gb', 0)
                 for s in entry.get('scenarios', []):
-                    rows.append({
+                    # Unify output text key (LLM uses raw_text, VLM uses text)
+                    out_text = s.get('text') or s.get('raw_text', 'N/A')
+                    
+                    row = {
                         "Setup": setup,
-                        "Model": s.get("llm_model", "N/A"),
+                        "Model": s.get("llm_model") or entry.get("model") or "N/A",
                         "Scenario": s.get('name'),
                         "Input Text": s.get('input_text', 'N/A'),
-                        "Output Text": s.get('text') or s.get('raw_text', 'N/A'),
+                        "Output Text": out_text,
                         "Status": s.get('status'),
                         "Streaming": "Yes" if s.get('streaming') else "No",
                         "TTFT (s)": s.get('ttft'),
@@ -194,50 +199,27 @@ def generate_excel(sync_artifacts=True):
                         "Setup (s)": s.get('setup_time', 0),
                         "Cleanup (s)": s.get('cleanup_time', 0),
                         "Peak VRAM (GB)": s.get('vram_peak', 0)
-                    })
+                    }
+                    # Keep Input Link only for VLM
+                    if domain == "vlm":
+                        label = get_link_label(s.get('input_file'), "👁️ View")
+                        row["Input Media"] = link_file(s.get('input_file'), input_folder_id, overwrite=False, label=label)
+                    
+                    rows.append(row)
             if rows:
                 df = pd.DataFrame(rows)
                 df.sort_values(by=["Setup", "Scenario"], inplace=True)
                 df = append_total_row(df)
-                sheets["LLM"] = df
+                sheets[domain.upper()] = df
                 has_any_data = True
 
-        # 4. VLM
-        data = load_json(os.path.join(artifacts_dir, "latest_vlm.json"))
-        if data:
-            rows = []
-            for entry in data:
-                setup = entry.get('loadout', 'unknown')
-                for s in entry.get('scenarios', []):
-                    label = get_link_label(s.get('input_file'), "👁️ View")
-                    rows.append({
-                        "Setup": setup,
-                        "Model": s.get("llm_model", "N/A"),
-                        "Scenario": s.get('name'),
-                        "Input Text": s.get('input_text', 'N/A'),
-                        "Input Media": link_file(s.get('input_file'), input_folder_id, overwrite=False, label=label),
-                        "Output Text": s.get('text') or s.get('raw_text', 'N/A'),
-                        "Status": s.get('status'),
-                        "TTFT (s)": s.get('ttft'),
-                        "TPS": s.get('tps'),
-                        "Execution (s)": s.get('duration'),
-                        "Setup (s)": s.get('setup_time', 0),
-                        "Cleanup (s)": s.get('cleanup_time', 0),
-                        "Peak VRAM (GB)": s.get('vram_peak', 0)
-                    })
-            if rows:
-                df = pd.DataFrame(rows)
-                df.sort_values(by=["Setup", "Scenario"], inplace=True)
-                df = append_total_row(df)
-                sheets["VLM"] = df
-                has_any_data = True
-
-        # 5. STS
+        # 4. STS
         data = load_json(os.path.join(artifacts_dir, "latest_sts.json"))
         if data:
             rows = []
             for entry in data:
                 setup = entry.get('loadout', 'unknown')
+                vram = entry.get('vram', {}).get('peak_gb', 0)
                 for s in entry.get('scenarios', []):
                     m = s.get('metrics', {})
                     rows.append({
@@ -249,6 +231,7 @@ def generate_excel(sync_artifacts=True):
                         "Input wav": link_file(s.get('input_file'), input_folder_id, overwrite=False, label="▶️ Play wav"),
                         "Output wav": link_file(s.get('output_file'), output_folder_id, overwrite=True, label="▶️ Play wav"),
                         "Status": s.get('status'),
+                        "Result": s.get('result'),
                         "Streaming": "Yes" if s.get('streaming') else "No",
                         "STT Time": s.get('stt_inf') or m.get('stt', [0,0])[1],
                         "LLM Time": s.get('llm_tot') or (m.get('llm', [0,0])[1] - m.get('llm', [0,0])[0]),
@@ -258,12 +241,12 @@ def generate_excel(sync_artifacts=True):
                         "Cleanup (s)": s.get('cleanup_time', 0),
                         "Peak VRAM (GB)": s.get('vram_peak', 0)
                     })
-            if rows:
-                df = pd.DataFrame(rows)
-                df.sort_values(by=["Setup", "Scenario"], inplace=True)
-                df = append_total_row(df)
-                sheets["STS"] = df
-                has_any_data = True
+        if rows:
+            df = pd.DataFrame(rows)
+            df.sort_values(by=["Setup", "Scenario"], inplace=True)
+            df = append_total_row(df, duration_cols=["Execution (s)", "Setup (s)", "Cleanup (s)"])
+            sheets["STS"] = df
+            has_any_data = True
 
         if not has_any_data:
             print("⚠️ No artifact data found. Excel generation skipped.")
