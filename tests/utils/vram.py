@@ -107,6 +107,15 @@ def get_gpu_vram_usage():
     except:
         return 0.0
 
+def get_gpu_total_vram():
+    """Returns total GPU VRAM in GB."""
+    try:
+        cmd = ["nvidia-smi", "--query-gpu=memory.total", "--format=csv,nounits,noheader"]
+        output = subprocess.check_output(cmd, text=True).strip()
+        return float(output) / 1024.0
+    except:
+        return 32.0 # Fallback for RTX 5090 if command fails
+
 def check_ollama_offload(model_name):
     try:
         resp = requests.get("http://127.0.0.1:11434/api/ps", timeout=2)

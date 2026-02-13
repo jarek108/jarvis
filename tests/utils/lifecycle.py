@@ -80,7 +80,28 @@ class LifecycleManager:
                 })
             elif engine == "vllm":
                 vllm_port = self.cfg['ports'].get('vllm', 8300)
-                vllm_util = self.cfg.get('vllm', {}).get('gpu_memory_utilization', 0.9)
+                
+                # Dynamic VRAM Calculation (GB -> %)
+                from .vram import get_gpu_total_vram
+                total_vram = get_gpu_total_vram()
+                
+                # Look up GB requirement
+                vram_gb = self.cfg.get('vllm', {}).get('gpu_memory_utilization', 0.5) # Default fallback
+                vram_map = self.cfg.get('vllm', {}).get('model_vram_map', {})
+                
+                # Find best match in map
+                match_gb = None
+                for key, val in vram_map.items():
+                    if key.lower() in model.lower():
+                        match_gb = val
+                        break
+                
+                if match_gb:
+                    vllm_util = min(0.95, max(0.1, match_gb / total_vram))
+                    print(f"  ↳ 🧠 VRAM Mapper: {model} needs {match_gb}GB. Machine has {total_vram:.1f}GB. Setting util to {vllm_util:.3f}")
+                else:
+                    vllm_util = self.cfg.get('vllm', {}).get('gpu_memory_utilization', 0.5)
+                
                 hf_cache = os.path.join(os.path.expanduser("~"), ".cache", "huggingface")
                 cmd = [
                     "docker", "run", "--gpus", "all", "-d", 
