@@ -1,11 +1,11 @@
 # Legacy Mixture (Original Loadouts)
-legacy_tiny_gpt20: ["faster-whisper-tiny", "gpt-oss:20b", "chatterbox-turbo"]
-legacy_base_gpt20: ["faster-whisper-base", "gpt-oss:20b", "chatterbox-multilingual"]
-legacy_base_qwen30: ["faster-whisper-base", "qwen3-vl:30b-a3b-instruct", "chatterbox-multilingual"]
+LEGACY_TINY_GPT20: ["faster-whisper-tiny", "gpt-oss:20b", "chatterbox-turbo"]
+LEGACY_BASE_GPT20: ["faster-whisper-base", "gpt-oss:20b", "chatterbox-multilingual"]
+LEGACY_BASE_QWEN30: ["faster-whisper-base", "qwen3-vl:30b-a3b-instruct", "chatterbox-multilingual"]
 
 # New Engine Tests
-tiny_ol_qwen_0.5: ["faster-whisper-tiny", "qwen2.5:0.5b", "chatterbox-turbo"]
-tiny_vl_qwen_0.5: ["faster-whisper-tiny", "vllm:Qwen/Qwen2.5-0.5B-Instruct", "chatterbox-turbo"]
+TINY_OL_QWEN_0.5: ["faster-whisper-tiny", "qwen2.5:0.5b", "chatterbox-turbo"]
+TINY_VL_QWEN_0.5: ["faster-whisper-tiny", "vllm:Qwen/Qwen2.5-0.5B-Instruct", "chatterbox-turbo"]
 
 # Sanity / Failure Cases
-missing_model_test: ["faster-whisper-tiny", "non-existent-llm:latest", "chatterbox-turbo"]
+MISSING_MODEL_TEST: ["faster-whisper-tiny", "non-existent-llm:latest", "chatterbox-turbo"]

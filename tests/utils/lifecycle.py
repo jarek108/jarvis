@@ -71,9 +71,10 @@ class LifecycleManager:
         if cat['llm'] and (domain in ["llm", "vlm", "sts"] or self.full):
             engine = cat['llm']['engine']
             model = cat['llm']['model']
+            original_id = cat['llm']['original']
             if engine == "ollama":
                 required.append({
-                    "type": "llm", "id": model, "port": self.cfg['ports']['ollama'],
+                    "type": "llm", "id": original_id, "port": self.cfg['ports']['ollama'],
                     "cmd": ["ollama", "serve"], "health": f"http://127.0.0.1:{self.cfg['ports']['ollama']}/api/tags"
                 })
             elif engine == "vllm":
@@ -81,7 +82,7 @@ class LifecycleManager:
                 hf_cache = os.path.join(os.path.expanduser("~"), ".cache", "huggingface")
                 cmd = ["docker", "run", "--gpus", "all", "-d", "--name", "vllm-server", "-p", f"{vllm_port}:8000", "-v", f"{hf_cache}:/root/.cache/huggingface", "vllm/vllm-openai", "--model", model]
                 required.append({
-                    "type": "llm", "id": model, "port": vllm_port,
+                    "type": "llm", "id": original_id, "port": vllm_port,
                     "cmd": cmd, "health": f"http://127.0.0.1:{vllm_port}/v1/models"
                 })
 
@@ -180,8 +181,7 @@ class LifecycleManager:
                 proc = start_server(s['cmd'])
                 self.owned_processes.append((s['port'], proc))
                 if not wait_for_port(s['port'], process=proc):
-                    print(f"❌ FAILED to start {s['id']}")
-                    sys.exit(1)
+                    raise RuntimeError(f"FAILED to start {s['id']} on port {s['port']}")
         
         # Warmup LLM
         if domain in ["llm", "vlm", "sts"] or self.full:

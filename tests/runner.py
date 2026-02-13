@@ -64,17 +64,24 @@ def run_domain_tests(domain, setup_name, models, purge=False, full=False, benchm
             break
 
     # 4. Run Lifecycle
-    setup_time, cleanup_time = run_test_lifecycle(
-        domain=domain,
-        setup_name=setup_name,
-        models=models,
-        purge=purge,
-        full=full,
-        test_func=lambda: test_func_to_run(target_id), 
-        benchmark_mode=benchmark_mode,
-        force_download=force_download
-    )
-    
+    try:
+        setup_time, cleanup_time = run_test_lifecycle(
+            domain=domain,
+            setup_name=setup_name,
+            models=models,
+            purge=purge,
+            full=full,
+            test_func=lambda: test_func_to_run(target_id), 
+            benchmark_mode=benchmark_mode,
+            force_download=force_download
+        )
+    except RuntimeError as e:
+        print(f"❌ LIFECYCLE ERROR: {e}")
+        from utils import report_scenario_result
+        res_obj = {"name": "LIFECYCLE", "status": "FAILED", "duration": 0, "result": str(e), "mode": domain.upper()}
+        report_scenario_result(res_obj)
+        return results_accumulator # Return what we have (even if just the failure)
+
     # Inject lifecycle timings into results
     for res in results_accumulator:
         res['setup_time'] = setup_time

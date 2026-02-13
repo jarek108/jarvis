@@ -1,3 +1,2 @@
 # VLM Test Setups
-qwen_vl_30b: ["qwen3-vl:30b-a3b-instruct"]
-# Removed vllm_opt_125m as it is not a VLM
+OL_QWEN_VL_30B: ["qwen3-vl:30b-a3b-instruct"]
