@@ -8,7 +8,7 @@ import yaml
 
 # Allow importing utils from parent levels
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from utils import load_config, report_scenario_result, ensure_utf8_output, run_test_lifecycle
+from utils import load_config, report_scenario_result, ensure_utf8_output, run_test_lifecycle, get_gpu_vram_usage
 
 # Ensure UTF-8 output
 ensure_utf8_output()
@@ -64,19 +64,20 @@ def run_test_suite(model_id, trim_length=80):
                     transcription = result.get('text', '').replace("\n", " ").strip()
                     similarity = calculate_similarity(transcription, ground_truth)
                     
-                    ascii_text = transcription.encode('ascii', 'replace').decode('ascii')
-                    if len(ascii_text) > trim_length:
-                        ascii_text = ascii_text[:trim_length] + "..."
+                    display_text = transcription
+                    if len(display_text) > trim_length:
+                        display_text = display_text[:trim_length] + "..."
 
                     res_obj = {
                         "name": scenario_name,
                         "status": "PASSED",
                         "duration": duration,
-                        "result": f"Match: {similarity:.1%} | [{ascii_text}]",
+                        "result": f"Match: {similarity:.1%} | [{display_text}]",
                         "stt_model": model_id,
                         "input_file": audio_path,
                         "input_text": ground_truth,
-                        "output_text": transcription
+                        "output_text": transcription,
+                        "vram_peak": get_gpu_vram_usage()
                     }
                 else:
                     res_obj = { "name": scenario_name, "status": "FAILED", "duration": duration, "result": f"HTTP {response.status_code}", "input_file": audio_path }

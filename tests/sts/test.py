@@ -95,7 +95,9 @@ def run_test_suite(loadout_id, stream=False, trim_length=80):
                                 "llm_model": response.headers.get("X-Model-LLM"),
                                 "tts_model": response.headers.get("X-Model-TTS"),
                                 "input_file": audio_path,
-                                "output_file": output_path
+                                "output_file": output_path,
+                                "streaming": True,
+                                "vram_peak": get_gpu_vram_usage()
                             }
                         else:
                             res_obj = {"name": s['name'], "status": "FAILED", "duration": duration, "result": f"HTTP {response.status_code}", "mode": "STREAM", "input_file": audio_path}
@@ -119,7 +121,9 @@ def run_test_suite(loadout_id, stream=False, trim_length=80):
                                 "llm_model": response.headers.get("X-Model-LLM"),
                                 "tts_model": response.headers.get("X-Model-TTS"),
                                 "input_file": audio_path,
-                                "output_file": output_path
+                                "output_file": output_path,
+                                "streaming": False,
+                                "vram_peak": get_gpu_vram_usage()
                             }
                         else:
                             res_obj = {"name": s['name'], "status": "FAILED", "duration": duration, "result": f"HTTP {response.status_code}", "mode": "WAV", "input_file": audio_path}

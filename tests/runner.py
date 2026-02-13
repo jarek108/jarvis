@@ -64,7 +64,7 @@ def run_domain_tests(domain, setup_name, models, purge=False, full=False, benchm
             break
 
     # 4. Run Lifecycle
-    run_test_lifecycle(
+    setup_time, cleanup_time = run_test_lifecycle(
         domain=domain,
         setup_name=setup_name,
         models=models,
@@ -74,6 +74,11 @@ def run_domain_tests(domain, setup_name, models, purge=False, full=False, benchm
         benchmark_mode=benchmark_mode,
         force_download=force_download
     )
+    
+    # Inject lifecycle timings into results
+    for res in results_accumulator:
+        res['setup_time'] = setup_time
+        res['cleanup_time'] = cleanup_time
     
     # Restore original reporters (optional but good practice)
     utils.report_scenario_result = original_report_scenario

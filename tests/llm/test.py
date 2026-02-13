@@ -133,7 +133,9 @@ def run_test_suite(model_name):
                 "chunks": chunks,
                 "duration": total_dur,
                 "llm_model": model_name,
-                "input_text": s['text']
+                "input_text": s['text'],
+                "streaming": True,
+                "vram_peak": get_gpu_vram_usage()
             }
             report_llm_result(res_obj)
 

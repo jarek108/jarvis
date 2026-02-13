@@ -220,7 +220,7 @@ def run_test_lifecycle(domain, setup_name, models, purge, full, test_func, bench
         from .reporting import report_scenario_result
         res_obj = {"name": "SETUP", "status": "MISSING", "duration": 0, "result": f"Missing models: {', '.join(manager.missing_models)}", "mode": domain.upper()}
         report_scenario_result(res_obj)
-        return
+        return 0, 0 # Return 0s for missing
 
     print("\n" + "="*LINE_LEN)
     print(f"{BOLD}{CYAN}{domain.upper() + ' [' + setup_name.upper() + '] TEST SUITE':^120}{RESET}")
@@ -232,3 +232,5 @@ def run_test_lifecycle(domain, setup_name, models, purge, full, test_func, bench
     print("="*LINE_LEN)
     print(f"{BOLD}Final Receipt:{RESET} Setup: {setup_time:.1f}s | Processing: {proc_time:.1f}s | Cleanup: {cleanup_time:.1f}s")
     print("="*LINE_LEN + "\n")
+    
+    return setup_time, cleanup_time
