@@ -168,13 +168,22 @@ def apply_loadout(name, loud=False):
 def kill_loadout(target):
     cfg = load_config()
     if target == "all":
-        ports = [cfg['ports']['ollama'], cfg['ports']['sts']] + list(cfg['stt_loadout'].values()) + list(cfg['tts_loadout'].values())
-        for p in ports:
-            kill_process_on_port(p)
+        from utils import kill_all_jarvis_services
+        kill_all_jarvis_services()
     else:
-        p = cfg['stt_loadout'].get(target) or cfg['tts_loadout'].get(target)
-        if p:
-            kill_process_on_port(p)
+        # Check for service name matches
+        port = None
+        if target == "ollama":
+            port = cfg['ports']['ollama']
+        elif target == "vllm":
+            port = cfg['ports'].get('vllm')
+        elif target == "sts":
+            port = cfg['ports']['sts']
+        else:
+            port = cfg['stt_loadout'].get(target) or cfg['tts_loadout'].get(target)
+            
+        if port:
+            kill_process_on_port(port)
         else:
             logger.error(f"Unknown target to kill: {target}")
 

@@ -97,7 +97,9 @@ def run_test_suite(loadout_id, stream=False, trim_length=80):
                                 "input_file": audio_path,
                                 "output_file": output_path,
                                 "streaming": True,
-                                "vram_peak": get_gpu_vram_usage()
+                                "vram_peak": get_gpu_vram_usage(),
+                                "stt_text": stt_text,
+                                "llm_text": llm_text
                             }
                         else:
                             res_obj = {"name": s['name'], "status": "FAILED", "duration": duration, "result": f"HTTP {response.status_code}", "mode": "STREAM", "input_file": audio_path}

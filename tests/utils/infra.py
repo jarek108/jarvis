@@ -88,6 +88,8 @@ def get_jarvis_ports():
     """Returns a set of all ports defined in config.yaml for Jarvis services."""
     cfg = load_config()
     ports = {cfg['ports']['sts'], cfg['ports']['ollama']}
+    if 'vllm' in cfg['ports']:
+        ports.add(cfg['ports']['vllm'])
     ports.update(cfg['stt_loadout'].values())
     ports.update(cfg['tts_loadout'].values())
     return ports
