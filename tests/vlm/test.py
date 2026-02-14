@@ -43,8 +43,12 @@ def extract_frames(video_path, max_frames=8):
 
 def run_test_suite(model_name, scenarios_to_run=None):
     cfg = load_config()
-    is_vllm = (model_name.startswith("vl_") or model_name.startswith("vllm:"))
-    clean_model_name = model_name[3:] if model_name.startswith("vl_") else (model_name[5:] if model_name.startswith("vllm:") else model_name)
+    is_vllm = model_name.startswith("VL_") or model_name.startswith("vllm:")
+    if model_name.startswith("VL_"): clean_model_name = model_name[3:]
+    elif model_name.startswith("vllm:"): clean_model_name = model_name[5:]
+    elif model_name.startswith("OL_"): clean_model_name = model_name[3:]
+    else: clean_model_name = model_name
+    
     url = f"http://127.0.0.1:{cfg['ports']['vllm'] if is_vllm else cfg['ports']['ollama']}/v1/chat/completions" if is_vllm else f"http://127.0.0.1:{cfg['ports']['ollama']}/api/chat"
     
     input_base = os.path.join(os.path.dirname(__file__), "input_data")
@@ -85,7 +89,12 @@ def run_test_suite(model_name, scenarios_to_run=None):
 
             total_dur = time.perf_counter() - start_time
             ttft = (first_token_time - start_time) if first_token_time else 0
-            report_llm_result({"name": s['name'], "status": "PASSED", "ttft": ttft, "tps": total_tokens / total_dur, "text": full_text, "duration": total_dur, "llm_model": model_name, "input_file": file_path, "input_text": s['text'], "vram_peak": get_gpu_vram_usage(), "streaming": True})
+            report_llm_result({
+                "name": s['name'], "status": "PASSED", "ttft": ttft, "tps": total_tokens / total_dur, 
+                "text": full_text, "duration": total_dur, "llm_model": model_name, "input_file": file_path, 
+                "input_text": s['text'], "vram_peak": get_gpu_vram_usage(), "streaming": True,
+                "vram_prior": 0.0 # Will be injected by runner
+            })
         except Exception as e:
             report_llm_result({"name": s['name'], "status": "FAILED", "text": str(e), "input_file": s.get('media'), "input_text": s.get('text')})
 
@@ -94,9 +103,16 @@ if __name__ == "__main__":
     with open(os.path.join(script_dir, "scenarios.yaml"), "r") as f:
         all_scenarios = yaml.safe_load(f)
     scenarios = [{"name": k, **v} for k, v in all_scenarios.items()]
+    
     parser = argparse.ArgumentParser()
     parser.add_argument("--loadout", type=str, required=True)
     args = parser.parse_args()
-    l_path = os.path.join(os.path.dirname(script_dir), "loadouts", f"{args.loadout}.yaml")
-    with open(l_path, "r") as f: target_model = yaml.safe_load(f).get('llm')
-    run_test_lifecycle(domain="vlm", setup_name=args.loadout, models=[target_model], purge_on_entry=True, purge_on_exit=True, full=False, test_func=lambda: run_test_suite(target_model, scenarios_to_run=scenarios))
+    
+    # Simple standalone support
+    target_model = args.loadout # Assume direct model ID for standalone
+    
+    run_test_lifecycle(
+        domain="vlm", setup_name="manual", models=[target_model], 
+        purge_on_entry=True, purge_on_exit=True, full=False, 
+        test_func=lambda: run_test_suite(target_model, scenarios_to_run=scenarios)
+    )

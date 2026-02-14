@@ -1,0 +1,11 @@
+name: "TTS Fast Check"
+description: "Quick verification of the TTS engine."
+settings:
+  purge_on_entry: true
+  purge_on_exit: true
+  track_prior_vram: true
+execution:
+  - domain: tts
+    loadouts:
+      - ["chatterbox-turbo"]
+    scenarios: [standard]

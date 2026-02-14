@@ -1,0 +1,13 @@
+name: "STT Exhaustive Comparison"
+description: "Full sweep of all STT model sizes."
+settings:
+  purge_on_entry: true
+  purge_on_exit: true
+  track_prior_vram: true
+execution:
+  - domain: stt
+    loadouts:
+      - ["faster-whisper-tiny"]
+      - ["faster-whisper-base"]
+      - ["faster-whisper-medium"]
+    scenarios: [all]

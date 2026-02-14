@@ -15,6 +15,11 @@ execution:
       - ["OL_qwen3-vl:30b-a3b-instruct"]
     scenarios: [all]
 
+  - domain: vlm
+    loadouts:
+      - ["OL_qwen3-vl:30b-a3b-instruct"]
+    scenarios: [all]
+
   - domain: stt
     loadouts:
       - ["faster-whisper-tiny"]

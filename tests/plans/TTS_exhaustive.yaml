@@ -1,0 +1,13 @@
+name: "TTS Exhaustive Comparison"
+description: "Full sweep of all TTS variants."
+settings:
+  purge_on_entry: true
+  purge_on_exit: true
+  track_prior_vram: true
+execution:
+  - domain: tts
+    loadouts:
+      - ["chatterbox-eng"]
+      - ["chatterbox-multilingual"]
+      - ["chatterbox-turbo"]
+    scenarios: [all]

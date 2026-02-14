@@ -10,8 +10,12 @@ execution:
   - domain: llm
     loadouts:
       - ["OL_qwen2.5:0.5b"]
-      - ["VL_Qwen/Qwen2.5-0.5B-Instruct"]
-    scenarios: [polish_explicit]
+    scenarios: [english_std, polish_explicit]
+
+  - domain: vlm
+    loadouts:
+      - ["OL_qwen3-vl:30b-a3b-instruct"]
+    scenarios: [jarvis_logo]
 
   - domain: stt
     loadouts:
