@@ -18,7 +18,7 @@ from utils import (
     run_test_lifecycle, save_artifact, trigger_report_generation
 )
 
-def run_domain_tests(domain, setup_name, models, purge_on_entry=True, purge_on_exit=False, full=False, benchmark_mode=False, force_download=False, track_prior_vram=True):
+def run_domain_tests(domain, setup_name, models, purge_on_entry=True, purge_on_exit=True, full=False, benchmark_mode=True, force_download=False, track_prior_vram=True):
     """
     Orchestrates the lifecycle and suite execution for a single domain/setup.
 
@@ -65,7 +65,6 @@ def run_domain_tests(domain, setup_name, models, purge_on_entry=True, purge_on_e
     setattr(module, "report_llm_result", capture_llm_result)
 
     # 3. Resolve the relevant model for this domain from the list
-    # LifecycleManager has this logic, let's use a helper or local logic
     target_id = setup_name # default fallback
     for m in models:
         if domain == "stt" and m in utils.load_config()['stt_loadout']:
@@ -122,26 +121,24 @@ def main():
     """
     parser = argparse.ArgumentParser(description="Jarvis Unified Test Runner")
     parser.add_argument("--domain", type=str, help="Comma-separated list of domains (stt,tts,llm,vlm,sts). Defaults to all.")
-    parser.add_argument("--setup", type=str, help="Specific setup name from test_setups.yaml to test.")
-    parser.add_argument("--purge", action="store_true", help="Enable both entry and exit purge")
-    parser.add_argument("--no-purge-entry", action="store_true", help="Disable default targeted purge on entry")
-    parser.add_argument("--purge-exit", action="store_true", help="Enable global purge on exit")
+    parser.add_argument("--setup", type=str, help="Comma-separated specific setup names from test_setups.yaml.")
+    
+    # Strict Defaults & Opt-Outs
+    parser.add_argument("--keep-alive", action="store_true", help="Disable default exit purge (Keep models resident)")
+    parser.add_argument("--dirty", action="store_true", help="Disable entry purge and VRAM tracking (Fast iteration)")
     parser.add_argument("--no-cleanup", action="store_true", help="Skip stale artifact cleanup at start")
-    parser.add_argument("--no-track-vram", action="store_true", help="Skip clean baseline VRAM measurement")
+    parser.add_argument("--force-download", action="store_true", help="Allow model downloads if missing (Default: False)")
+    
     parser.add_argument("--full", action="store_true", help="Ensure all setup services are running")
-    parser.add_argument("--benchmark-mode", action="store_true", help="Deterministic output")
     parser.add_argument("--local", action="store_true", help="Skip cloud upload")
-    parser.add_argument("--force-download", action="store_true", help="Allow model downloads if missing")
     
     args = parser.parse_args()
 
-    # Resolve purge logic
-    # Default: purge_on_entry=True, purge_on_exit=False
-    p_entry = not args.no_purge_entry
-    p_exit = args.purge_exit
-    if args.purge:
-        p_entry = True
-        p_exit = True
+    # Resolve Logic
+    purge_on_entry = not args.dirty
+    track_prior_vram = not args.dirty
+    purge_on_exit = not args.keep_alive
+    benchmark_mode = True # Always on
 
     # 0. Clean up stale "latest" artifacts to ensure the report only contains current run data
     if not args.no_cleanup:
@@ -205,12 +202,12 @@ def main():
             try:
                 res = run_domain_tests(
                     domain, s_name, models, 
-                    purge_on_entry=p_entry,
-                    purge_on_exit=p_exit,
+                    purge_on_entry=purge_on_entry,
+                    purge_on_exit=purge_on_exit,
                     full=args.full, 
-                    benchmark_mode=args.benchmark_mode,
+                    benchmark_mode=benchmark_mode,
                     force_download=args.force_download,
-                    track_prior_vram=not args.no_track_vram
+                    track_prior_vram=track_prior_vram
                 )
                 
                 status = "PASSED"
