@@ -7,6 +7,16 @@ def load_config():
     with open(config_path, "r") as f:
         return yaml.safe_load(f)
 
+def resolve_path(path_str):
+    """Expands ~ and resolves relative paths against project root."""
+    if not path_str: return None
+    expanded = os.path.expanduser(path_str)
+    if os.path.isabs(expanded):
+        return expanded
+    
+    project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    return os.path.normpath(os.path.join(project_root, expanded))
+
 def list_all_loadouts(include_experimental=False):
     project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     loadout_dir = os.path.join(project_root, "loadouts")

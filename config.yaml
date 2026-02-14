@@ -1,5 +1,13 @@
 device: cuda
 
+# --- Project Paths ---
+paths:
+  # Where model weights are stored
+  huggingface_cache: "~/.cache/huggingface"
+  ollama_models: "~/.ollama/models"
+  # Where the virtual environment lives (relative to project root or absolute)
+  venv_python: "jarvis-venv/Scripts/python.exe"
+
 # --- Fixed Infrastructure Ports ---
 # Every model variant lives on its own port
 stt_loadout:
@@ -24,10 +32,7 @@ vllm:
   gpu_memory_utilization: 0.5
   # Portable VRAM requirements in GB (Weights + KV Cache)
   model_vram_map:
-    "qwen2.5-0.5b": 4.0
-    "qwen2.5-7b": 16.0
-    "qwen2.5-14b": 24.0
-    "llama-3.1-8b": 18.0
+    "qwen2.5-0.5b": 3.0
     "default": 8.0
 
 system:

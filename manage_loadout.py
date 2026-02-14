@@ -92,7 +92,8 @@ def apply_loadout(name, loud=False):
 
     logger.info(f"Applying Loadout: {target.get('description', name)}")
     
-    python_exe = os.path.join(os.getcwd(), "jarvis-venv", "Scripts", "python.exe")
+    from utils import resolve_path
+    python_exe = resolve_path(cfg['paths']['venv_python'])
     stt_script = os.path.join(os.getcwd(), "servers", "stt_server.py")
     tts_script = os.path.join(os.getcwd(), "servers", "tts_server.py")
 
@@ -140,7 +141,7 @@ def apply_loadout(name, loud=False):
                 logger.info(f"ℹ️ vLLM already running on port {vllm_port}.")
             else:
                 logger.info(f"🚀 Starting vLLM [{model}] on port {vllm_port}...")
-                hf_cache = os.path.join(os.path.expanduser("~"), ".cache", "huggingface")
+                hf_cache = resolve_path(cfg['paths']['huggingface_cache'])
                 cmd = [
                     "docker", "run", "--gpus", "all", "-d", 
                     "--name", "vllm-server",

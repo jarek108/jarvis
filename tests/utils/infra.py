@@ -24,6 +24,12 @@ def wait_for_port(port: int, timeout: int = 120, process=None) -> bool:
     while time.time() - start_time < timeout:
         status, info = get_service_status(port)
         if status == "ON": return True
+        
+        # Heartbeat for long boots
+        elapsed = int(time.time() - start_time)
+        if elapsed % 10 == 0:
+            print(f"  ... waiting for port {port} ({elapsed}s elapsed, status: {status})", flush=True)
+            
         if process and process.poll() is not None: return False
         time.sleep(1)
     return False
@@ -48,7 +54,10 @@ def is_vllm_docker_running():
 
 def is_vllm_model_local(model_name):
     # Check in HF cache
-    hf_cache = os.path.join(os.path.expanduser("~"), ".cache", "huggingface", "hub")
+    from .config import load_config, resolve_path
+    cfg = load_config()
+    hf_cache_base = resolve_path(cfg['paths']['huggingface_cache'])
+    hf_cache = os.path.join(hf_cache_base, "hub")
     if not os.path.exists(hf_cache): return False
     
     # Model name usually looks like "org/model"
