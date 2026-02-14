@@ -17,43 +17,37 @@ def resolve_path(path_str):
     project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     return os.path.normpath(os.path.join(project_root, expanded))
 
+import sys
+
 def get_hf_home():
-    """Resolves HuggingFace cache path: Config Override > Env Var > Default."""
-    cfg = load_config()
-    override = cfg.get('paths', {}).get('huggingface_cache')
-    if override:
-        path = resolve_path(override)
-        print(f"  ↳ 📂 Path: Using HF_HOME override from config.yaml: {path}")
-        return path
-    
+    """Strictly resolves HuggingFace cache path from system environment."""
     env = os.environ.get('HF_HOME')
-    if env:
-        path = os.path.normpath(env)
-        print(f"  ↳ 📂 Path: Using system HF_HOME: {path}")
-        return path
+    if not env:
+        print("\n" + "!"*80)
+        print("❌ CRITICAL ERROR: System environment variable 'HF_HOME' is not set.")
+        print("Jarvis requires explicit pathing to prevent accidental system drive bloat.")
+        print("Please set 'HF_HOME' to your model storage directory (e.g., D:\\Models\\HF).")
+        print("!"*80 + "\n")
+        sys.exit(1)
     
-    default = resolve_path("~/.cache/huggingface")
-    print(f"  ↳ 📂 Path: Using default HF cache: {default}")
-    return default
+    path = os.path.normpath(env)
+    print(f"  ↳ ✅ System Integrity: HF_HOME detected -> {path}")
+    return path
 
 def get_ollama_models():
-    """Resolves Ollama models path: Config Override > Env Var > Default."""
-    cfg = load_config()
-    override = cfg.get('paths', {}).get('ollama_models')
-    if override:
-        path = resolve_path(override)
-        print(f"  ↳ 📂 Path: Using OLLAMA_MODELS override from config.yaml: {path}")
-        return path
-    
+    """Strictly resolves Ollama models path from system environment."""
     env = os.environ.get('OLLAMA_MODELS')
-    if env:
-        path = os.path.normpath(env)
-        print(f"  ↳ 📂 Path: Using system OLLAMA_MODELS: {path}")
-        return path
+    if not env:
+        print("\n" + "!"*80)
+        print("❌ CRITICAL ERROR: System environment variable 'OLLAMA_MODELS' is not set.")
+        print("Jarvis requires explicit pathing to prevent accidental system drive bloat.")
+        print("Please set 'OLLAMA_MODELS' to your model storage directory (e.g., D:\\Models\\Ollama).")
+        print("!"*80 + "\n")
+        sys.exit(1)
     
-    default = resolve_path("~/.ollama/models")
-    print(f"  ↳ 📂 Path: Using default Ollama models: {default}")
-    return default
+    path = os.path.normpath(env)
+    print(f"  ↳ ✅ System Integrity: OLLAMA_MODELS detected -> {path}")
+    return path
 
 def list_all_loadouts(include_experimental=False):
     project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
