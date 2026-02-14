@@ -1,0 +1,13 @@
+# STS Test Scenarios (Full Pipeline)
+english_std:
+  input: "english_std.wav"
+  lang: "en"
+polish_explicit:
+  input: "polish_std.wav"
+  lang: "pl"
+short2long:
+  input: "short_dog_story.wav"
+  lang: "en"
+long2short:
+  input: "long_book_quote.wav"
+  lang: "en"

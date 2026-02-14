@@ -1,0 +1,19 @@
+# TTS Test Scenarios
+standard:
+  text: "The quick brown fox jumps over the lazy dog."
+polish:
+  text: "W Szczebrzeszynie chrząszcz brzmi w trzcinie."
+french:
+  text: "Le petit chat boit du lait."
+chinese:
+  text: "你好，世界。"
+implicit_excited:
+  text: "I am so incredibly happy to be here today!"
+implicit_serious:
+  text: "We must discuss the critical failure of the primary power grid."
+implicit_hesitant:
+  text: "Well... I am not quite sure if that is... actually... the best idea."
+explicit_laugh:
+  text: "That was a hilarious joke! [laugh]"
+explicit_cough:
+  text: "[cough] Excuse me, I think I have a cold."

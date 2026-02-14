@@ -13,7 +13,7 @@ from utils import report_llm_result, ensure_utf8_output, run_test_lifecycle, get
 # Ensure UTF-8 output
 ensure_utf8_output()
 
-def run_test_suite(model_name):
+def run_test_suite(model_name, scenarios_to_run=None):
     cfg = load_config()
     is_vllm = False
     clean_model_name = model_name
@@ -28,17 +28,10 @@ def run_test_suite(model_name):
             clean_model_name = model_name[3:]
         url = f"http://127.0.0.1:{cfg['ports']['ollama']}/api/chat"
     
-    scenarios = [
-        {"name": "english_std", "text": "Hello, this is a test of Tatterbox TTS."},
-        {"name": "polish_explicit", "text": "Cześć, nazywam się Jarbis, jed mogę ci dzisiaj pomóc."},
-        {"name": "short2long", "text": "Tell me a four to five sentences story about a dog."},
-        {"name": "long2short", "text": "It is a truth universally acknowledged, that a single man in possession of a good fortune, must be in want of a wife. However little known the feelings or views of such a man may be on his first entering a neighbourhood, this truth is so well fixed in the minds of the surrounding families, that he is considered the rightful property of some one or other of their daughters. What is the title of this book? Respond with title only."}
-    ]
-
     # Audit Start
     vram_baseline = get_gpu_vram_usage()
 
-    for s in scenarios:
+    for s in scenarios_to_run:
         if is_vllm:
             payload = {
                 "model": clean_model_name,

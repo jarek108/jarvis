@@ -1,0 +1,10 @@
+# STT Test Scenarios (Mapping to audio files in input_data/)
+polish_std:
+  input: "polish.wav"
+  expected: "Cześć"
+french_std:
+  input: "french.wav"
+chinese_std:
+  input: "chinese.wav"
+english_std:
+  input: "input.wav"

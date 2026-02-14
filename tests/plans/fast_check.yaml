@@ -1,0 +1,20 @@
+name: "Fast Health Check"
+description: "Minimal verification of the core stack."
+
+settings:
+  purge_on_entry: true
+  purge_on_exit: false # Keep alive for manual check
+  track_prior_vram: true
+
+execution:
+  - domain: llm
+    loadouts: [OL_QWEN_0.5B]
+    scenarios: [english_std, polish_explicit]
+
+  - domain: stt
+    loadouts: [whisper_tiny]
+    scenarios: [english_std]
+
+  - domain: sts
+    loadouts: [TINY_OL_QWEN_0.5]
+    scenarios: [english_std]
