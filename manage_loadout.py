@@ -92,7 +92,7 @@ def apply_loadout(name, loud=False):
 
     logger.info(f"Applying Loadout: {target.get('description', name)}")
     
-    from utils import resolve_path
+    from utils import resolve_path, get_hf_home, get_ollama_models
     python_exe = resolve_path(cfg['paths']['venv_python'])
     stt_script = os.path.join(os.getcwd(), "servers", "stt_server.py")
     tts_script = os.path.join(os.getcwd(), "servers", "tts_server.py")
@@ -115,6 +115,8 @@ def apply_loadout(name, loud=False):
                 logger.info("ℹ️ Ollama already running.")
             else:
                 logger.info("🚀 Starting Ollama...")
+                # Broadcast OLLAMA_MODELS to native process
+                os.environ['OLLAMA_MODELS'] = get_ollama_models()
                 start_server(["ollama", "serve"], loud=loud)
                 wait_for_port(llm_port)
         elif engine == "vllm":
@@ -141,7 +143,7 @@ def apply_loadout(name, loud=False):
                 logger.info(f"ℹ️ vLLM already running on port {vllm_port}.")
             else:
                 logger.info(f"🚀 Starting vLLM [{model}] on port {vllm_port}...")
-                hf_cache = resolve_path(cfg['paths']['huggingface_cache'])
+                hf_cache = get_hf_home()
                 cmd = [
                     "docker", "run", "--gpus", "all", "-d", 
                     "--name", "vllm-server",

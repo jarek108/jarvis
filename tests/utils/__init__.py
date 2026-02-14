@@ -4,7 +4,8 @@ from .ui import (
 )
 from .config import (
     load_config, list_all_loadouts, list_all_llm_models, 
-    list_all_stt_models, list_all_tts_models, resolve_path
+    list_all_stt_models, list_all_tts_models, resolve_path,
+    get_hf_home, get_ollama_models
 )
 from .infra import (
     is_port_in_use, start_server, wait_for_port, 

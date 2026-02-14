@@ -2,9 +2,9 @@ device: cuda
 
 # --- Project Paths ---
 paths:
-  # Where model weights are stored
-  huggingface_cache: "~/.cache/huggingface"
-  ollama_models: "~/.ollama/models"
+  # Where model weights are stored (Defaults to system HF_HOME / OLLAMA_MODELS if null)
+  huggingface_cache: null
+  ollama_models: null
   # Where the virtual environment lives (relative to project root or absolute)
   venv_python: "jarvis-venv/Scripts/python.exe"
 

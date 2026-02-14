@@ -12,10 +12,48 @@ def resolve_path(path_str):
     if not path_str: return None
     expanded = os.path.expanduser(path_str)
     if os.path.isabs(expanded):
-        return expanded
+        return os.path.normpath(expanded)
     
     project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     return os.path.normpath(os.path.join(project_root, expanded))
+
+def get_hf_home():
+    """Resolves HuggingFace cache path: Config Override > Env Var > Default."""
+    cfg = load_config()
+    override = cfg.get('paths', {}).get('huggingface_cache')
+    if override:
+        path = resolve_path(override)
+        print(f"  ↳ 📂 Path: Using HF_HOME override from config.yaml: {path}")
+        return path
+    
+    env = os.environ.get('HF_HOME')
+    if env:
+        path = os.path.normpath(env)
+        print(f"  ↳ 📂 Path: Using system HF_HOME: {path}")
+        return path
+    
+    default = resolve_path("~/.cache/huggingface")
+    print(f"  ↳ 📂 Path: Using default HF cache: {default}")
+    return default
+
+def get_ollama_models():
+    """Resolves Ollama models path: Config Override > Env Var > Default."""
+    cfg = load_config()
+    override = cfg.get('paths', {}).get('ollama_models')
+    if override:
+        path = resolve_path(override)
+        print(f"  ↳ 📂 Path: Using OLLAMA_MODELS override from config.yaml: {path}")
+        return path
+    
+    env = os.environ.get('OLLAMA_MODELS')
+    if env:
+        path = os.path.normpath(env)
+        print(f"  ↳ 📂 Path: Using system OLLAMA_MODELS: {path}")
+        return path
+    
+    default = resolve_path("~/.ollama/models")
+    print(f"  ↳ 📂 Path: Using default Ollama models: {default}")
+    return default
 
 def list_all_loadouts(include_experimental=False):
     project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
