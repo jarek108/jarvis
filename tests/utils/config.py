@@ -1,5 +1,6 @@
 import os
 import yaml
+import sys
 
 def load_config():
     base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -16,8 +17,6 @@ def resolve_path(path_str):
     
     project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     return os.path.normpath(os.path.join(project_root, expanded))
-
-import sys
 
 def get_hf_home():
     """Strictly resolves HuggingFace cache path from system environment."""
@@ -48,30 +47,3 @@ def get_ollama_models():
     path = os.path.normpath(env)
     print(f"  ↳ ✅ System Integrity: OLLAMA_MODELS detected -> {path}")
     return path
-
-def list_all_loadouts(include_experimental=False):
-    project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-    loadout_dir = os.path.join(project_root, "loadouts")
-    if not os.path.exists(loadout_dir): return []
-    return [f.replace(".yaml", "") for f in os.listdir(loadout_dir) if f.endswith(".yaml")]
-
-def list_all_llm_models():
-    loadouts = list_all_loadouts(include_experimental=True)
-    project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-    models = set()
-    for lid in loadouts:
-        path = os.path.join(project_root, "loadouts", f"{lid}.yaml")
-        try:
-            with open(path, "r") as f:
-                data = yaml.safe_load(f)
-                if data.get('llm'): models.add(data['llm'])
-        except: pass
-    return sorted(list(models))
-
-def list_all_stt_models():
-    cfg = load_config()
-    return sorted(list(cfg.get('stt_loadout', {}).keys()))
-
-def list_all_tts_models():
-    cfg = load_config()
-    return sorted(list(cfg.get('tts_loadout', {}).keys()))

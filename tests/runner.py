@@ -15,7 +15,8 @@ sys.path.append(project_root)
 
 from utils import (
     CYAN, BOLD, RESET, LINE_LEN, 
-    run_test_lifecycle, save_artifact, trigger_report_generation
+    run_test_lifecycle, save_artifact, trigger_report_generation,
+    resolve_path
 )
 
 def load_scenarios(domain, filter_list=None):
@@ -91,49 +92,41 @@ def run_domain_tests(domain, setup_name, models, scenarios, settings):
 
 def main():
     parser = argparse.ArgumentParser(description="Jarvis Plan-Driven Test Runner")
-    parser.add_argument("--plan", type=str, help="Path to a .yaml test plan (e.g., plans/fast_check.yaml)")
-    parser.add_argument("--domain", type=str, help="Legacy: Comma-separated domains")
-    parser.add_argument("--setup", type=str, help="Legacy: Comma-separated setups")
-    parser.add_argument("--keep-alive", action="store_true", help="Opt-out of exit purge")
+    parser.add_argument("--plan", type=str, required=True, help="Path to a .yaml test plan (e.g., tests/plan_fast_check.yaml)")
     parser.add_argument("--local", action="store_true", help="Skip cloud upload")
+    parser.add_argument("--no-cleanup", action="store_true", help="Skip stale artifact cleanup at start")
     args = parser.parse_args()
 
     # 1. Resolve the Plan
-    if args.plan:
-        plan_path = resolve_path(args.plan) if hasattr(utils, 'resolve_path') else os.path.join(script_dir, args.plan)
-        if not os.path.exists(plan_path):
-            print(f"❌ ERROR: Plan not found at {plan_path}"); return
-        with open(plan_path, "r") as f:
-            plan = yaml.safe_load(f)
-    else:
-        # Construct ad-hoc plan from CLI args
-        domains = [d.strip() for d in args.domain.split(",")] if args.domain else ["llm", "stt", "tts", "sts"]
-        plan = {
-            "name": "Ad-hoc Run",
-            "settings": {"purge_on_exit": not args.keep_alive},
-            "execution": [{"domain": d, "loadouts": [s.strip() for s in args.setup.split(",")] if args.setup else None, "scenarios": ["all"]} for d in domains]
-        }
+    plan_path = resolve_path(args.plan)
+    if not os.path.exists(plan_path):
+        print(f"❌ ERROR: Plan not found at {plan_path}"); return
+    with open(plan_path, "r") as f:
+        plan = yaml.safe_load(f)
 
     print("#"*LINE_LEN)
     print(f"{BOLD}{CYAN}{'JARVIS TEST PLAN: ' + plan.get('name', 'Unnamed'):^120}{RESET}")
     print("#"*LINE_LEN)
 
-    # 0. Cleanup
-    artifacts_dir = os.path.join(script_dir, "artifacts")
-    if os.path.exists(artifacts_dir):
-        for f in os.listdir(artifacts_dir):
-            if f.startswith("latest_") and f.endswith(".json"):
-                os.remove(os.path.join(artifacts_dir, f))
+    # 0. Cleanup stale artifacts
+    if not args.no_cleanup:
+        artifacts_dir = os.path.join(script_dir, "artifacts")
+        if os.path.exists(artifacts_dir):
+            for f in os.listdir(artifacts_dir):
+                if f.startswith("latest_") and f.endswith(".json"):
+                    os.remove(os.path.join(artifacts_dir, f))
 
     # 2. Execute Execution Blocks
     global_start = time.perf_counter()
     settings = plan.get('settings', {})
     
     # Store results by domain for final artifact saving
-    all_results = {d: [] for d in ["llm", "vlm", "stt", "tts", "sts"]}
+    all_results = {}
 
     for block in plan.get('execution', []):
         domain = block['domain']
+        if domain not in all_results: all_results[domain] = []
+        
         scenarios = load_scenarios(domain, block.get('scenarios'))
         
         # Resolve Setups

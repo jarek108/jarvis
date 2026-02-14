@@ -15,18 +15,9 @@ ensure_utf8_output()
 
 def run_test_suite(model_name, scenarios_to_run=None):
     cfg = load_config()
-    is_vllm = False
-    clean_model_name = model_name
-    
-    if model_name.startswith("vl_") or model_name.startswith("vllm:"):
-        is_vllm = True
-        clean_model_name = model_name[3:] if model_name.startswith("vl_") else model_name[5:]
-        url = f"http://127.0.0.1:{cfg['ports']['vllm']}/v1/chat/completions"
-    else:
-        # Default to Ollama native API
-        if model_name.startswith("ol_"):
-            clean_model_name = model_name[3:]
-        url = f"http://127.0.0.1:{cfg['ports']['ollama']}/api/chat"
+    is_vllm = (model_name.startswith("vl_") or model_name.startswith("vllm:"))
+    clean_model_name = model_name[3:] if model_name.startswith("vl_") else (model_name[5:] if model_name.startswith("vllm:") else model_name)
+    url = f"http://127.0.0.1:{cfg['ports']['vllm'] if is_vllm else cfg['ports']['ollama']}/v1/chat/completions" if is_vllm else f"http://127.0.0.1:{cfg['ports']['ollama']}/api/chat"
     
     # Audit Start
     vram_baseline = get_gpu_vram_usage()
@@ -113,7 +104,7 @@ def run_test_suite(model_name, scenarios_to_run=None):
                     })
 
             total_dur = time.perf_counter() - start_time
-            ttft = first_token_time - start_time if first_token_time else 0
+            ttft = (first_token_time - start_time) if first_token_time else 0
             tps = total_tokens / total_dur if total_dur > 0 else 0
 
             res_obj = {
@@ -128,7 +119,8 @@ def run_test_suite(model_name, scenarios_to_run=None):
                 "llm_model": model_name,
                 "input_text": s['text'],
                 "streaming": True,
-                "vram_peak": get_gpu_vram_usage()
+                "vram_peak": get_gpu_vram_usage(),
+                "vram_prior": 0.0 # Will be injected by runner
             }
             report_llm_result(res_obj)
 
@@ -148,7 +140,6 @@ def run_test_suite(model_name, scenarios_to_run=None):
         "total_size_gb": total_size
     }
     
-    # Unified output for LLM Audit
     print("\n" + "-"*40)
     print(f"VRAM FOOTPRINT: {model_name.upper()}")
     print(f"  Baseline: {vram_baseline:.1f} GB")
@@ -160,36 +151,23 @@ def run_test_suite(model_name, scenarios_to_run=None):
     print(f"VRAM_AUDIT_RESULT: {json.dumps(audit_data)}")
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Jarvis LLM Test Suite")
-    parser.add_argument("--loadout", type=str, required=True, help="Loadout YAML name")
-    parser.add_argument("--purge", action="store_true", help="Kill extra Jarvis services")
-    parser.add_argument("--full", action="store_true", help="Ensure all loadout services are running")
-    parser.add_argument("--benchmark-mode", action="store_true", help="Enable deterministic output")
+    # Standalone support
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    with open(os.path.join(script_dir, "scenarios.yaml"), "r") as f:
+        data = yaml.safe_load(f)
+    scenarios = [{"name": k, **v} for k, v in data.items()]
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--loadout", type=str, required=True)
     args = parser.parse_args()
 
-    # Load loadout to get model_id
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    project_root = os.path.dirname(os.path.dirname(script_dir))
-    loadout_path = os.path.join(project_root, "tests", "loadouts", f"{args.loadout}.yaml")
-    
-    if not os.path.exists(loadout_path):
-        print(f"❌ ERROR: Loadout '{args.loadout}' not found.")
-        sys.exit(1)
-        
-    with open(loadout_path, "r") as f:
-        l_data = yaml.safe_load(f)
-        target_model = l_data.get('llm')
-        if not target_model:
-            print(f"❌ ERROR: Loadout '{args.loadout}' defines no LLM component.")
-            sys.exit(1)
+    cfg = load_config()
+    l_path = os.path.join(os.path.dirname(script_dir), "loadouts", f"{args.loadout}.yaml")
+    with open(l_path, "r") as f:
+        target_model = yaml.safe_load(f).get('llm')
 
-    # Standalone support
     run_test_lifecycle(
-        domain="llm",
-        setup_name=args.loadout,
-        models=[target_model],
-        purge=args.purge,
-        full=args.full,
-        test_func=lambda: run_test_suite(target_model),
-        benchmark_mode=args.benchmark_mode
+        domain="llm", setup_name=args.loadout, models=[target_model],
+        purge_on_entry=True, purge_on_exit=True, full=False,
+        test_func=lambda: run_test_suite(target_model, scenarios_to_run=scenarios)
     )
