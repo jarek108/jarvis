@@ -11,7 +11,7 @@ from .vram import get_service_status, get_loaded_ollama_models, get_system_healt
 from .llm import check_and_pull_model, warmup_llm, is_model_local
 
 class LifecycleManager:
-    def __init__(self, setup_name, models=None, purge_on_entry=True, purge_on_exit=False, full=False, benchmark_mode=False, force_download=False):
+    def __init__(self, setup_name, models=None, purge_on_entry=True, purge_on_exit=False, full=False, benchmark_mode=False, force_download=False, track_prior_vram=True):
         self.setup_name = setup_name
         self.models = models or [] # List of model strings
         self.purge_on_entry = purge_on_entry
@@ -19,6 +19,7 @@ class LifecycleManager:
         self.full = full
         self.benchmark_mode = benchmark_mode
         self.force_download = force_download
+        self.track_prior_vram = track_prior_vram
         self.cfg = load_config()
         self.project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
         self.python_exe = sys.executable
@@ -158,6 +159,14 @@ class LifecycleManager:
         ensure_utf8_output()
         print(f"\n--- JARVIS LIFECYCLE RECONCILER [Setup: {self.setup_name.upper()}] ---")
         
+        prior_vram = 0.0
+        if self.track_prior_vram:
+            print("🧹 TRACK PRIOR VRAM: Performing global cleanup for clean baseline...")
+            kill_all_jarvis_services()
+            from .vram import get_gpu_vram_usage
+            prior_vram = get_gpu_vram_usage()
+            print(f"  ↳ Baseline External VRAM: {prior_vram:.1f} GB")
+
         required_services = self.get_required_services(domain)
         required_ports = {s['port'] for s in required_services}
 
@@ -175,14 +184,14 @@ class LifecycleManager:
                     self.owned_processes.append((ollama_port, proc))
                     if not wait_for_port(ollama_port, process=proc):
                         print(f"❌ FAILED to start Ollama")
-                        return -1
+                        return -1, prior_vram
 
         # 2. Now check availability
         if not self.check_availability():
             print(f"❌ MISSING MODELS: {', '.join(self.missing_models)}")
-            return -1 # Sentinel for missing
+            return -1, prior_vram # Sentinel for missing
         
-        if self.purge_on_entry:
+        if self.purge_on_entry and not self.track_prior_vram:
             print("🧹 PURGE ON ENTRY: Cleaning up foreign Jarvis services...")
             for port in get_jarvis_ports():
                 if port not in required_ports and is_port_in_use(port):
@@ -231,7 +240,7 @@ class LifecycleManager:
                 
                 warmup_llm(model, visual=(domain == "vlm"), engine=engine)
         
-        return time.perf_counter() - setup_start
+        return time.perf_counter() - setup_start, prior_vram
 
     def cleanup(self):
         if self.purge_on_exit:
@@ -248,17 +257,17 @@ class LifecycleManager:
         for port, _ in self.owned_processes: kill_process_on_port(port)
         return time.perf_counter() - start_c
 
-def run_test_lifecycle(domain, setup_name, models, purge_on_entry, purge_on_exit, full, test_func, benchmark_mode=False, force_download=False):
+def run_test_lifecycle(domain, setup_name, models, purge_on_entry, purge_on_exit, full, test_func, benchmark_mode=False, force_download=False, track_prior_vram=True):
     ensure_utf8_output()
-    manager = LifecycleManager(setup_name, models=models, purge_on_entry=purge_on_entry, purge_on_exit=purge_on_exit, full=full, benchmark_mode=benchmark_mode, force_download=force_download)
+    manager = LifecycleManager(setup_name, models=models, purge_on_entry=purge_on_entry, purge_on_exit=purge_on_exit, full=full, benchmark_mode=benchmark_mode, force_download=force_download, track_prior_vram=track_prior_vram)
     
-    setup_time = manager.reconcile(domain)
+    setup_time, prior_vram = manager.reconcile(domain)
     if setup_time == -1:
         # Report MISSING
         from .reporting import report_scenario_result
-        res_obj = {"name": "SETUP", "status": "MISSING", "duration": 0, "result": f"Missing models: {', '.join(manager.missing_models)}", "mode": domain.upper()}
+        res_obj = {"name": "SETUP", "status": "MISSING", "duration": 0, "result": f"Missing models: {', '.join(manager.missing_models)}", "mode": domain.upper(), "vram_prior": prior_vram}
         report_scenario_result(res_obj)
-        return 0, 0 # Return 0s for missing
+        return 0, 0, prior_vram # Return 0s for missing
 
     print("\n" + "="*LINE_LEN)
     print(f"{BOLD}{CYAN}{domain.upper() + ' [' + setup_name.upper() + '] TEST SUITE':^120}{RESET}")
@@ -271,4 +280,4 @@ def run_test_lifecycle(domain, setup_name, models, purge_on_entry, purge_on_exit
     print(f"{BOLD}Final Receipt:{RESET} Setup: {setup_time:.1f}s | Processing: {proc_time:.1f}s | Cleanup: {cleanup_time:.1f}s")
     print("="*LINE_LEN + "\n")
     
-    return setup_time, cleanup_time
+    return setup_time, cleanup_time, prior_vram

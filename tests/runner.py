@@ -18,7 +18,7 @@ from utils import (
     run_test_lifecycle, save_artifact, trigger_report_generation
 )
 
-def run_domain_tests(domain, setup_name, models, purge_on_entry=True, purge_on_exit=False, full=False, benchmark_mode=False, force_download=False):
+def run_domain_tests(domain, setup_name, models, purge_on_entry=True, purge_on_exit=False, full=False, benchmark_mode=False, force_download=False, track_prior_vram=True):
     """
     Orchestrates the lifecycle and suite execution for a single domain/setup.
 
@@ -31,6 +31,7 @@ def run_domain_tests(domain, setup_name, models, purge_on_entry=True, purge_on_e
         full (bool): If True, ensures all services listed in the setup are started, even if not strictly required by the domain.
         benchmark_mode (bool): If True, enables extra telemetry and deterministic behavior for performance analysis.
         force_download (bool): If True, allows the system to automatically pull missing models from Ollama/vLLM providers.
+        track_prior_vram (bool): If True, performs a full global cleanup before measurement to capture a clean baseline.
 
     Returns:
         list: A list of result dictionaries for each scenario executed in the test suite.
@@ -80,7 +81,7 @@ def run_domain_tests(domain, setup_name, models, purge_on_entry=True, purge_on_e
 
     # 4. Run Lifecycle
     try:
-        setup_time, cleanup_time = run_test_lifecycle(
+        setup_time, cleanup_time, prior_vram = run_test_lifecycle(
             domain=domain,
             setup_name=setup_name,
             models=models,
@@ -89,12 +90,13 @@ def run_domain_tests(domain, setup_name, models, purge_on_entry=True, purge_on_e
             full=full,
             test_func=lambda: test_func_to_run(target_id), 
             benchmark_mode=benchmark_mode,
-            force_download=force_download
+            force_download=force_download,
+            track_prior_vram=track_prior_vram
         )
     except RuntimeError as e:
         print(f"❌ LIFECYCLE ERROR: {e}")
         from utils import report_scenario_result
-        res_obj = {"name": "LIFECYCLE", "status": "FAILED", "duration": 0, "result": str(e), "mode": domain.upper()}
+        res_obj = {"name": "LIFECYCLE", "status": "FAILED", "duration": 0, "result": str(e), "mode": domain.upper(), "vram_prior": 0.0}
         report_scenario_result(res_obj)
         return results_accumulator # Return what we have (even if just the failure)
 
@@ -102,6 +104,7 @@ def run_domain_tests(domain, setup_name, models, purge_on_entry=True, purge_on_e
     for res in results_accumulator:
         res['setup_time'] = setup_time
         res['cleanup_time'] = cleanup_time
+        res['vram_prior'] = prior_vram
     
     # Restore original reporters (optional but good practice)
     utils.report_scenario_result = original_report_scenario
@@ -124,6 +127,7 @@ def main():
     parser.add_argument("--no-purge-entry", action="store_true", help="Disable default targeted purge on entry")
     parser.add_argument("--purge-exit", action="store_true", help="Enable global purge on exit")
     parser.add_argument("--no-cleanup", action="store_true", help="Skip stale artifact cleanup at start")
+    parser.add_argument("--no-track-vram", action="store_true", help="Skip clean baseline VRAM measurement")
     parser.add_argument("--full", action="store_true", help="Ensure all setup services are running")
     parser.add_argument("--benchmark-mode", action="store_true", help="Deterministic output")
     parser.add_argument("--local", action="store_true", help="Skip cloud upload")
@@ -205,7 +209,8 @@ def main():
                     purge_on_exit=p_exit,
                     full=args.full, 
                     benchmark_mode=args.benchmark_mode,
-                    force_download=args.force_download
+                    force_download=args.force_download,
+                    track_prior_vram=not args.no_track_vram
                 )
                 
                 status = "PASSED"
