@@ -15,8 +15,12 @@ ensure_utf8_output()
 
 def run_test_suite(model_name, scenarios_to_run=None):
     cfg = load_config()
-    is_vllm = (model_name.startswith("vl_") or model_name.startswith("vllm:"))
-    clean_model_name = model_name[3:] if model_name.startswith("vl_") else (model_name[5:] if model_name.startswith("vllm:") else model_name)
+    is_vllm = model_name.startswith("VL_") or model_name.startswith("vllm:")
+    if model_name.startswith("VL_"): clean_model_name = model_name[3:]
+    elif model_name.startswith("vllm:"): clean_model_name = model_name[5:]
+    elif model_name.startswith("OL_"): clean_model_name = model_name[3:]
+    else: clean_model_name = model_name
+    
     url = f"http://127.0.0.1:{cfg['ports']['vllm'] if is_vllm else cfg['ports']['ollama']}/v1/chat/completions" if is_vllm else f"http://127.0.0.1:{cfg['ports']['ollama']}/api/chat"
     
     # Audit Start

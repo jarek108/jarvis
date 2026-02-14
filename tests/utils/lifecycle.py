@@ -39,15 +39,19 @@ class LifecycleManager:
                 categorized['stt'] = m
             elif m in self.cfg['tts_loadout']:
                 categorized['tts'] = m
-            else:
-                # Assume LLM
+            elif m.startswith("OL_") or m.startswith("VL_") or m.startswith("vllm:"):
+                # Explicit LLM Prefixes
                 engine = "ollama"
                 model_id = m
-                if m.startswith("vllm:"):
+                if m.startswith("VL_"):
+                    engine = "vllm"
+                    model_id = m[3:]
+                elif m.startswith("vllm:"):
                     engine = "vllm"
                     model_id = m[5:]
-                elif ":" in m or "/" in m: # Heuristic for org/model or model:tag
-                    engine = "ollama" # default
+                elif m.startswith("OL_"):
+                    engine = "ollama"
+                    model_id = m[3:]
                 
                 categorized['llm'] = {"engine": engine, "model": model_id, "original": m}
         return categorized
@@ -160,9 +164,25 @@ class LifecycleManager:
             })
         return required
 
+    def format_models_for_display(self):
+        """Returns a string like 'OL_QWEN-0.5B + WHISPER-TINY'."""
+        display_parts = []
+        cat = self.identify_models()
+        
+        if cat['stt']:
+            display_parts.append(cat['stt'].upper())
+        if cat['llm']:
+            prefix = "VL_" if cat['llm']['engine'] == "vllm" else "OL_"
+            display_parts.append(f"{prefix}{cat['llm']['model'].upper()}")
+        if cat['tts']:
+            display_parts.append(cat['tts'].upper())
+        
+        return " + ".join(display_parts) or self.setup_name.upper()
+
     def reconcile(self, domain):
         ensure_utf8_output()
-        print(f"\n--- JARVIS LIFECYCLE RECONCILER [Setup: {self.setup_name.upper()}] ---")
+        model_str = self.format_models_for_display()
+        print(f"\n--- JARVIS LIFECYCLE RECONCILER [Models: {model_str}] ---")
         
         prior_vram = 0.0
         if self.track_prior_vram:
@@ -274,8 +294,9 @@ def run_test_lifecycle(domain, setup_name, models, purge_on_entry, purge_on_exit
         report_scenario_result(res_obj)
         return 0, 0, prior_vram # Return 0s for missing
 
+    model_display = manager.format_models_for_display()
     print("\n" + "="*LINE_LEN)
-    print(f"{BOLD}{CYAN}{domain.upper() + ' [' + setup_name.upper() + '] TEST SUITE':^120}{RESET}")
+    print(f"{BOLD}{CYAN}{domain.upper() + ' [' + model_display + '] TEST SUITE':^120}{RESET}")
     print("="*LINE_LEN)
     f = LiveFilter(); proc_start = time.perf_counter()
     with redirect_stdout(f): test_func()

@@ -126,10 +126,8 @@ def generate_excel(sync_artifacts=True):
             print(f"📁 Loading STT data from {stt_path}...")
             rows = []
             for entry in data:
-                setup = entry.get('loadout', 'unknown')
                 for s in entry.get('scenarios', []):
                     rows.append({
-                        "Setup": setup,
                         "Model": s.get("stt_model", "N/A"),
                         "Scenario": s.get('name'),
                         "Input wav": link_file(s.get('input_file'), input_folder_id, overwrite=False, label="▶️ Play wav"),
@@ -145,7 +143,7 @@ def generate_excel(sync_artifacts=True):
                     })
             if rows:
                 df = pd.DataFrame(rows)
-                df.sort_values(by=["Setup", "Scenario"], inplace=True)
+                df.sort_values(by=["Model", "Scenario"], inplace=True)
                 df = append_total_row(df)
                 sheets["STT"] = df
                 has_any_data = True
@@ -157,10 +155,8 @@ def generate_excel(sync_artifacts=True):
             print(f"📁 Loading TTS data from {tts_path}...")
             rows = []
             for entry in data:
-                setup = entry.get('loadout', 'unknown')
                 for s in entry.get('scenarios', []):
                     rows.append({
-                        "Setup": setup,
                         "Model": s.get("tts_model", "N/A"),
                         "Scenario": s.get('name'),
                         "Input Text": s.get('input_text', 'N/A'),
@@ -175,7 +171,7 @@ def generate_excel(sync_artifacts=True):
                     })
             if rows:
                 df = pd.DataFrame(rows)
-                df.sort_values(by=["Setup", "Scenario"], inplace=True)
+                df.sort_values(by=["Model", "Scenario"], inplace=True)
                 df = append_total_row(df)
                 sheets["TTS"] = df
                 has_any_data = True
@@ -187,7 +183,6 @@ def generate_excel(sync_artifacts=True):
             print(f"📁 Loading LLM data from {llm_path}...")
             rows = []
             for entry in data:
-                setup = entry.get('loadout', 'unknown')
                 for s in entry.get('scenarios', []):
                     out_text = s.get('text') or s.get('raw_text', 'N/A')
                     if s.get('streaming') and s.get('chunks'):
@@ -196,7 +191,6 @@ def generate_excel(sync_artifacts=True):
                         out_text = f"{out_text} ({s.get('duration', 0):.2f}s)"
 
                     rows.append({
-                        "Setup": setup,
                         "Model": s.get("llm_model", "N/A"),
                         "Scenario": s.get('name'),
                         "Input Text": s.get('input_text', 'N/A'),
@@ -214,7 +208,7 @@ def generate_excel(sync_artifacts=True):
                     })
             if rows:
                 df = pd.DataFrame(rows)
-                df.sort_values(by=["Setup", "Scenario"], inplace=True)
+                df.sort_values(by=["Model", "Scenario"], inplace=True)
                 df = append_total_row(df)
                 sheets["LLM"] = df
                 has_any_data = True
@@ -226,7 +220,6 @@ def generate_excel(sync_artifacts=True):
             print(f"📁 Loading VLM data from {vlm_path}...")
             rows = []
             for entry in data:
-                setup = entry.get('loadout', 'unknown')
                 for s in entry.get('scenarios', []):
                     label = get_link_label(s.get('input_file'), "👁️ View")
                     out_text = s.get('text') or s.get('raw_text', 'N/A')
@@ -236,7 +229,6 @@ def generate_excel(sync_artifacts=True):
                         out_text = f"{out_text} ({s.get('duration', 0):.2f}s)"
 
                     rows.append({
-                        "Setup": setup,
                         "Model": s.get("llm_model", "N/A"),
                         "Scenario": s.get('name'),
                         "Input Text": s.get('input_text', 'N/A'),
@@ -255,7 +247,7 @@ def generate_excel(sync_artifacts=True):
                     })
             if rows:
                 df = pd.DataFrame(rows)
-                df.sort_values(by=["Setup", "Scenario"], inplace=True)
+                df.sort_values(by=["Model", "Scenario"], inplace=True)
                 df = append_total_row(df)
                 sheets["VLM"] = df
                 has_any_data = True
@@ -300,7 +292,7 @@ def generate_excel(sync_artifacts=True):
                     })
             if rows:
                 df = pd.DataFrame(rows)
-                df.sort_values(by=["Setup", "Scenario"], inplace=True)
+                df.sort_values(by=["STT Model", "Scenario"], inplace=True)
                 df = append_total_row(df, duration_cols=["Execution (s)", "Setup (s)", "Cleanup (s)"])
                 sheets["STS"] = df
                 has_any_data = True
@@ -334,8 +326,6 @@ def generate_excel(sync_artifacts=True):
                         worksheet.column_dimensions[col_letter].width = 15
                         for row_idx in range(2, len(df) + 2):
                             worksheet.cell(row=row_idx, column=idx+1).alignment = Alignment(horizontal='center')
-                    elif col == "Setup":
-                        worksheet.column_dimensions[col_letter].width = 25
                     elif col == "Status":
                         worksheet.column_dimensions[col_letter].width = 15
                     elif col == "Streaming":

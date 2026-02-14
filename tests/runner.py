@@ -59,12 +59,15 @@ def run_domain_tests(domain, setup_name, models, scenarios, settings):
     setattr(module, "report_scenario_result", capture_result)
     setattr(module, "report_llm_result", capture_llm_result)
 
-    # Resolve target ID for domain
+    # Resolve target ID for domain (what is passed to test_func)
     target_id = setup_name
     for m in models:
+        # LLM takes priority for ID if it has a prefix
+        if m.startswith("OL_") or m.startswith("VL_") or m.startswith("vllm:"):
+            target_id = m
+            break
         if domain == "stt" and m in utils.load_config()['stt_loadout']: target_id = m; break
         if domain == "tts" and m in utils.load_config()['tts_loadout']: target_id = m; break
-        if domain in ["llm", "vlm"] and (":" in m or "/" in m or m.startswith("vllm:")): target_id = m; break
 
     try:
         setup_time, cleanup_time, prior_vram = run_test_lifecycle(
@@ -92,7 +95,7 @@ def run_domain_tests(domain, setup_name, models, scenarios, settings):
 
 def main():
     parser = argparse.ArgumentParser(description="Jarvis Plan-Driven Test Runner")
-    parser.add_argument("--plan", type=str, required=True, help="Path to a .yaml test plan (e.g., tests/plan_fast_check.yaml)")
+    parser.add_argument("plan", type=str, help="Path to a .yaml test plan (e.g., tests/plan_fast_check.yaml)")
     parser.add_argument("--local", action="store_true", help="Skip cloud upload")
     parser.add_argument("--no-cleanup", action="store_true", help="Skip stale artifact cleanup at start")
     args = parser.parse_args()
@@ -129,13 +132,13 @@ def main():
         
         scenarios = load_scenarios(domain, block.get('scenarios'))
         
-        # Resolve Setups
-        setup_path = os.path.join(script_dir, domain, "test_setups.yaml")
-        with open(setup_path, "r") as f: setups = yaml.safe_load(f)
-        
-        target_setups = {k: v for k, v in setups.items() if k in block.get('loadouts', [])} if block.get('loadouts') else setups
+        # Loadouts are now a list of model lists: [ ["m1", "m2"], ... ]
+        loadouts = block.get('loadouts', [])
 
-        for s_name, models in target_setups.items():
+        for models in loadouts:
+            # Create a name for logging and file naming
+            s_name = "_".join([m.replace(":", "-").replace("/", "--") for m in models])
+            
             res = run_domain_tests(domain, s_name, models, scenarios, settings)
             status = "PASSED" if res and not any(r.get('status') == "FAILED" for r in res) else "FAILED"
             if res and any(r.get('status') == "MISSING" for r in res): status = "MISSING"

@@ -1,5 +1,0 @@
-# LLM Test Setups (Resident models only)
-OL_QWEN_0.5B: ["qwen2.5:0.5b"]
-OL_GPT_OSS_20B: ["gpt-oss:20b"]
-VL_QWEN_0.5B: ["vllm:Qwen/Qwen2.5-0.5B-Instruct"]
-OL_QWEN_30B_VLM: ["qwen3-vl:30b-a3b-instruct"]

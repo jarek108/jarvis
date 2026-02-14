@@ -39,3 +39,14 @@ Benchmarks are automatically exported to **Google Drive** as stylized Excel repo
 ## Infrastructure Management
 
 Jarvis provides a `manage_loadout.py` utility to control the entire cluster. It manages both native Windows processes and Docker containers, ensuring clean GPU memory state between sessions.
+
+### Drive-Agnostic Storage
+Jarvis employs a **Strict Environment Policy** to manage large model files (100GB+). Instead of hardcoding paths or defaulting to `%USERPROFILE%`, it relies on industry-standard environment variables:
+
+1.  **`HF_HOME`**: Primary storage for HuggingFace weights (STT, vLLM).
+2.  **`OLLAMA_MODELS`**: Storage for Ollama blobs and manifests.
+
+**The Bridge Logic**:
+- **Native Apps**: Libraries like `faster-whisper` automatically detect these variables.
+- **Docker Containers**: Jarvis reads these host variables and dynamically "bind mounts" them into the vLLM container at runtime.
+- **Safety Lock**: If these variables are not found, Jarvis refuses to start, protecting the system drive from silent bloat.

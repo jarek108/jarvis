@@ -1,0 +1,29 @@
+name: "Fast Health Check"
+description: "Minimal verification of the core stack."
+
+settings:
+  purge_on_entry: true
+  purge_on_exit: false
+  track_prior_vram: true
+
+execution:
+  - domain: llm
+    loadouts:
+      - ["OL_qwen2.5:0.5b"]
+      - ["VL_Qwen/Qwen2.5-0.5B-Instruct"]
+    scenarios: [polish_explicit]
+
+  - domain: stt
+    loadouts:
+      - ["faster-whisper-base"]
+    scenarios: [english_std]
+
+  - domain: tts
+    loadouts:
+      - ["chatterbox-turbo"]
+    scenarios: [standard]
+
+  - domain: sts
+    loadouts:
+      - ["faster-whisper-base", "OL_qwen2.5:0.5b", "chatterbox-turbo"]
+    scenarios: [english_std]

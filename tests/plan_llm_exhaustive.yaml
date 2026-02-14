@@ -1,0 +1,16 @@
+name: "LLM Performance Sweep"
+description: "Detailed benchmarks across all resident LLM and VLM-as-LLM models."
+
+settings:
+  purge_on_entry: true
+  purge_on_exit: true
+  track_prior_vram: true
+
+execution:
+  - domain: llm
+    loadouts:
+      - ["OL_qwen2.5:0.5b"]
+      - ["VL_Qwen/Qwen2.5-0.5B-Instruct"]
+      - ["OL_gpt-oss:20b"]
+      - ["OL_qwen3-vl:30b-a3b-instruct"]
+    scenarios: [all]
