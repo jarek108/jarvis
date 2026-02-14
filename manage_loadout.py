@@ -10,16 +10,16 @@ headless mode by default to prevent console window clutter.
 [Subsection] : View Cluster Health
 python manage_loadout.py --status
 
-[Subsection] : Apply a Preset Loadout
-Starts only missing services defined in the preset.
+[Subsection] : Apply a Preset Loadout (Strict Reset)
+Kills all existing services, measures baseline VRAM, then starts the loadout.
 python manage_loadout.py --apply base-qwen30-multi
-python manage_loadout.py --apply tiny-gpt20-turbo
+
+[Subsection] : Apply a Loadout Layer (Soft Start)
+Starts only missing services without killing anything. Useful for adding TTS to an running LLM.
+python manage_loadout.py --apply tiny-gpt20-turbo --soft
 
 [Subsection] : Kill a Specific Service
 python manage_loadout.py --kill faster-whisper-tiny
-python manage_loadout.py --kill chatterbox-turbo
-
-[Subsection] : Global Infrastructure Shutdown
 python manage_loadout.py --kill all
 
 [Subsection] : Debug Mode
@@ -40,7 +40,12 @@ from loguru import logger
 
 # Ensure we can import from tests/
 sys.path.append(os.path.join(os.getcwd(), "tests"))
-from utils import get_system_health, load_config, kill_process_on_port, wait_for_port, start_server, is_vllm_docker_running, stop_vllm_docker
+from utils import (
+    get_system_health, load_config, kill_process_on_port, wait_for_port, 
+    start_server, is_vllm_docker_running, stop_vllm_docker, 
+    kill_all_jarvis_services, get_gpu_vram_usage, resolve_path,
+    get_hf_home, get_ollama_models
+)
 
 # ANSI Colors
 GREEN = "\033[92m"
@@ -78,7 +83,7 @@ def print_status():
     
     print("="*LINE_LEN + "\n")
 
-def apply_loadout(name, loud=False):
+def apply_loadout(name, loud=False, soft=False):
     cfg = load_config()
     loadout_path = os.path.join(os.getcwd(), "loadouts", f"{name}.yaml")
     if not os.path.exists(loadout_path):
@@ -92,12 +97,20 @@ def apply_loadout(name, loud=False):
 
     logger.info(f"Applying Loadout: {target.get('description', name)}")
     
-    from utils import resolve_path, get_hf_home, get_ollama_models
+    # 1. Strict Purge & Baseline Measurement
+    if not soft:
+        logger.warning("🧹 Performing strict global purge...")
+        kill_all_jarvis_services()
+        baseline_vram = get_gpu_vram_usage()
+        logger.info(f"📉 Baseline VRAM: {baseline_vram:.1f} GB")
+    else:
+        logger.info("ℹ️ Soft mode enabled: Skipping purge.")
+
     python_exe = resolve_path(cfg['paths']['venv_python'])
     stt_script = os.path.join(os.getcwd(), "servers", "stt_server.py")
     tts_script = os.path.join(os.getcwd(), "servers", "tts_server.py")
 
-    # 1. Start LLM Engine if needed
+    # 2. Start LLM Engine if needed
     llm_config = target.get('llm')
     if llm_config:
         engine = "ollama"
@@ -157,7 +170,7 @@ def apply_loadout(name, loud=False):
                 subprocess.run(cmd, capture_output=True)
                 wait_for_port(vllm_port, timeout=300) # vLLM can take a while to pull/load
 
-    # 2. STT Models
+    # 3. STT Models
     for model in target.get('stt', []):
         port = cfg['stt_loadout'].get(model)
         if not port:
@@ -165,14 +178,17 @@ def apply_loadout(name, loud=False):
             continue
         
         if os.system(f"netstat -ano | findstr :{port} > nul"):
+            if not soft: logger.warning(f"⚠️ STT [{model}] detected despite purge! (Ghost Process?)")
+            else: logger.info(f"ℹ️ STT [{model}] already running.")
+        else:
             logger.info(f"🚀 Starting STT [{model}] on port {port}...")
+            # Broadcast HF_HOME
+            os.environ['HF_HOME'] = get_hf_home()
             cmd = [python_exe, stt_script, "--port", str(port), "--model", model]
             start_server(cmd, loud=loud)
             wait_for_port(port)
-        else:
-            logger.info(f"ℹ️ STT [{model}] already running.")
 
-    # 3. TTS Models
+    # 4. TTS Models
     for variant in target.get('tts', []):
         port = cfg['tts_loadout'].get(variant)
         if not port:
@@ -180,17 +196,19 @@ def apply_loadout(name, loud=False):
             continue
             
         if os.system(f"netstat -ano | findstr :{port} > nul"):
+            if not soft: logger.warning(f"⚠️ TTS [{variant}] detected despite purge! (Ghost Process?)")
+            else: logger.info(f"ℹ️ TTS [{variant}] already running.")
+        else:
             logger.info(f"🚀 Starting TTS [{variant}] on port {port}...")
+            # Broadcast HF_HOME
+            os.environ['HF_HOME'] = get_hf_home()
             cmd = [python_exe, tts_script, "--port", str(port), "--variant", variant]
             start_server(cmd, loud=loud)
             wait_for_port(port, timeout=120)
-        else:
-            logger.info(f"ℹ️ TTS [{variant}] already running.")
 
 def kill_loadout(target):
     cfg = load_config()
     if target == "all":
-        from utils import kill_all_jarvis_services
         kill_all_jarvis_services()
     else:
         # Check for service name matches
@@ -212,7 +230,8 @@ def kill_loadout(target):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Jarvis Loadout Manager")
     parser.add_argument("--status", action="store_true", help="Show cluster health")
-    parser.add_argument("--apply", type=str, help="Apply a loadout preset")
+    parser.add_argument("--apply", type=str, help="Apply a loadout preset (Implies Strict Purge)")
+    parser.add_argument("--soft", action="store_true", help="Disable strict purge (Layer on top of existing services)")
     parser.add_argument("--kill", type=str, help="Kill a specific model or 'all'")
     parser.add_argument("--loud", action="store_true", help="Show console windows for started servers")
     
@@ -221,7 +240,7 @@ if __name__ == "__main__":
     if args.status:
         print_status()
     elif args.apply:
-        apply_loadout(args.apply, loud=args.loud)
+        apply_loadout(args.apply, loud=args.loud, soft=args.soft)
     elif args.kill:
         kill_loadout(args.kill)
     else:
