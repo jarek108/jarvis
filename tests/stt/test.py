@@ -59,6 +59,7 @@ def run_test_suite(model_id, scenarios_to_run=None, trim_length=80):
                     "status": "PASSED",
                     "duration": duration,
                     "result": f"Match: {similarity:.1%} | [{display_text}]",
+                    "match_pct": similarity,
                     "stt_model": model_id,
                     "input_file": audio_path,
                     "input_text": ground_truth,
@@ -75,7 +76,7 @@ def run_test_suite(model_id, scenarios_to_run=None, trim_length=80):
 if __name__ == "__main__":
     # Note: Standalone mode updated to load default scenarios
     script_dir = os.path.dirname(os.path.abspath(__file__))
-    with open(os.path.join(script_dir, "scenarios.yaml"), "r") as f:
+    with open(os.path.join(script_dir, "scenarios.yaml"), "r", encoding="utf-8") as f:
         all_scenarios = yaml.safe_load(f)
     
     # Simple list conversion for standalone
@@ -89,7 +90,7 @@ if __name__ == "__main__":
     # Load model from loadout
     cfg = load_config()
     l_path = os.path.join(os.path.dirname(script_dir), "loadouts", f"{args.loadout}.yaml")
-    with open(l_path, "r") as f:
+    with open(l_path, "r", encoding="utf-8") as f:
         target_model = yaml.safe_load(f).get('stt')[0]
 
     run_test_lifecycle(

@@ -1,10 +1,13 @@
 # STT Test Scenarios (Mapping to audio files in input_data/)
 polish_std:
   input: "polish.wav"
-  expected: "Cześć"
+  expected: "Cześć, nazywam się Jarvis. Jak mogę Ci dzisiaj pomóc?"
 french_std:
   input: "french.wav"
+  expected: "Bonjour, je m'appelle Jarvis. Comment puis-je vous aider?"
 chinese_std:
   input: "chinese.wav"
+  expected: "你好，我叫贾维斯。我今天能为您做什么？"
 english_std:
   input: "input.wav"
+  expected: "Hello, this is a test of Tatterbox TTS."

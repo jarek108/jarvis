@@ -25,7 +25,7 @@ def load_scenarios(domain, filter_list=None):
     path = os.path.join(script_dir, domain, "scenarios.yaml")
     if not os.path.exists(path):
         return []
-    with open(path, "r") as f:
+    with open(path, "r", encoding="utf-8") as f:
         data = yaml.safe_load(f)
     
     # Convert dict to list of named objects

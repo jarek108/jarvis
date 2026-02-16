@@ -138,6 +138,7 @@ def generate_excel(sync_artifacts=True):
                         "Input wav": link_file(s.get('input_file'), input_folder_id, overwrite=False, label="▶️ Play wav"),
                         "Input Text (GT)": s.get('input_text', 'N/A'),
                         "Output Text": f"{s.get('output_text', 'N/A')} ({s.get('duration', 0):.2f}s)",
+                        "Match %": s.get('match_pct', 0),
                         "Status": s.get('status'),
                         "Result": s.get('result'),
                         "Prior VRAM (GB)": s.get('vram_prior', 0),
@@ -334,6 +335,10 @@ def generate_excel(sync_artifacts=True):
                         worksheet.column_dimensions[col_letter].width = 15
                         for row_idx in range(2, len(df) + 2):
                             worksheet.cell(row=row_idx, column=idx+1).alignment = Alignment(horizontal='center')
+                    elif col == "Match %":
+                        worksheet.column_dimensions[col_letter].width = 15
+                        for row_idx in range(2, len(df) + 2):
+                            worksheet.cell(row=row_idx, column=idx+1).number_format = '0.0%'
                     elif col == "Status":
                         worksheet.column_dimensions[col_letter].width = 15
                     elif col == "Streaming":
@@ -377,6 +382,12 @@ def generate_excel(sync_artifacts=True):
                         rule = ColorScaleRule(start_type='min', start_color='C6EFCE', 
                                               mid_type='percentile', mid_value=50, mid_color='FFEB9C',
                                               end_type='max', end_color='FFC7CE')
+                        worksheet.conditional_formatting.add(range_str, rule)
+                    
+                    elif col == "Match %":
+                        rule = ColorScaleRule(start_type='num', start_value=0, start_color='FFC7CE',
+                                              mid_type='num', mid_value=0.8, mid_color='FFEB9C',
+                                              end_type='num', end_value=1, end_color='C6EFCE')
                         worksheet.conditional_formatting.add(range_str, rule)
 
                 # 5. Bold Total Row
