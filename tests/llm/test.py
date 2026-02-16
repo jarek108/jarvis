@@ -13,7 +13,7 @@ from utils import report_llm_result, ensure_utf8_output, run_test_lifecycle, get
 # Ensure UTF-8 output
 ensure_utf8_output()
 
-def run_test_suite(model_name, scenarios_to_run=None):
+def run_test_suite(model_name, scenarios_to_run=None, output_dir=None):
     cfg = load_config()
     is_vllm = model_name.startswith("VL_") or model_name.startswith("vllm:")
     if model_name.startswith("VL_"): clean_model_name = model_name[3:]

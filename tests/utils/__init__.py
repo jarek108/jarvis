@@ -1,6 +1,6 @@
 from .ui import (
     CYAN, GREEN, RED, YELLOW, GRAY, RESET, BOLD, LINE_LEN,
-    ensure_utf8_output, LiveFilter
+    ensure_utf8_output, LiveFilter, RichDashboard
 )
 from .config import (
     load_config, resolve_path,
@@ -19,6 +19,8 @@ from .vram import (
 from .llm import check_and_pull_model, warmup_llm, is_model_local
 from .reporting import (
     format_status, fmt_with_chunks, report_llm_result, 
-    report_scenario_result, save_artifact, trigger_report_generation
+    report_scenario_result, save_artifact, trigger_report_generation,
+    ProgressionLogger
 )
 from .lifecycle import LifecycleManager, run_test_lifecycle
+from .session import init_session

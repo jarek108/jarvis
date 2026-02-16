@@ -13,7 +13,7 @@ from utils import load_config, report_scenario_result, ensure_utf8_output, run_t
 # Ensure UTF-8 output
 ensure_utf8_output()
 
-def run_test_suite(variant_id, scenarios_to_run=None, trim_length=80):
+def run_test_suite(variant_id, scenarios_to_run=None, trim_length=80, output_dir=None):
     cfg = load_config()
     port = cfg['tts_loadout'].get(variant_id)
     if not port:
@@ -21,12 +21,14 @@ def run_test_suite(variant_id, scenarios_to_run=None, trim_length=80):
         return False
         
     url = f"http://127.0.0.1:{port}/tts"
-    results_dir = os.path.join(os.path.dirname(__file__), "chatterbox", "results")
-    os.makedirs(results_dir, exist_ok=True)
+    
+    # Use session output dir if provided
+    final_results_dir = output_dir if output_dir else os.path.join(os.path.dirname(__file__), "chatterbox", "results")
+    os.makedirs(final_results_dir, exist_ok=True)
     
     for s in scenarios_to_run:
         payload = {"text": s['text'], "voice": "default", "language_id": s.get('lang', 'en')}
-        out_path = os.path.join(results_dir, f"{variant_id}_{s['name']}.wav")
+        out_path = os.path.join(final_results_dir, f"{variant_id}_{s['name']}.wav")
         # Relative to project root
         project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
         rel_path = os.path.relpath(out_path, project_root)

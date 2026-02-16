@@ -41,8 +41,8 @@ def wait_for_port(port: int, timeout: int = 120, process=None) -> bool:
         
         # Heartbeat for long boots
         elapsed = int(time.time() - start_time)
-        if elapsed % 10 == 0:
-            print(f"  ... waiting for port {port} ({elapsed}s elapsed, status: {status})", flush=True)
+        # if elapsed % 10 == 0:
+        #    print(f"  ... waiting for port {port} ({elapsed}s elapsed, status: {status})", flush=True)
             
         if process and process.poll() is not None: return False
         time.sleep(1)

@@ -14,19 +14,20 @@ from utils import load_config, report_scenario_result, ensure_utf8_output, run_t
 # Ensure UTF-8 output
 ensure_utf8_output()
 
-def run_test_suite(loadout_id, scenarios_to_run=None, stream=False, trim_length=80):
+def run_test_suite(loadout_id, scenarios_to_run=None, stream=False, trim_length=80, output_dir=None):
     cfg = load_config()
     endpoint = "/process_stream" if stream else "/process"
     url = f"http://127.0.0.1:{cfg['ports']['sts']}{endpoint}"
     
     input_base = os.path.join(os.path.dirname(__file__), "input_data")
-    results_dir = os.path.join(os.path.dirname(__file__), "results")
-    os.makedirs(results_dir, exist_ok=True)
+    # Use session output dir if provided
+    final_results_dir = output_dir if output_dir else os.path.join(os.path.dirname(__file__), "results")
+    os.makedirs(final_results_dir, exist_ok=True)
 
     for s in scenarios_to_run:
         audio_path = os.path.join(input_base, s['input'])
         suffix = "_stream" if stream else ""
-        output_path = os.path.join(results_dir, f"{loadout_id}_{s['name']}{suffix}.wav")
+        output_path = os.path.join(final_results_dir, f"{loadout_id}_{s['name']}{suffix}.wav")
 
         if not os.path.exists(audio_path):
             res_obj = {"name": s['name'], "status": "FAILED", "duration": 0, "result": f"Input missing: {s['input']}", "mode": "STREAM" if stream else "WAV"}

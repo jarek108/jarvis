@@ -27,7 +27,7 @@ ports:
 
 vllm:
   gpu_memory_utilization: 0.5
-  model_startup_timeout: 500
+  model_startup_timeout: 800
   check_docker: true
   # Portable VRAM requirements in GB (Weights + KV Cache)
   model_vram_map:
@@ -47,3 +47,11 @@ vllm:
 
 system:
   health_check_interval: 1.0
+
+# --- Mock Mode Settings ---
+mock:
+  # Ranges in seconds [min, max]
+  setup_range: [2.0, 5.0]
+  execution_range: [0.3, 1.0]
+  cleanup_range: [1.0, 3.0]
+  failure_chance: 0.1

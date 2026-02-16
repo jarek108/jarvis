@@ -41,7 +41,7 @@ def extract_frames(video_path, max_frames=8):
     except: pass
     return frames
 
-def run_test_suite(model_name, scenarios_to_run=None):
+def run_test_suite(model_name, scenarios_to_run=None, output_dir=None):
     cfg = load_config()
     is_vllm = model_name.startswith("VL_") or model_name.startswith("vllm:")
     if model_name.startswith("VL_"): clean_model_name = model_name[3:]

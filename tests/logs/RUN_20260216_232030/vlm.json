@@ -1,0 +1,38 @@
+[
+    {
+        "loadout": "OL_moondream",
+        "scenarios": [
+            {
+                "name": "jarvis_logo",
+                "status": "PASSED",
+                "duration": 0.5708530820350862,
+                "setup_time": 3.8450404121997974,
+                "cleanup_time": 2.5505259378391916,
+                "vram_prior": 2.953218355289161,
+                "vram_peak": 9.660769498264877,
+                "result": "MOCK RESULT: 274",
+                "input_file": "mock_input_jarvis_logo.wav",
+                "mode": "MOCK"
+            }
+        ],
+        "status": "PASSED"
+    },
+    {
+        "loadout": "VL_Qwen--Qwen2-VL-2B-Instruct",
+        "scenarios": [
+            {
+                "name": "jarvis_logo",
+                "status": "PASSED",
+                "duration": 0.8926300456422254,
+                "setup_time": 4.483166217277448,
+                "cleanup_time": 1.101566888653168,
+                "vram_prior": 2.3411184622429904,
+                "vram_peak": 8.483560355740158,
+                "result": "MOCK RESULT: 399",
+                "input_file": "mock_input_jarvis_logo.wav",
+                "mode": "MOCK"
+            }
+        ],
+        "status": "PASSED"
+    }
+]

@@ -12,29 +12,27 @@ def fmt_with_chunks(text, chunks):
     return _fmt_with_chunks(text, chunks)
 
 def report_llm_result(res_obj):
-    """Lean reporting: Status and Name only."""
-    status_fmt = format_status(res_obj['status'])
-    name = res_obj['name']
-    row = f"  - {status_fmt} {name}\n"
-    sys.stdout.write(row)
+    """Lean reporting: Handled by dashboard/artifacts."""
     sys.stdout.write(f"SCENARIO_RESULT: {json.dumps(res_obj)}\n")
     sys.stdout.flush()
 
 def report_scenario_result(res_obj):
-    """Lean reporting: Status and Name only."""
-    status_fmt = format_status(res_obj['status'])
-    name = res_obj['name']
-    row = f"  - {status_fmt} {name}\n"
-    sys.stdout.write(row)
+    """Lean reporting: Handled by dashboard/artifacts."""
     sys.stdout.write(f"SCENARIO_RESULT: {json.dumps(res_obj)}\n")
     sys.stdout.flush()
 
-def save_artifact(domain, data):
-    utils_dir = os.path.dirname(os.path.abspath(__file__))
-    project_root = os.path.dirname(os.path.dirname(utils_dir))
-    artifacts_dir = os.path.join(project_root, "tests", "artifacts")
+def save_artifact(domain, data, session_dir=None):
+    """Saves or appends results to the domain's JSON file in the session directory."""
+    if not session_dir:
+        # Fallback to legacy if no session dir
+        utils_dir = os.path.dirname(os.path.abspath(__file__))
+        project_root = os.path.dirname(os.path.dirname(utils_dir))
+        artifacts_dir = os.path.join(project_root, "tests", "artifacts")
+    else:
+        artifacts_dir = session_dir
+
     os.makedirs(artifacts_dir, exist_ok=True)
-    file_path = os.path.join(artifacts_dir, f"latest_{domain}.json")
+    file_path = os.path.join(artifacts_dir, f"{domain}.json")
     
     existing_data = []
     if os.path.exists(file_path):
@@ -51,23 +49,37 @@ def save_artifact(domain, data):
     
     with open(file_path, "w", encoding="utf-8") as f:
         json.dump(combined_data, f, indent=4, ensure_ascii=False)
-    print(f"✅ Artifact saved: {os.path.relpath(file_path, project_root)}")
+    # Silent save to not clutter TUI
+    # print(f"✅ Artifact saved: {os.path.relpath(file_path, project_root)}")
 
-def trigger_report_generation(upload=True):
-    print("\n" + "-"*40)
-    print("🔄 TRIGGERING AUTO-REPORT GENERATION...")
+def trigger_report_generation(upload=True, session_dir=None):
     try:
         utils_dir = os.path.dirname(os.path.abspath(__file__))
         tests_dir = os.path.dirname(utils_dir)
         if tests_dir not in sys.path:
             sys.path.append(tests_dir)
         from generate_report import generate_excel, upload_to_gdrive
-        path = generate_excel(sync_artifacts=upload)
+        
+        path = generate_excel(sync_artifacts=upload, session_dir=session_dir)
         if upload and path:
-            upload_to_gdrive(path)
+            link = upload_to_gdrive(path)
+            return link or path
+        return path
     except Exception as e:
-        print(f"⚠️ Auto-report failed: {e}")
-    print("-" * 40 + "\n")
+        sys.stderr.write(f"⚠️ Auto-report failed: {e}\n")
+        return None
+
+class ProgressionLogger:
+    """Logs clean, timestamped events to progression.log in the session directory."""
+    def __init__(self, session_dir):
+        self.session_dir = session_dir
+        self.log_path = os.path.join(session_dir, "progression.log")
+        
+    def log(self, message, level="INFO"):
+        timestamp = time.strftime("%H:%M:%S")
+        entry = f"[{timestamp}] [{level:7}] {message}\n"
+        with open(self.log_path, "a", encoding="utf-8") as f:
+            f.write(entry)
 
 class GDriveAssetManager:
     def __init__(self, service):

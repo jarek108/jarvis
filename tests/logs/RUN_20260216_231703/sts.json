@@ -1,0 +1,37 @@
+[
+    {
+        "loadout": "faster-whisper-base_OL_qwen2.5-0.5b_chatterbox-turbo",
+        "scenarios": [
+            {
+                "name": "english_std",
+                "status": "PASSED",
+                "duration": 0.9882757219788252,
+                "setup_time": 4.981568269451147,
+                "cleanup_time": 1.5335872438149347,
+                "vram_prior": 1.8616876442736756,
+                "vram_peak": 7.868102117845862,
+                "result": "MOCK RESULT: 918",
+                "input_file": "mock_input_english_std.wav",
+                "mode": "MOCK",
+                "stt_text": "Mock STT input",
+                "llm_text": "Mock LLM response",
+                "output_file": "C:\\Users\\chojn\\jarvis\\tests\\logs\\RUN_20260216_231703\\mock_sts_english_std.wav",
+                "metrics": {
+                    "stt": [
+                        0,
+                        0.21121102549498857
+                    ],
+                    "llm": [
+                        0.24266685475558206,
+                        1.2872556724726074
+                    ],
+                    "tts": [
+                        1.2906145988670843,
+                        2.1732717734670395
+                    ]
+                }
+            }
+        ],
+        "status": "PASSED"
+    }
+]

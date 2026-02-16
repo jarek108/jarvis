@@ -1,0 +1,279 @@
+[
+    {
+        "loadout": "OL_qwen2.5-0.5b",
+        "scenarios": [
+            {
+                "name": "english_std",
+                "status": "PASSED",
+                "ttft": 0.06352530000003753,
+                "tps": 266.526234914578,
+                "raw_text": "Hello! It's nice to meet you. I'm Qwen, an artificial intelligence developed by Alibaba Cloud. How can I assist you today?",
+                "thought": "",
+                "chunks": [
+                    {
+                        "text": "Hello!",
+                        "end": 0.06563479999931587
+                    },
+                    {
+                        "text": "It's nice to meet you.",
+                        "end": 0.07611759999963397
+                    },
+                    {
+                        "text": "I'm Qwen, an artificial intelligence developed by Alibaba Cloud.",
+                        "end": 0.09614759999931266
+                    },
+                    {
+                        "text": "How can I assist you today?",
+                        "end": 0.10701410000001488
+                    }
+                ],
+                "duration": 0.10880729999917094,
+                "llm_model": "OL_qwen2.5:0.5b",
+                "input_text": "Hello, this is a test of Jarvis Assistant.",
+                "streaming": true,
+                "vram_peak": 3.3154296875,
+                "vram_prior": 1.681640625,
+                "setup_time": 3.7263802999987092,
+                "cleanup_time": 23.71019890000025
+            },
+            {
+                "name": "polish_explicit",
+                "status": "PASSED",
+                "ttft": 0.0540779000002658,
+                "tps": 172.9220095125241,
+                "raw_text": "Witaj! Jak mogę Ci pomóc w dniu?",
+                "thought": "",
+                "chunks": [
+                    {
+                        "text": "Witaj!",
+                        "end": 0.059106700000484125
+                    },
+                    {
+                        "text": "Jak mogę Ci pomóc w dniu?",
+                        "end": 0.07345669999995152
+                    }
+                ],
+                "duration": 0.07517840000036813,
+                "llm_model": "OL_qwen2.5:0.5b",
+                "input_text": "Cześć, nazywam się Jarvis, jak mogę ci dzisiaj pomóc?",
+                "streaming": true,
+                "vram_peak": 3.3154296875,
+                "vram_prior": 1.681640625,
+                "setup_time": 3.7263802999987092,
+                "cleanup_time": 23.71019890000025
+            },
+            {
+                "name": "short2long",
+                "status": "PASSED",
+                "ttft": 0.05413079999925685,
+                "tps": 566.0046828703167,
+                "raw_text": "Once upon a time, in a small village nestled between the mountains and the sea, there lived a loyal and playful dog named Max. Max was known for his quick wit and his ability to outsmart even the bravest of humans. He would often play fetch with his owner, Max's human, and they would race through the fields and over the hills together.\n\nMax had a special bond with his owner, but he also loved playing alone. One day, Max decided it was time for him to take a break from his adventures and spend some quality time with his family. He snuggled up against his owner's chest, feeling safe and secure in the company of his furry friend.\n\nAs they walked through the fields, Max wagged his tail and barked excitedly, his playful energy always keeping him company. They laughed and played games together, and Max felt content and happy that he had found a new way to bond with his human companion.\n\nMax's adventures continued in the village, but he never forgot about his family or the love he had for them. He would often return home at night, snuggling up against his owner's chest and dreaming of all the fun games they could play together.",
+                "thought": "",
+                "chunks": [
+                    {
+                        "text": "Once upon a time, in a small village nestled between the mountains and the sea, there lived a loyal and playful dog named Max.",
+                        "end": 0.09518720000050962
+                    },
+                    {
+                        "text": "Max was known for his quick wit and his ability to outsmart even the bravest of humans.",
+                        "end": 0.12751720000051137
+                    },
+                    {
+                        "text": "He would often play fetch with his owner, Max's human, and they would race through the fields and over the hills together.",
+                        "end": 0.16696289999890723
+                    },
+                    {
+                        "text": "Max had a special bond with his owner, but he also loved playing alone.",
+                        "end": 0.19108559999949648
+                    },
+                    {
+                        "text": "One day, Max decided it was time for him to take a break from his adventures and spend some quality time with his family.",
+                        "end": 0.2306537999993452
+                    },
+                    {
+                        "text": "He snuggled up against his owner's chest, feeling safe and secure in the company of his furry friend.",
+                        "end": 0.2656793000005564
+                    },
+                    {
+                        "text": "As they walked through the fields, Max wagged his tail and barked excitedly, his playful energy always keeping him company.",
+                        "end": 0.30541359999915585
+                    },
+                    {
+                        "text": "They laughed and played games together, and Max felt content and happy that he had found a new way to bond with his human companion.",
+                        "end": 0.34654649999902176
+                    },
+                    {
+                        "text": "Max's adventures continued in the village, but he never forgot about his family or the love he had for them.",
+                        "end": 0.3815529000003153
+                    },
+                    {
+                        "text": "He would often return home at night, snuggling up against his owner's chest and dreaming of all the fun games they could play together.",
+                        "end": 0.42592250000052445
+                    }
+                ],
+                "duration": 0.42755829999987327,
+                "llm_model": "OL_qwen2.5:0.5b",
+                "input_text": "Tell me a four to five sentences story about a dog.",
+                "streaming": true,
+                "vram_peak": 3.3154296875,
+                "vram_prior": 1.681640625,
+                "setup_time": 3.7263802999987092,
+                "cleanup_time": 23.71019890000025
+            },
+            {
+                "name": "long2short",
+                "status": "PASSED",
+                "ttft": 0.056249199999001576,
+                "tps": 149.97634464031265,
+                "raw_text": "\"Women and Men: A Tale of Two Worlds\"",
+                "thought": "",
+                "chunks": [
+                    {
+                        "text": "\"Women and Men: A Tale of Two Worlds\"",
+                        "end": 0.0733421000004455
+                    }
+                ],
+                "duration": 0.0733448999999382,
+                "llm_model": "OL_qwen2.5:0.5b",
+                "input_text": "It is a truth universally acknowledged, that a single man in possession of a good fortune, must be in want of a wife. However little known the feelings or views of such a man may be on his first entering a neighbourhood, this truth is so well fixed in the minds of the surrounding families, that he is considered the rightful property of some one or other of their daughters. What is the title of this book? Respond with title only.",
+                "streaming": true,
+                "vram_peak": 3.3154296875,
+                "vram_prior": 1.681640625,
+                "setup_time": 3.7263802999987092,
+                "cleanup_time": 23.71019890000025
+            }
+        ],
+        "status": "PASSED"
+    },
+    {
+        "loadout": "VL_Qwen--Qwen2.5-0.5B-Instruct",
+        "scenarios": [],
+        "status": "FAILED"
+    },
+    {
+        "loadout": "OL_gpt-oss-20b",
+        "scenarios": [
+            {
+                "name": "english_std",
+                "status": "PASSED",
+                "ttft": 23.43645170000127,
+                "tps": 1.0621007008517869,
+                "raw_text": "Hello! 👋 I’m Jarvis Assistant, ready to help you with whatever you need. How can I assist you today?",
+                "thought": "",
+                "chunks": [
+                    {
+                        "text": "Hello!",
+                        "end": 23.440299500000037
+                    },
+                    {
+                        "text": "👋 I’m Jarvis Assistant, ready to help you with whatever you need.",
+                        "end": 23.506499900000563
+                    },
+                    {
+                        "text": "How can I assist you today?",
+                        "end": 23.534235900000567
+                    }
+                ],
+                "duration": 23.53825770000003,
+                "llm_model": "OL_gpt-oss:20b",
+                "input_text": "Hello, this is a test of Jarvis Assistant.",
+                "streaming": true,
+                "vram_peak": 15.109375,
+                "vram_prior": 1.681640625,
+                "setup_time": 302.8308265000014,
+                "cleanup_time": 23.74997110000004
+            },
+            {
+                "name": "polish_explicit",
+                "status": "PASSED",
+                "ttft": 0.6558659999991505,
+                "tps": 28.36393193793501,
+                "raw_text": "Cześć Jarvis! Jestem ChatGPT. Jak mogę Ci dzisiaj pomóc?",
+                "thought": "",
+                "chunks": [
+                    {
+                        "text": "Cześć Jarvis!",
+                        "end": 0.6754662000003009
+                    },
+                    {
+                        "text": "Jestem ChatGPT.",
+                        "end": 0.6969766000001982
+                    },
+                    {
+                        "text": "Jak mogę Ci dzisiaj pomóc?",
+                        "end": 0.7362629999988712
+                    }
+                ],
+                "duration": 0.740376899999319,
+                "llm_model": "OL_gpt-oss:20b",
+                "input_text": "Cześć, nazywam się Jarvis, jak mogę ci dzisiaj pomóc?",
+                "streaming": true,
+                "vram_peak": 15.109375,
+                "vram_prior": 1.681640625,
+                "setup_time": 302.8308265000014,
+                "cleanup_time": 23.74997110000004
+            },
+            {
+                "name": "short2long",
+                "status": "PASSED",
+                "ttft": 0.31286200000067765,
+                "tps": 152.93719615399704,
+                "raw_text": "Milo, a scruffy terrier with a nose that could sniff out trouble, lived on the edge of a sleepy coastal town. One stormy night, he heard a faint whimper coming from the abandoned lighthouse, and his curiosity pulled him toward the crumbling beams. Inside, he found a tiny, shivering kitten that had slipped from a passing boat. Milo wrapped his warm fur around the kitten, and together they made a pact to protect each other. By dawn, the lighthouse was no longer a lonely ruin but a beacon of friendship, and Milo’s heroic tail wagged louder than any siren.",
+                "thought": "",
+                "chunks": [
+                    {
+                        "text": "Milo, a scruffy terrier with a nose that could sniff out trouble, lived on the edge of a sleepy coastal town.",
+                        "end": 0.41585549999945215
+                    },
+                    {
+                        "text": "One stormy night, he heard a faint whimper coming from the abandoned lighthouse, and his curiosity pulled him toward the crumbling beams.",
+                        "end": 0.5268085000006977
+                    },
+                    {
+                        "text": "Inside, he found a tiny, shivering kitten that had slipped from a passing boat.",
+                        "end": 0.5978921000005357
+                    },
+                    {
+                        "text": "Milo wrapped his warm fur around the kitten, and together they made a pact to protect each other.",
+                        "end": 0.6807506999994075
+                    },
+                    {
+                        "text": "By dawn, the lighthouse was no longer a lonely ruin but a beacon of friendship, and Milo’s heroic tail wagged louder than any siren.",
+                        "end": 0.8001920000006066
+                    }
+                ],
+                "duration": 0.8042516999994405,
+                "llm_model": "OL_gpt-oss:20b",
+                "input_text": "Tell me a four to five sentences story about a dog.",
+                "streaming": true,
+                "vram_peak": 15.109375,
+                "vram_prior": 1.681640625,
+                "setup_time": 302.8308265000014,
+                "cleanup_time": 23.74997110000004
+            },
+            {
+                "name": "long2short",
+                "status": "PASSED",
+                "ttft": 0.4917746999999508,
+                "tps": 9.779918580226138,
+                "raw_text": "Pride and Prejudice",
+                "thought": "",
+                "chunks": [
+                    {
+                        "text": "Pride and Prejudice",
+                        "end": 0.5112456000006205
+                    }
+                ],
+                "duration": 0.5112516999997752,
+                "llm_model": "OL_gpt-oss:20b",
+                "input_text": "It is a truth universally acknowledged, that a single man in possession of a good fortune, must be in want of a wife. However little known the feelings or views of such a man may be on his first entering a neighbourhood, this truth is so well fixed in the minds of the surrounding families, that he is considered the rightful property of some one or other of their daughters. What is the title of this book? Respond with title only.",
+                "streaming": true,
+                "vram_peak": 15.109375,
+                "vram_prior": 1.681640625,
+                "setup_time": 302.8308265000014,
+                "cleanup_time": 23.74997110000004
+            }
+        ],
+        "status": "PASSED"
+    }
+]

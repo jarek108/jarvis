@@ -17,7 +17,7 @@ def calculate_similarity(a, b):
     import difflib
     return difflib.SequenceMatcher(None, a.lower(), b.lower()).ratio()
 
-def run_test_suite(model_id, scenarios_to_run=None, trim_length=80):
+def run_test_suite(model_id, scenarios_to_run=None, trim_length=80, output_dir=None):
     cfg = load_config()
     port = cfg['stt_loadout'].get(model_id)
     if not port:
@@ -26,6 +26,10 @@ def run_test_suite(model_id, scenarios_to_run=None, trim_length=80):
         
     url = f"http://127.0.0.1:{port}/transcribe"
     input_dir = os.path.join(os.path.dirname(__file__), "whisper", "input_data")
+    
+    # Use session output dir if provided
+    final_results_dir = output_dir if output_dir else os.path.join(os.path.dirname(__file__), "results")
+    os.makedirs(final_results_dir, exist_ok=True)
     
     for s in scenarios_to_run:
         audio_path = os.path.join(input_dir, s['input'])

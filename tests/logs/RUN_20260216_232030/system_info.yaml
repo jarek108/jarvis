@@ -1,0 +1,49 @@
+timestamp: '2026-02-16 23:20:30'
+host:
+  os: Windows-10-10.0.26100-SP0
+  cpu_count: 32
+  total_ram_gb: 93.64
+  gpu: NVIDIA GeForce RTX 5090
+environment:
+  HF_HOME: D:\jarek\critical_storage\huggingface
+  OLLAMA_MODELS: D:\jarek\critical_storage\.ollama\models
+git:
+  hash: cc6c124161a636690f9bf38d90f49d623f4d7720
+  branch: main
+plan:
+  name: Fast Health Check
+  description: Minimal verification of the core stack.
+  settings:
+    purge_on_entry: true
+    purge_on_exit: false
+    track_prior_vram: true
+  execution:
+  - domain: llm
+    loadouts:
+    - - OL_qwen2.5:0.5b
+    scenarios:
+    - english_std
+    - polish_explicit
+  - domain: vlm
+    loadouts:
+    - - OL_moondream
+    - - VL_Qwen/Qwen2-VL-2B-Instruct
+    scenarios:
+    - jarvis_logo
+  - domain: stt
+    loadouts:
+    - - faster-whisper-base
+    scenarios:
+    - english_std
+  - domain: tts
+    loadouts:
+    - - chatterbox-turbo
+    scenarios:
+    - standard
+  - domain: sts
+    loadouts:
+    - - faster-whisper-base
+      - OL_qwen2.5:0.5b
+      - chatterbox-turbo
+    scenarios:
+    - english_std

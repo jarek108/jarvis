@@ -1,0 +1,38 @@
+[
+    {
+        "loadout": "OL_qwen2.5-0.5b",
+        "scenarios": [
+            {
+                "name": "english_std",
+                "status": "PASSED",
+                "duration": 0.9571179901840052,
+                "setup_time": 2.918650924960921,
+                "cleanup_time": 2.7941317306490223,
+                "vram_prior": 3.135800956365096,
+                "vram_peak": 8.118681201323627,
+                "result": "MOCK RESULT: 333",
+                "input_file": "mock_input_english_std.wav",
+                "mode": "MOCK",
+                "ttft": 0.18254239659997637,
+                "tps": 46.22644548367424,
+                "text": "This is a mock LLM response."
+            },
+            {
+                "name": "polish_explicit",
+                "status": "PASSED",
+                "duration": 0.6840684450631442,
+                "setup_time": 2.918650924960921,
+                "cleanup_time": 1.420669369020325,
+                "vram_prior": 1.5273296153608575,
+                "vram_peak": 5.637611449653926,
+                "result": "MOCK RESULT: 558",
+                "input_file": "mock_input_polish_explicit.wav",
+                "mode": "MOCK",
+                "ttft": 0.20351457200264564,
+                "tps": 27.163357676054638,
+                "text": "This is a mock LLM response."
+            }
+        ],
+        "status": "PASSED"
+    }
+]

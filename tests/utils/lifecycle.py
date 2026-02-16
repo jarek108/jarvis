@@ -12,7 +12,7 @@ from .vram import get_service_status, get_loaded_ollama_models, get_system_healt
 from .llm import check_and_pull_model, warmup_llm, is_model_local
 
 class LifecycleManager:
-    def __init__(self, setup_name, models=None, purge_on_entry=True, purge_on_exit=False, full=False, benchmark_mode=False, force_download=False, track_prior_vram=True):
+    def __init__(self, setup_name, models=None, purge_on_entry=True, purge_on_exit=False, full=False, benchmark_mode=False, force_download=False, track_prior_vram=True, session_dir=None, progression_logger=None, on_phase=None):
         self.setup_name = setup_name
         self.models = models or [] # List of model strings
         self.purge_on_entry = purge_on_entry
@@ -21,6 +21,9 @@ class LifecycleManager:
         self.benchmark_mode = benchmark_mode
         self.force_download = force_download
         self.track_prior_vram = track_prior_vram
+        self.session_dir = session_dir
+        self.progression_logger = progression_logger
+        self.on_phase = on_phase
         self.cfg = load_config()
         self.project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
         self.python_exe = resolve_path(self.cfg['paths']['venv_python'])
@@ -215,103 +218,89 @@ class LifecycleManager:
     def reconcile(self, domain):
         ensure_utf8_output()
         model_str = self.format_models_for_display()
-        print(f"\n--- JARVIS LIFECYCLE RECONCILER [Models: {model_str}] ---")
+        if self.progression_logger:
+            self.progression_logger.log(f"Reconciling Lifecycle for {domain.upper()} with models: {model_str}")
         
         prior_vram = 0.0
         if self.track_prior_vram:
-            print("🧹 TRACK PRIOR VRAM: Performing global cleanup for clean baseline...")
             kill_all_jarvis_services()
             from .vram import get_gpu_vram_usage
             prior_vram = get_gpu_vram_usage()
-            print(f"  ↳ Baseline External VRAM: {prior_vram:.1f} GB")
 
         required_services = self.get_required_services(domain)
         required_ports = {s['port'] for s in required_services}
 
+        # MANDATORY OLLAMA KILL if in required services to ensure fresh logs
+        ollama_port = self.cfg['ports']['ollama']
+        if ollama_port in required_ports:
+            cat = self.identify_models()
+            if cat['llm'] and cat['llm']['engine'] == "ollama":
+                if self.progression_logger: self.progression_logger.log("Mandatory Ollama cleanup for fresh logging...")
+                kill_process_on_port(ollama_port)
+
         # 1. Check availability
         if not self.check_availability():
-            print(f"❌ MISSING MODELS: {', '.join(self.missing_models)}")
+            if self.progression_logger: self.progression_logger.log(f"MISSING MODELS: {', '.join(self.missing_models)}", level="ERROR")
             return -1, prior_vram # Sentinel for missing
         
         if self.purge_on_entry and not self.track_prior_vram:
-            print("🧹 PURGE ON ENTRY: Cleaning up foreign Jarvis services...")
             for port in get_jarvis_ports():
                 if port not in required_ports and is_port_in_use(port):
-                    print(f"  ↳ Killing orphaned service on port {port}")
                     kill_process_on_port(port)
-            
-            # Special check for Ollama model mismatch
-            ollama_port = self.cfg['ports']['ollama']
-            if ollama_port in required_ports:
-                cat = self.identify_models()
-                if cat['llm'] and cat['llm']['engine'] == "ollama":
-                    target_llm = cat['llm']['model']
-                    loaded = get_loaded_ollama_models()
-                    if loaded and not any(target_llm in m for m in loaded):
-                        print(f"  ↳ ☢️ OLLAMA PURGE: Mismatched models loaded ({loaded}). Restarting Ollama...")
-                        kill_process_on_port(ollama_port)
 
         setup_start = time.perf_counter()
         
         # Setup Persistent Logging Path
-        log_dir = os.path.join(self.project_root, "tests", "artifacts", "logs")
+        log_dir = self.session_dir if self.session_dir else os.path.join(self.project_root, "tests", "artifacts", "logs")
         os.makedirs(log_dir, exist_ok=True)
         timestamp = time.strftime("%Y%m%d_%H%M%S")
 
         for s in required_services:
-            # Special case for Ollama - we handle its startup above for logging (if not already healthy)
-            if s['type'] == 'llm' and 'ollama' in str(s['cmd']):
-                # But even if it's already healthy, we don't restart it.
-                # If we did start it above, it's already in owned_processes.
-                if any(p[0] == s['port'] for p in self.owned_processes):
-                    continue
-                # If it's already ON, we just skip it here
-                status, _ = get_service_status(s['port'])
-                if status == "ON":
-                    print(f"✅ Service LLM [Ollama] already healthy.")
-                    continue
-
             status, info = get_service_status(s['port'])
-            if status == "ON": print(f"✅ Service {s['type'].upper()} [{s['id']}] already healthy.")
+            if status == "ON": 
+                if self.progression_logger: self.progression_logger.log(f"Service {s['type'].upper()} [{s['id']}] already healthy.")
             else:
                 if status != "OFF":
-                    print(f"⚠️ Service on port {s['port']} is {status}. Rebirthing...")
                     kill_process_on_port(s['port'])
                 
-                print(f"🚀 Starting {s['type'].upper()} [{s['id']}]...")
-                log_path = os.path.join(log_dir, f"{s['type']}_{s['id'].replace(':', '-').replace('/', '--')}_{timestamp}.log")
+                if self.progression_logger: self.progression_logger.log(f"Starting {s['type'].upper()} [{s['id']}]...")
+                log_path = os.path.join(log_dir, f"svc_{s['type']}_{s['id'].replace(':', '-').replace('/', '--')}_{timestamp}.log")
                 
-                # Use a context manager to ensure the file is closed if start_server fails, 
-                # but start_server returns immediately, so we need to keep it open or let Popen handle it.
+                # Signal log path to dashboard with type
+                if self.on_phase:
+                    self.on_phase(f"log_path:{s['type']}:{log_path}")
+
                 f_log = open(log_path, "w")
                 proc = start_server(s['cmd'], log_file=f_log)
                 self.owned_processes.append((s['port'], proc))
                 
-                # For vLLM (docker -d), the process exits immediately, so don't pass it to wait_for_port
                 is_vllm = 'docker' in str(s['cmd'])
                 wait_proc = None if is_vllm else proc
-                
-                # Use global timeout from config
                 timeout = self.cfg.get('vllm', {}).get('model_startup_timeout', 600)
                 
                 if not wait_for_port(s['port'], process=wait_proc, timeout=timeout):
                     if is_vllm:
                         from .infra import get_vllm_logs
-                        print("\n--- vLLM DOCKER LOGS ---")
-                        print(get_vllm_logs())
-                        print("------------------------\n")
+                        with open(os.path.join(log_dir, f"docker_vllm_fail_{timestamp}.log"), "w") as f_fail:
+                            f_fail.write(get_vllm_logs())
                     
-                    # Read back some logs on failure
-                    try:
-                        f_log.flush()
-                        with open(log_path, "r") as f_read:
-                            lines = f_read.readlines()
-                            print(f"\n--- {s['type'].upper()} SERVER LOGS (Last 20 lines) ---")
-                            print("".join(lines[-20:]))
-                            print("------------------------------------------\n")
-                    except: pass
-                    
+                    if self.progression_logger: self.progression_logger.log(f"FAILED to start {s['id']} on port {s['port']}", level="ERROR")
                     raise RuntimeError(f"FAILED to start {s['id']} on port {s['port']} after {timeout}s")
+        
+        # Warmup LLM
+        if domain in ["llm", "vlm", "sts"] or self.full:
+            cat = self.identify_models()
+            if cat['llm']:
+                engine = cat['llm']['engine']
+                model = cat['llm']['model']
+                if engine == "ollama":
+                    check_and_pull_model(model, force_pull=self.force_download)
+                
+                if self.progression_logger: self.progression_logger.log(f"Warming up LLM: {model}")
+                warmup_llm(model, visual=(domain == "vlm"), engine=engine)
+        
+        return time.perf_counter() - setup_start, prior_vram
+
         
         # Warmup LLM
         if domain in ["llm", "vlm", "sts"] or self.full:
@@ -341,12 +330,13 @@ class LifecycleManager:
         for port, _ in self.owned_processes: kill_process_on_port(port)
         return time.perf_counter() - start_c
 
-def run_test_lifecycle(domain, setup_name, models, purge_on_entry, purge_on_exit, full, test_func, benchmark_mode=False, force_download=False, track_prior_vram=True):
+def run_test_lifecycle(domain, setup_name, models, purge_on_entry, purge_on_exit, full, test_func, benchmark_mode=False, force_download=False, track_prior_vram=True, session_dir=None, progression_logger=None, on_phase=None):
     ensure_utf8_output()
-    manager = LifecycleManager(setup_name, models=models, purge_on_entry=purge_on_entry, purge_on_exit=purge_on_exit, full=full, benchmark_mode=benchmark_mode, force_download=force_download, track_prior_vram=track_prior_vram)
+    manager = LifecycleManager(setup_name, models=models, purge_on_entry=purge_on_entry, purge_on_exit=purge_on_exit, full=full, benchmark_mode=benchmark_mode, force_download=force_download, track_prior_vram=track_prior_vram, session_dir=session_dir, progression_logger=progression_logger, on_phase=on_phase)
     model_display = manager.format_models_for_display()
     
     try:
+        if on_phase: on_phase("setup")
         setup_time, prior_vram = manager.reconcile(domain)
         if setup_time == -1:
             # Report MISSING
@@ -360,16 +350,15 @@ def run_test_lifecycle(domain, setup_name, models, purge_on_entry, purge_on_exit
             report_scenario_result(res_obj)
             return 0, 0, prior_vram, model_display
 
-        print("\n" + "="*LINE_LEN)
-        print(f"{BOLD}{CYAN}{domain.upper() + ' [' + model_display + '] TEST SUITE':^120}{RESET}")
-        print("="*LINE_LEN)
+        if on_phase: on_phase("execution")
+        if progression_logger: progression_logger.log(f"Entering {domain.upper()} test suite execution.")
+        
         f = LiveFilter(); proc_start = time.perf_counter()
         with redirect_stdout(f): test_func()
         proc_time = time.perf_counter() - proc_start
+        
+        if on_phase: on_phase("cleanup")
         cleanup_time = manager.cleanup()
-        print("="*LINE_LEN)
-        print(f"{BOLD}Final Receipt:{RESET} Setup: {setup_time:.1f}s | Processing: {proc_time:.1f}s | Cleanup: {cleanup_time:.1f}s")
-        print("="*LINE_LEN + "\n")
         
         return setup_time, cleanup_time, prior_vram, model_display
     except Exception as e:
@@ -385,6 +374,6 @@ def run_test_lifecycle(domain, setup_name, models, purge_on_entry, purge_on_exit
             "llm_model": model_display, "stt_model": model_display, "tts_model": model_display
         }
         report_scenario_result(res_obj)
-        print(f"❌ LIFECYCLE ERROR: {e}")
+        if progression_logger: progression_logger.log(f"LIFECYCLE ERROR: {e}", level="ERROR")
         cleanup_time = manager.cleanup()
         return 0, cleanup_time, 0.0, model_display

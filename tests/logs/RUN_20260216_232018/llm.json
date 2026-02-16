@@ -1,0 +1,148 @@
+[
+    {
+        "loadout": "OL_qwen2.5-0.5b",
+        "scenarios": [
+            {
+                "name": "english_std",
+                "status": "PASSED",
+                "ttft": 0.06270619999850169,
+                "tps": 257.28949948596454,
+                "raw_text": "Hello! It's nice to meet you. I'm Qwen, an artificial intelligence developed by Alibaba Cloud. How can I assist you today?",
+                "thought": "",
+                "chunks": [
+                    {
+                        "text": "Hello!",
+                        "end": 0.06480759999976726
+                    },
+                    {
+                        "text": "It's nice to meet you.",
+                        "end": 0.07580179999968095
+                    },
+                    {
+                        "text": "I'm Qwen, an artificial intelligence developed by Alibaba Cloud.",
+                        "end": 0.0984811999987869
+                    },
+                    {
+                        "text": "How can I assist you today?",
+                        "end": 0.1108723999986978
+                    }
+                ],
+                "duration": 0.11271349999879021,
+                "llm_model": "OL_qwen2.5:0.5b",
+                "input_text": "Hello, this is a test of Jarvis Assistant.",
+                "streaming": true,
+                "vram_peak": 3.2978515625,
+                "vram_prior": 1.6376953125,
+                "setup_time": 3.803421900000103,
+                "cleanup_time": 23.743678400000135
+            },
+            {
+                "name": "polish_explicit",
+                "status": "PASSED",
+                "ttft": 0.057722999999896274,
+                "tps": 164.689338898875,
+                "raw_text": "Witaj! Jak mogę Ci pomóc w dniu?",
+                "thought": "",
+                "chunks": [
+                    {
+                        "text": "Witaj!",
+                        "end": 0.06278419999944163
+                    },
+                    {
+                        "text": "Jak mogę Ci pomóc w dniu?",
+                        "end": 0.07698329999948328
+                    }
+                ],
+                "duration": 0.07893650000005437,
+                "llm_model": "OL_qwen2.5:0.5b",
+                "input_text": "Cześć, nazywam się Jarvis, jak mogę ci dzisiaj pomóc?",
+                "streaming": true,
+                "vram_peak": 3.2978515625,
+                "vram_prior": 1.6376953125,
+                "setup_time": 3.803421900000103,
+                "cleanup_time": 23.743678400000135
+            },
+            {
+                "name": "short2long",
+                "status": "PASSED",
+                "ttft": 0.06179750000046624,
+                "tps": 547.8328231554268,
+                "raw_text": "Once upon a time, in a small village nestled between the mountains and the sea, there lived a loyal and playful dog named Max. Max was known for his quick wit and his ability to outsmart even the bravest of humans. He would often play fetch with his owner, Max's human, and they would race through the fields and over the hills together.\n\nMax had a special bond with his owner, but he also loved playing alone. One day, Max decided it was time for him to take a break from his adventures and spend some quality time with his family. He snuggled up against his owner's chest, feeling safe and secure in the company of his furry friend.\n\nAs they walked through the fields, Max wagged his tail and barked excitedly, his playful energy always keeping him company. They laughed and played games together, and Max felt content and happy that he had found a new way to bond with his human companion.\n\nMax's adventures continued in the village, but he never forgot about his family or the love he had for them. He would often return home at night, snuggling up against his owner's chest and dreaming of all the fun games they could play together.",
+                "thought": "",
+                "chunks": [
+                    {
+                        "text": "Once upon a time, in a small village nestled between the mountains and the sea, there lived a loyal and playful dog named Max.",
+                        "end": 0.108752000000095
+                    },
+                    {
+                        "text": "Max was known for his quick wit and his ability to outsmart even the bravest of humans.",
+                        "end": 0.144672399999763
+                    },
+                    {
+                        "text": "He would often play fetch with his owner, Max's human, and they would race through the fields and over the hills together.",
+                        "end": 0.18450990000019374
+                    },
+                    {
+                        "text": "Max had a special bond with his owner, but he also loved playing alone.",
+                        "end": 0.20874609999918903
+                    },
+                    {
+                        "text": "One day, Max decided it was time for him to take a break from his adventures and spend some quality time with his family.",
+                        "end": 0.24756239999987883
+                    },
+                    {
+                        "text": "He snuggled up against his owner's chest, feeling safe and secure in the company of his furry friend.",
+                        "end": 0.2821817000003648
+                    },
+                    {
+                        "text": "As they walked through the fields, Max wagged his tail and barked excitedly, his playful energy always keeping him company.",
+                        "end": 0.32154540000010456
+                    },
+                    {
+                        "text": "They laughed and played games together, and Max felt content and happy that he had found a new way to bond with his human companion.",
+                        "end": 0.3620439999995142
+                    },
+                    {
+                        "text": "Max's adventures continued in the village, but he never forgot about his family or the love he had for them.",
+                        "end": 0.3967644000003929
+                    },
+                    {
+                        "text": "He would often return home at night, snuggling up against his owner's chest and dreaming of all the fun games they could play together.",
+                        "end": 0.4401283000006515
+                    }
+                ],
+                "duration": 0.4417405999993207,
+                "llm_model": "OL_qwen2.5:0.5b",
+                "input_text": "Tell me a four to five sentences story about a dog.",
+                "streaming": true,
+                "vram_peak": 3.2978515625,
+                "vram_prior": 1.6376953125,
+                "setup_time": 3.803421900000103,
+                "cleanup_time": 23.743678400000135
+            },
+            {
+                "name": "long2short",
+                "status": "PASSED",
+                "ttft": 0.05816939999931492,
+                "tps": 146.13687179552136,
+                "raw_text": "\"Women and Men: A Tale of Two Worlds\"",
+                "thought": "",
+                "chunks": [
+                    {
+                        "text": "\"Women and Men: A Tale of Two Worlds\"",
+                        "end": 0.07526870000037889
+                    }
+                ],
+                "duration": 0.07527189999927941,
+                "llm_model": "OL_qwen2.5:0.5b",
+                "input_text": "It is a truth universally acknowledged, that a single man in possession of a good fortune, must be in want of a wife. However little known the feelings or views of such a man may be on his first entering a neighbourhood, this truth is so well fixed in the minds of the surrounding families, that he is considered the rightful property of some one or other of their daughters. What is the title of this book? Respond with title only.",
+                "streaming": true,
+                "vram_peak": 3.2978515625,
+                "vram_prior": 1.6376953125,
+                "setup_time": 3.803421900000103,
+                "cleanup_time": 23.743678400000135
+            }
+        ],
+        "status": "PASSED"
+    }
+]

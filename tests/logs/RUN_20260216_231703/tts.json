@@ -1,0 +1,22 @@
+[
+    {
+        "loadout": "chatterbox-turbo",
+        "scenarios": [
+            {
+                "name": "standard",
+                "status": "PASSED",
+                "duration": 0.9295282600456891,
+                "setup_time": 3.270283906069059,
+                "cleanup_time": 1.7257481888463946,
+                "vram_prior": 2.2735597070940305,
+                "vram_peak": 6.089151405520636,
+                "result": "MOCK RESULT: 360",
+                "input_file": "mock_input_standard.wav",
+                "mode": "MOCK",
+                "output_file": "C:\\Users\\chojn\\jarvis\\tests\\logs\\RUN_20260216_231703\\mock_chatterbox-turbo_standard.wav",
+                "input_text": "Sample TTS input."
+            }
+        ],
+        "status": "PASSED"
+    }
+]

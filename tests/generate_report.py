@@ -69,14 +69,20 @@ def upload_to_gdrive(file_path):
         print("❌ GDrive Upload Failed (no link returned).")
     return link
 
-def generate_excel(sync_artifacts=True):
+def generate_excel(sync_artifacts=True, session_dir=None):
     try:
         project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        artifacts_dir = os.path.join(project_root, "tests", "artifacts")
+        
+        if session_dir:
+            artifacts_dir = session_dir
+            output_dir = session_dir
+        else:
+            artifacts_dir = os.path.join(project_root, "tests", "artifacts")
+            output_dir = artifacts_dir
         
         date_str = time.strftime("%Y-%m-%d_%H-%M-%S")
         file_name = f"Jarvis_Benchmark_Report_{date_str}.xlsx"
-        output_path = os.path.join(artifacts_dir, file_name)
+        output_path = os.path.join(output_dir, file_name)
         
         service = get_gdrive_service() if sync_artifacts else None
         asset_mgr = GDriveAssetManager(service) if service else None
@@ -86,6 +92,11 @@ def generate_excel(sync_artifacts=True):
 
         sheets = {}
         has_any_data = False
+
+        # Helper for loading data
+        def load_domain_data(domain):
+            fname = f"{domain}.json" if session_dir else f"latest_{domain}.json"
+            return load_json(os.path.join(artifacts_dir, fname))
 
         # Helper for totals
         def append_total_row(df, duration_cols=None):
@@ -125,10 +136,9 @@ def generate_excel(sync_artifacts=True):
             return base
 
         # 1. STT
-        stt_path = os.path.join(artifacts_dir, "latest_stt.json")
-        data = load_json(stt_path)
+        data = load_domain_data("stt")
         if data:
-            print(f"📁 Loading STT data from {stt_path}...")
+            print(f"📁 Loading STT data...")
             rows = []
             for entry in data:
                 for s in entry.get('scenarios', []):
@@ -155,10 +165,9 @@ def generate_excel(sync_artifacts=True):
                 has_any_data = True
 
         # 2. TTS
-        tts_path = os.path.join(artifacts_dir, "latest_tts.json")
-        data = load_json(tts_path)
+        data = load_domain_data("tts")
         if data:
-            print(f"📁 Loading TTS data from {tts_path}...")
+            print(f"📁 Loading TTS data...")
             rows = []
             for entry in data:
                 for s in entry.get('scenarios', []):
@@ -183,10 +192,9 @@ def generate_excel(sync_artifacts=True):
                 has_any_data = True
 
         # 3. LLM
-        llm_path = os.path.join(artifacts_dir, "latest_llm.json")
-        data = load_json(llm_path)
+        data = load_domain_data("llm")
         if data:
-            print(f"📁 Loading LLM data from {llm_path}...")
+            print(f"📁 Loading LLM data...")
             rows = []
             for entry in data:
                 for s in entry.get('scenarios', []):
@@ -220,10 +228,9 @@ def generate_excel(sync_artifacts=True):
                 has_any_data = True
 
         # 4. VLM
-        vlm_path = os.path.join(artifacts_dir, "latest_vlm.json")
-        data = load_json(vlm_path)
+        data = load_domain_data("vlm")
         if data:
-            print(f"📁 Loading VLM data from {vlm_path}...")
+            print(f"📁 Loading VLM data...")
             rows = []
             for entry in data:
                 for s in entry.get('scenarios', []):
@@ -259,10 +266,9 @@ def generate_excel(sync_artifacts=True):
                 has_any_data = True
 
         # 5. STS
-        sts_path = os.path.join(artifacts_dir, "latest_sts.json")
-        data = load_json(sts_path)
+        data = load_domain_data("sts")
         if data:
-            print(f"📁 Loading STS data from {sts_path}...")
+            print(f"📁 Loading STS data...")
             rows = []
             for entry in data:
                 setup = entry.get('loadout', 'unknown')

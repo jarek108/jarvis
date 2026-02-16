@@ -1,0 +1,23 @@
+[
+    {
+        "loadout": "faster-whisper-base",
+        "scenarios": [
+            {
+                "name": "english_std",
+                "status": "PASSED",
+                "duration": 0.13316179999947053,
+                "result": "Match: 100.0% | [Hello, this is a test of Tatterbox TTS.]",
+                "match_pct": 1.0,
+                "stt_model": "faster-whisper-base",
+                "input_file": "C:\\Users\\chojn\\jarvis\\tests\\stt\\whisper\\input_data\\input.wav",
+                "input_text": "Hello, this is a test of Tatterbox TTS.",
+                "output_text": "Hello, this is a test of Tatterbox TTS.",
+                "vram_peak": 2.548828125,
+                "setup_time": 5.119798400000036,
+                "cleanup_time": 2.1210511999997834,
+                "vram_prior": 1.8330078125
+            }
+        ],
+        "status": "PASSED"
+    }
+]
