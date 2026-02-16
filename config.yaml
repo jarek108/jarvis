@@ -35,12 +35,12 @@ vllm:
     "moondream": 2.0
     "qwen2-vl-2b": 12.0
     "qwen3-vl-30b": 30.0
-    "qwen3-vl-30b-a3b-instruct-awq": 12.0
-    "default": 8.0
+    "qwen3-vl-30b-a3b-instruct-awq": 24.0
+    "default": 30.0
   # Context window overrides
   model_max_len_map:
     "qwen3-vl-30b": 16384
-    "default": 32768
+    "default": 16384
   # Multi-modal limits (JSON strings)
   model_mm_limit_map:
     "default": '{"image": 1}'

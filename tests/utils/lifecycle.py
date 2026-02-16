@@ -3,6 +3,7 @@ import sys
 import time
 import yaml
 import json
+import subprocess
 from contextlib import redirect_stdout
 from .config import load_config, resolve_path, get_hf_home, get_ollama_models
 from .ui import ensure_utf8_output, LiveFilter, BOLD, CYAN, RESET, LINE_LEN
@@ -227,23 +228,7 @@ class LifecycleManager:
         required_services = self.get_required_services(domain)
         required_ports = {s['port'] for s in required_services}
 
-        # 1. Start LLM Engine FIRST if it's Ollama, so we can check availability
-        ollama_port = self.cfg['ports']['ollama']
-        if ollama_port in required_ports:
-            cat = self.identify_models()
-            if cat['llm'] and cat['llm']['engine'] == "ollama":
-                status, _ = get_service_status(ollama_port)
-                if status != "ON":
-                    print(f"🚀 Starting Ollama (required for availability check)...")
-                    # Find the ollama service config
-                    ollama_service = next(s for s in required_services if s['port'] == ollama_port)
-                    proc = start_server(ollama_service['cmd'])
-                    self.owned_processes.append((ollama_port, proc))
-                    if not wait_for_port(ollama_port, process=proc):
-                        print(f"❌ FAILED to start Ollama")
-                        return -1, prior_vram
-
-        # 2. Now check availability
+        # 1. Check availability
         if not self.check_availability():
             print(f"❌ MISSING MODELS: {', '.join(self.missing_models)}")
             return -1, prior_vram # Sentinel for missing
@@ -267,15 +252,39 @@ class LifecycleManager:
                         kill_process_on_port(ollama_port)
 
         setup_start = time.perf_counter()
+        
+        # Setup Persistent Logging Path
+        log_dir = os.path.join(self.project_root, "tests", "artifacts", "logs")
+        os.makedirs(log_dir, exist_ok=True)
+        timestamp = time.strftime("%Y%m%d_%H%M%S")
+
         for s in required_services:
+            # Special case for Ollama - we handle its startup above for logging (if not already healthy)
+            if s['type'] == 'llm' and 'ollama' in str(s['cmd']):
+                # But even if it's already healthy, we don't restart it.
+                # If we did start it above, it's already in owned_processes.
+                if any(p[0] == s['port'] for p in self.owned_processes):
+                    continue
+                # If it's already ON, we just skip it here
+                status, _ = get_service_status(s['port'])
+                if status == "ON":
+                    print(f"✅ Service LLM [Ollama] already healthy.")
+                    continue
+
             status, info = get_service_status(s['port'])
             if status == "ON": print(f"✅ Service {s['type'].upper()} [{s['id']}] already healthy.")
             else:
                 if status != "OFF":
                     print(f"⚠️ Service on port {s['port']} is {status}. Rebirthing...")
                     kill_process_on_port(s['port'])
+                
                 print(f"🚀 Starting {s['type'].upper()} [{s['id']}]...")
-                proc = start_server(s['cmd'])
+                log_path = os.path.join(log_dir, f"{s['type']}_{s['id'].replace(':', '-').replace('/', '--')}_{timestamp}.log")
+                
+                # Use a context manager to ensure the file is closed if start_server fails, 
+                # but start_server returns immediately, so we need to keep it open or let Popen handle it.
+                f_log = open(log_path, "w")
+                proc = start_server(s['cmd'], log_file=f_log)
                 self.owned_processes.append((s['port'], proc))
                 
                 # For vLLM (docker -d), the process exits immediately, so don't pass it to wait_for_port
@@ -291,6 +300,17 @@ class LifecycleManager:
                         print("\n--- vLLM DOCKER LOGS ---")
                         print(get_vllm_logs())
                         print("------------------------\n")
+                    
+                    # Read back some logs on failure
+                    try:
+                        f_log.flush()
+                        with open(log_path, "r") as f_read:
+                            lines = f_read.readlines()
+                            print(f"\n--- {s['type'].upper()} SERVER LOGS (Last 20 lines) ---")
+                            print("".join(lines[-20:]))
+                            print("------------------------------------------\n")
+                    except: pass
+                    
                     raise RuntimeError(f"FAILED to start {s['id']} on port {s['port']} after {timeout}s")
         
         # Warmup LLM
@@ -325,7 +345,6 @@ def run_test_lifecycle(domain, setup_name, models, purge_on_entry, purge_on_exit
     ensure_utf8_output()
     manager = LifecycleManager(setup_name, models=models, purge_on_entry=purge_on_entry, purge_on_exit=purge_on_exit, full=full, benchmark_mode=benchmark_mode, force_download=force_download, track_prior_vram=track_prior_vram)
     model_display = manager.format_models_for_display()
-    log_path = os.path.join(manager.project_root, "tests", "artifacts", "test_run.log")
     
     try:
         setup_time, prior_vram = manager.reconcile(domain)
@@ -356,7 +375,9 @@ def run_test_lifecycle(domain, setup_name, models, purge_on_entry, purge_on_exit
     except Exception as e:
         from .reporting import report_scenario_result
         err_msg = str(e)
-        status = "NO-DOCKER" if "NO-DOCKER" in err_msg else "FAILED"
+        status = "FAILED"
+        if "NO-DOCKER" in err_msg: status = "NO-DOCKER"
+        elif "NO-OLLAMA" in err_msg: status = "NO-OLLAMA"
         
         res_obj = {
             "name": "LIFECYCLE", "status": status, "duration": 0, 

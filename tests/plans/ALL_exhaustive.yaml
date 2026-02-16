@@ -29,6 +29,7 @@ execution:
       - ["faster-whisper-tiny"]
       - ["faster-whisper-base"]
       - ["faster-whisper-medium"]
+      - ["faster-whisper-large"]
     scenarios: [all]
 
   - domain: tts
@@ -40,9 +41,9 @@ execution:
 
   - domain: sts
     loadouts:
-      - ["faster-whisper-tiny", "OL_gpt-oss:20b", "chatterbox-turbo"]
-      - ["faster-whisper-base", "OL_gpt-oss:20b", "chatterbox-multilingual"]
-      - ["faster-whisper-base", "OL_qwen3-vl:30b-a3b-instruct", "chatterbox-multilingual"]
       - ["faster-whisper-tiny", "OL_qwen2.5:0.5b", "chatterbox-turbo"]
       - ["faster-whisper-tiny", "VL_Qwen/Qwen2.5-0.5B-Instruct", "chatterbox-turbo"]
+      - ["faster-whisper-tiny", "OL_gpt-oss:20b", "chatterbox-turbo"]
+      - ["faster-whisper-base", "OL_qwen3-vl:30b-a3b-instruct", "chatterbox-multilingual"]
+      - ["faster-whisper-base", "VL_QuantTrio/Qwen3-VL-30B-A3B-Instruct-AWQ", "chatterbox-multilingual"]
     scenarios: [all]

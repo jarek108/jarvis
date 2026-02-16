@@ -158,6 +158,9 @@ async def lifespan(app: FastAPI):
     elif isinstance(active_llm, str) and active_llm.startswith("vllm:"):
         llm_engine = "vllm"
         llm_model_name = active_llm[5:]
+    elif isinstance(active_llm, str) and active_llm.startswith("OL_"):
+        llm_engine = "ollama"
+        llm_model_name = active_llm[3:]
 
     if llm_engine == "vllm":
         llm_port = cfg['ports'].get('vllm', 8300)

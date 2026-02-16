@@ -367,6 +367,7 @@ def generate_excel(sync_artifacts=True):
                         worksheet.conditional_formatting.add(range_str, FormulaRule(formula=[f'{col_letter}2="FAILED"'], stopIfTrue=True, fill=red_fill))
                         worksheet.conditional_formatting.add(range_str, FormulaRule(formula=[f'{col_letter}2="MISSING"'], stopIfTrue=True, fill=yellow_fill))
                         worksheet.conditional_formatting.add(range_str, FormulaRule(formula=[f'{col_letter}2="NO-DOCKER"'], stopIfTrue=True, fill=red_fill))
+                        worksheet.conditional_formatting.add(range_str, FormulaRule(formula=[f'{col_letter}2="NO-OLLAMA"'], stopIfTrue=True, fill=red_fill))
                     
                     elif col == "Streaming":
                         worksheet.conditional_formatting.add(range_str, FormulaRule(formula=[f'{col_letter}2="Yes"'], stopIfTrue=True, fill=green_fill))

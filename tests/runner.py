@@ -100,7 +100,6 @@ def run_domain_tests(domain, setup_name, models, scenarios, settings):
 def main():
     parser = argparse.ArgumentParser(description="Jarvis Plan-Driven Test Runner")
     parser.add_argument("plan", type=str, help="Path to a .yaml test plan (e.g., tests/plan_fast_check.yaml)")
-    parser.add_argument("--local", action="store_true", help="Skip cloud upload")
     parser.add_argument("--no-cleanup", action="store_true", help="Skip stale artifact cleanup at start")
     args = parser.parse_args()
 
@@ -158,7 +157,7 @@ def main():
     print(f"{'Total Time: ' + str(round(time.perf_counter() - global_start, 2)) + 's':^120}")
     print("#"*LINE_LEN + "\n")
 
-    trigger_report_generation(upload=not args.local)
+    trigger_report_generation(upload=True)
 
 if __name__ == "__main__":
     main()

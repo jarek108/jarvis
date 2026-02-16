@@ -11,14 +11,17 @@ def is_port_in_use(port: int) -> bool:
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         return s.connect_ex(('127.0.0.1', port)) == 0
 
-def start_server(cmd, loud=False):
+def start_server(cmd, loud=False, log_file=None):
     flags = subprocess.CREATE_NEW_CONSOLE if loud else (0x08000000 if os.name == 'nt' else 0)
     project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     
     # On Windows, list-based Popen is more reliable for complex arguments like JSON
     # if shell=False. However, we use shell=True for some legacy reasons.
     # Let's try to pass the list directly and let Python handle the quoting.
-    return subprocess.Popen(cmd, creationflags=flags, shell=True, cwd=project_root)
+    stdout = log_file if log_file else None
+    stderr = log_file if log_file else None
+    
+    return subprocess.Popen(cmd, creationflags=flags, shell=True, cwd=project_root, stdout=stdout, stderr=stderr)
 
 def wait_for_port(port: int, timeout: int = 120, process=None) -> bool:
     # Local import to avoid circular dependency if get_service_status moves elsewhere
@@ -113,8 +116,9 @@ def kill_process_on_port(port: int):
     try:
         cfg = load_config()
         if port == cfg['ports']['ollama'] and os.name == 'nt':
-            os.system("taskkill /F /IM ollama* /T > nul 2>&1")
-            time.sleep(0.5)
+            # Kill everything related to ollama
+            subprocess.run(["taskkill", "/F", "/IM", "ollama*", "/T"], capture_output=True)
+            time.sleep(1.0)
         
         # If port is vLLM port, try to stop docker container
         if port == cfg['ports'].get('vllm'):

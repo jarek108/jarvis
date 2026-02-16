@@ -3,12 +3,40 @@ import subprocess
 import os
 
 def is_model_local(model_name):
+    # 1. Try API first
     try:
-        resp = requests.get("http://127.0.0.1:11434/api/tags")
+        resp = requests.get("http://127.0.0.1:11434/api/tags", timeout=2)
         if resp.status_code == 200:
             models = [m['name'] for m in resp.json().get('models', [])]
+            # Ollama tags can be model:latest or just model
+            if ":" not in model_name:
+                return any(model_name == m.split(":")[0] for m in models)
             return any(model_name in m for m in models)
     except: pass
+
+    # 2. Try Filesystem (Robust fallback)
+    from .config import get_ollama_models
+    models_dir = get_ollama_models()
+    if models_dir and os.path.exists(models_dir):
+        # Ollama structure: manifests/registry.ollama.ai/library/model/tag
+        # or manifests/registry.ollama.ai/author/model/tag
+        manifest_root = os.path.join(models_dir, "manifests", "registry.ollama.ai")
+        if os.path.exists(manifest_root):
+            # Flatten search for model_name
+            target = model_name
+            if ":" not in target: target += ":latest"
+            parts = target.split(":")
+            name_parts = parts[0].split("/")
+            if len(name_parts) == 1:
+                # library/model
+                rel_path = os.path.join("library", name_parts[0], parts[1])
+            else:
+                # author/model
+                rel_path = os.path.join(name_parts[0], name_parts[1], parts[1])
+            
+            if os.path.exists(os.path.join(manifest_root, rel_path)):
+                return True
+    
     return False
 
 def check_and_pull_model(model_name, force_pull=False):
