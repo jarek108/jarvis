@@ -95,7 +95,12 @@ def generate_excel(sync_artifacts=True):
             has_cols = False
             for col in duration_cols:
                 if col in df.columns:
-                    sum_data[col] = pd.to_numeric(df[col], errors='coerce').sum()
+                    if col in ["Setup (s)", "Cleanup (s)"]:
+                        # Sum once per unique setup/model stack to avoid overcounting
+                        group_col = "Setup" if "Setup" in df.columns else "Model"
+                        sum_data[col] = df.groupby(group_col)[col].max().sum()
+                    else:
+                        sum_data[col] = pd.to_numeric(df[col], errors='coerce').sum()
                     has_cols = True
             if has_cols:
                 sum_row = pd.DataFrame([sum_data])
@@ -279,7 +284,6 @@ def generate_excel(sync_artifacts=True):
                         "Output wav": link_file(s.get('output_file'), output_folder_id, overwrite=True, label="▶️ Play wav"),
                         "Output Text": out_text,
                         "Status": s.get('status'),
-                        "Result": s.get('result', 'N/A'),
                         "Streaming": "Yes" if s.get('streaming') else "No",
                         "Prior VRAM (GB)": s.get('vram_prior', 0),
                         "Peak VRAM (GB)": s.get('vram_peak', 0),
@@ -309,10 +313,14 @@ def generate_excel(sync_artifacts=True):
                 df.to_excel(writer, sheet_name=name, index=False)
                 worksheet = writer.sheets[name]
                 
-                # 1. AutoFilter
-                worksheet.auto_filter.ref = worksheet.dimensions
+                # 1. AutoFilter (exclude the TOTAL row at the bottom)
+                last_data_row = len(df) # TOTAL is the last row, so len(df) is its index (1-based + 1)
+                worksheet.auto_filter.ref = f"A1:{chr(64 + len(df.columns))}{last_data_row}"
                 
-                # 2. Header Style
+                # 2. Freeze Panes (Freeze first 2 columns [Model/Scenario] and Header row)
+                worksheet.freeze_panes = "C2"
+                
+                # 3. Header Style
                 header_font = Font(bold=True, color="FFFFFF")
                 header_fill = PatternFill(start_color="4F81BD", end_color="4F81BD", fill_type="solid")
                 for cell in worksheet[1]:
@@ -353,12 +361,13 @@ def generate_excel(sync_artifacts=True):
                         worksheet.conditional_formatting.add(range_str, FormulaRule(formula=[f'{col_letter}2="PASSED"'], stopIfTrue=True, fill=green_fill))
                         worksheet.conditional_formatting.add(range_str, FormulaRule(formula=[f'{col_letter}2="FAILED"'], stopIfTrue=True, fill=red_fill))
                         worksheet.conditional_formatting.add(range_str, FormulaRule(formula=[f'{col_letter}2="MISSING"'], stopIfTrue=True, fill=yellow_fill))
+                        worksheet.conditional_formatting.add(range_str, FormulaRule(formula=[f'{col_letter}2="NO-DOCKER"'], stopIfTrue=True, fill=red_fill))
                     
                     elif col == "Streaming":
                         worksheet.conditional_formatting.add(range_str, FormulaRule(formula=[f'{col_letter}2="Yes"'], stopIfTrue=True, fill=green_fill))
                         worksheet.conditional_formatting.add(range_str, FormulaRule(formula=[f'{col_letter}2="No"'], stopIfTrue=True, fill=gray_fill))
 
-                    elif "(s)" in col or "Time" in col:
+                    elif "(s)" in col or "Time" in col or col in ["TPS", "TTFT (s)", "TTFT"]:
                         rule = ColorScaleRule(start_type='min', start_color='C6EFCE', 
                                               mid_type='percentile', mid_value=50, mid_color='FFEB9C',
                                               end_type='max', end_color='FFC7CE')

@@ -5,6 +5,7 @@ import time
 import json
 import yaml
 import importlib
+from contextlib import redirect_stdout
 import utils
 
 # Add project root and tests root to sys.path
@@ -70,7 +71,7 @@ def run_domain_tests(domain, setup_name, models, scenarios, settings):
         if domain == "tts" and m in utils.load_config()['tts_loadout']: target_id = m; break
 
     try:
-        setup_time, cleanup_time, prior_vram = run_test_lifecycle(
+        setup_time, cleanup_time, prior_vram, model_display = run_test_lifecycle(
             domain=domain, setup_name=setup_name, models=models,
             purge_on_entry=settings.get('purge_on_entry', True),
             purge_on_exit=settings.get('purge_on_exit', True),
@@ -81,13 +82,16 @@ def run_domain_tests(domain, setup_name, models, scenarios, settings):
             track_prior_vram=settings.get('track_prior_vram', True)
         )
     except Exception as e:
-        print(f"❌ LIFECYCLE ERROR: {e}")
-        from utils import report_scenario_result
-        res_obj = {"name": "LIFECYCLE", "status": "FAILED", "duration": 0, "result": str(e), "mode": domain.upper(), "vram_prior": 0.0}
-        report_scenario_result(res_obj); return results_accumulator
+        print(f"❌ UNEXPECTED RUNNER ERROR: {e}")
+        return results_accumulator
 
     for res in results_accumulator:
         res['setup_time'] = setup_time; res['cleanup_time'] = cleanup_time; res['vram_prior'] = prior_vram
+        # Ensure model field is populated for lifecycle failures
+        if res.get('name') in ["LIFECYCLE", "SETUP"]:
+            if domain == "stt": res["stt_model"] = model_display
+            elif domain == "tts": res["tts_model"] = model_display
+            else: res["llm_model"] = model_display
     
     utils.report_scenario_result = original_report_scenario
     utils.report_llm_result = original_report_llm

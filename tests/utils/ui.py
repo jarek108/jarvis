@@ -38,8 +38,7 @@ def fmt_with_chunks(text, chunks):
     """Adds (timestamp) markers to text based on chunk data."""
     if not chunks: return text
     out = []
-    last_end = 0.0
     for c in chunks:
-        out.append(f"{c['text']} ({last_end:.2f} → {c['end']:.2f}s)")
-        last_end = c['end']
-    return " ".join(out)
+        # Standard compact timestamp format
+        out.append(f"{c['text']}({c['end']:.2f}s)")
+    return "".join(out)

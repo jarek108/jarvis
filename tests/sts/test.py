@@ -45,7 +45,7 @@ def run_test_suite(loadout_id, scenarios_to_run=None, stream=False, trim_length=
                             continue
 
                         audio_content = b""; metrics = {}; llm_text = ""; stt_text = ""
-                        stream_reader = response.raw
+                        chunks = []; stream_reader = response.raw
                         while True:
                             header = stream_reader.read(5)
                             if not header or len(header) < 5: break
@@ -54,13 +54,15 @@ def run_test_suite(loadout_id, scenarios_to_run=None, stream=False, trim_length=
                             if type_char == 'T': 
                                 frame_data = json.loads(payload.decode())
                                 if frame_data['role'] == "user": stt_text = frame_data['text']
-                                else: llm_text += " " + frame_data['text']
+                                else: 
+                                    llm_text += " " + frame_data['text']
+                                    chunks.append({"text": frame_data['text'], "end": time.perf_counter() - start_time})
                             elif type_char == 'A': audio_content += payload
                             elif type_char == 'M': metrics = json.loads(payload.decode()); break
                         
                         duration = time.perf_counter() - start_time
                         with open(output_path, "wb") as f_out: f_out.write(audio_content)
-                        res_obj = {"name": s['name'], "status": "PASSED", "duration": duration, "result": os.path.relpath(output_path, os.path.dirname(os.path.dirname(os.path.dirname(__file__)))), "mode": "STREAM", "metrics": metrics, "stt_model": response.headers.get("X-Model-STT"), "llm_model": response.headers.get("X-Model-LLM"), "tts_model": response.headers.get("X-Model-TTS"), "input_file": audio_path, "output_file": output_path, "streaming": True, "vram_peak": get_gpu_vram_usage(), "stt_text": stt_text, "llm_text": llm_text}
+                        res_obj = {"name": s['name'], "status": "PASSED", "duration": duration, "result": os.path.relpath(output_path, os.path.dirname(os.path.dirname(os.path.dirname(__file__)))), "mode": "STREAM", "metrics": metrics, "stt_model": response.headers.get("X-Model-STT"), "llm_model": response.headers.get("X-Model-LLM"), "tts_model": response.headers.get("X-Model-TTS"), "input_file": audio_path, "output_file": output_path, "streaming": True, "vram_peak": get_gpu_vram_usage(), "stt_text": stt_text, "llm_text": llm_text, "chunks": chunks}
                     else:
                         response = requests.post(url, files=files, data=data)
                         duration = time.perf_counter() - start_time

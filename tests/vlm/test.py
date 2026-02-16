@@ -69,6 +69,7 @@ def run_test_suite(model_name, scenarios_to_run=None):
                 payload = {"model": clean_model_name, "messages": [{"role": "user", "content": s['text'], "images": b64_frames}], "stream": True, "options": {"temperature": 0}}
 
             start_time = time.perf_counter(); first_token_time = None; full_text = ""; total_tokens = 0
+            chunks = []; sentence_buffer = ""
             with requests.post(url, json=payload, stream=True) as resp:
                 if resp.status_code != 200:
                     report_llm_result({"name": s['name'], "status": "FAILED", "text": f"HTTP {resp.status_code}", "input_file": file_path, "input_text": s['text']})
@@ -86,12 +87,19 @@ def run_test_suite(model_name, scenarios_to_run=None):
                         if not token: continue
                         if first_token_time is None: first_token_time = time.perf_counter()
                         full_text += token; total_tokens += 1
+                        sentence_buffer += token
+                        if any(c in token for c in ".!?"):
+                            chunks.append({"text": sentence_buffer.strip(), "end": time.perf_counter() - start_time})
+                            sentence_buffer = ""
+
+            if sentence_buffer.strip():
+                chunks.append({"text": sentence_buffer.strip(), "end": time.perf_counter() - start_time})
 
             total_dur = time.perf_counter() - start_time
             ttft = (first_token_time - start_time) if first_token_time else 0
             report_llm_result({
                 "name": s['name'], "status": "PASSED", "ttft": ttft, "tps": total_tokens / total_dur, 
-                "text": full_text, "duration": total_dur, "llm_model": model_name, "input_file": file_path, 
+                "text": full_text, "chunks": chunks, "duration": total_dur, "llm_model": model_name, "input_file": file_path, 
                 "input_text": s['text'], "vram_peak": get_gpu_vram_usage(), "streaming": True,
                 "vram_prior": 0.0 # Will be injected by runner
             })

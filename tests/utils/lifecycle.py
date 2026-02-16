@@ -89,6 +89,11 @@ class LifecycleManager:
                     "cmd": ["ollama", "serve"], "health": f"http://127.0.0.1:{self.cfg['ports']['ollama']}/api/tags"
                 })
             elif engine == "vllm":
+                if self.cfg.get('vllm', {}).get('check_docker', True):
+                    from .infra import is_docker_daemon_running
+                    if not is_docker_daemon_running():
+                        raise RuntimeError("NO-DOCKER")
+
                 vllm_port = self.cfg['ports'].get('vllm', 8300)
                 
                 # Dynamic VRAM Calculation (GB -> %)
@@ -99,19 +104,44 @@ class LifecycleManager:
                 vram_gb = self.cfg.get('vllm', {}).get('gpu_memory_utilization', 0.5) # Default fallback
                 vram_map = self.cfg.get('vllm', {}).get('model_vram_map', {})
                 
-                # Find best match in map
+                # Find best match in map (Sort by length descending so most specific wins)
                 match_gb = None
-                for key, val in vram_map.items():
+                sorted_keys = sorted(vram_map.keys(), key=len, reverse=True)
+                for key in sorted_keys:
                     if key.lower() in model.lower():
-                        match_gb = val
+                        match_gb = vram_map[key]
                         break
                 
+                # Check for Calibration History
+                model_safe = model.replace("/", "--").replace(":", "-")
+                cal_path = os.path.join(self.project_root, "tests", "artifacts", "calibration", f"{model_safe}_trajectory.json")
+                if os.path.exists(cal_path):
+                    print(f"  ↳ ✅ Integrated: Found calibration history at {os.path.basename(cal_path)}")
+                else:
+                    print(f"  ↳ ⚠️ Unintegrated: No calibration history found. Using config guestimate.")
+
                 if match_gb:
                     vllm_util = min(0.95, max(0.1, match_gb / total_vram))
                     print(f"  ↳ 🧠 VRAM Mapper: {model} needs {match_gb}GB. Machine has {total_vram:.1f}GB. Setting util to {vllm_util:.3f}")
                 else:
                     vllm_util = self.cfg.get('vllm', {}).get('gpu_memory_utilization', 0.5)
                 
+                # Dynamic Max Model Len lookup
+                max_len_map = self.cfg.get('vllm', {}).get('model_max_len_map', {})
+                max_len = max_len_map.get('default', 32768)
+                for key, val in max_len_map.items():
+                    if key.lower() in model.lower():
+                        max_len = val
+                        break
+                
+                # Dynamic MM Limit lookup
+                mm_limit_map = self.cfg.get('vllm', {}).get('model_mm_limit_map', {})
+                mm_limit = mm_limit_map.get('default', '{"image": 1}')
+                for key, val in mm_limit_map.items():
+                    if key.lower() in model.lower():
+                        mm_limit = val
+                        break
+
                 hf_cache = get_hf_home()
                 cmd = [
                     "docker", "run", "--gpus", "all", "-d", 
@@ -119,8 +149,10 @@ class LifecycleManager:
                     "-p", f"{vllm_port}:8000", 
                     "-v", f"{hf_cache}:/root/.cache/huggingface", 
                     "vllm/vllm-openai", 
-                    "--model", model,
-                    "--gpu-memory-utilization", str(vllm_util)
+                    model,
+                    "--gpu-memory-utilization", str(vllm_util),
+                    "--max-model-len", str(max_len),
+                    "--limit-mm-per-prompt", mm_limit
                 ]
                 required.append({
                     "type": "llm", "id": original_id, "port": vllm_port,
@@ -250,9 +282,16 @@ class LifecycleManager:
                 is_vllm = 'docker' in str(s['cmd'])
                 wait_proc = None if is_vllm else proc
                 
-                timeout = 300 if is_vllm else 120
+                # Use global timeout from config
+                timeout = self.cfg.get('vllm', {}).get('model_startup_timeout', 600)
+                
                 if not wait_for_port(s['port'], process=wait_proc, timeout=timeout):
-                    raise RuntimeError(f"FAILED to start {s['id']} on port {s['port']}")
+                    if is_vllm:
+                        from .infra import get_vllm_logs
+                        print("\n--- vLLM DOCKER LOGS ---")
+                        print(get_vllm_logs())
+                        print("------------------------\n")
+                    raise RuntimeError(f"FAILED to start {s['id']} on port {s['port']} after {timeout}s")
         
         # Warmup LLM
         if domain in ["llm", "vlm", "sts"] or self.full:
@@ -285,25 +324,46 @@ class LifecycleManager:
 def run_test_lifecycle(domain, setup_name, models, purge_on_entry, purge_on_exit, full, test_func, benchmark_mode=False, force_download=False, track_prior_vram=True):
     ensure_utf8_output()
     manager = LifecycleManager(setup_name, models=models, purge_on_entry=purge_on_entry, purge_on_exit=purge_on_exit, full=full, benchmark_mode=benchmark_mode, force_download=force_download, track_prior_vram=track_prior_vram)
-    
-    setup_time, prior_vram = manager.reconcile(domain)
-    if setup_time == -1:
-        # Report MISSING
-        from .reporting import report_scenario_result
-        res_obj = {"name": "SETUP", "status": "MISSING", "duration": 0, "result": f"Missing models: {', '.join(manager.missing_models)}", "mode": domain.upper(), "vram_prior": prior_vram}
-        report_scenario_result(res_obj)
-        return 0, 0, prior_vram # Return 0s for missing
-
     model_display = manager.format_models_for_display()
-    print("\n" + "="*LINE_LEN)
-    print(f"{BOLD}{CYAN}{domain.upper() + ' [' + model_display + '] TEST SUITE':^120}{RESET}")
-    print("="*LINE_LEN)
-    f = LiveFilter(); proc_start = time.perf_counter()
-    with redirect_stdout(f): test_func()
-    proc_time = time.perf_counter() - proc_start
-    cleanup_time = manager.cleanup()
-    print("="*LINE_LEN)
-    print(f"{BOLD}Final Receipt:{RESET} Setup: {setup_time:.1f}s | Processing: {proc_time:.1f}s | Cleanup: {cleanup_time:.1f}s")
-    print("="*LINE_LEN + "\n")
+    log_path = os.path.join(manager.project_root, "tests", "artifacts", "test_run.log")
     
-    return setup_time, cleanup_time, prior_vram
+    try:
+        setup_time, prior_vram = manager.reconcile(domain)
+        if setup_time == -1:
+            # Report MISSING
+            from .reporting import report_scenario_result
+            res_obj = {
+                "name": "SETUP", "status": "MISSING", "duration": 0, 
+                "result": f"Missing models: {', '.join(manager.missing_models)}", 
+                "mode": domain.upper(), "vram_prior": prior_vram,
+                "llm_model": model_display, "stt_model": model_display, "tts_model": model_display
+            }
+            report_scenario_result(res_obj)
+            return 0, 0, prior_vram, model_display
+
+        print("\n" + "="*LINE_LEN)
+        print(f"{BOLD}{CYAN}{domain.upper() + ' [' + model_display + '] TEST SUITE':^120}{RESET}")
+        print("="*LINE_LEN)
+        f = LiveFilter(); proc_start = time.perf_counter()
+        with redirect_stdout(f): test_func()
+        proc_time = time.perf_counter() - proc_start
+        cleanup_time = manager.cleanup()
+        print("="*LINE_LEN)
+        print(f"{BOLD}Final Receipt:{RESET} Setup: {setup_time:.1f}s | Processing: {proc_time:.1f}s | Cleanup: {cleanup_time:.1f}s")
+        print("="*LINE_LEN + "\n")
+        
+        return setup_time, cleanup_time, prior_vram, model_display
+    except Exception as e:
+        from .reporting import report_scenario_result
+        err_msg = str(e)
+        status = "NO-DOCKER" if "NO-DOCKER" in err_msg else "FAILED"
+        
+        res_obj = {
+            "name": "LIFECYCLE", "status": status, "duration": 0, 
+            "result": err_msg, "mode": domain.upper(), "vram_prior": 0.0,
+            "llm_model": model_display, "stt_model": model_display, "tts_model": model_display
+        }
+        report_scenario_result(res_obj)
+        print(f"❌ LIFECYCLE ERROR: {e}")
+        cleanup_time = manager.cleanup()
+        return 0, cleanup_time, 0.0, model_display

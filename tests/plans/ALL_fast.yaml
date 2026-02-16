@@ -14,7 +14,8 @@ execution:
 
   - domain: vlm
     loadouts:
-      - ["OL_qwen3-vl:30b-a3b-instruct"]
+      - ["OL_moondream"]
+      - ["VL_Qwen/Qwen2-VL-2B-Instruct"]
     scenarios: [jarvis_logo]
 
   - domain: stt

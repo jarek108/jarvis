@@ -1,154 +1,142 @@
 import os
 import sys
+import json
 import time
-import argparse
-import requests
 import subprocess
+import requests
+import argparse
+from datetime import datetime
 
-# Add project root to sys.path
-script_dir = os.path.dirname(os.path.abspath(__file__))
-project_root = os.path.dirname(script_dir)
-sys.path.append(project_root)
+# Add project root to path for imports
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from tests.utils.config import load_config, resolve_path, get_hf_home
+from tests.utils.infra import is_port_in_use, kill_process_on_port, start_server, wait_for_port, is_docker_daemon_running
+from tests.utils.vram import get_gpu_total_vram, get_gpu_vram_usage
 
-from tests.utils import (
-    get_gpu_total_vram, stop_vllm_docker, wait_for_port, 
-    start_server, get_service_status, load_config,
-    kill_all_jarvis_services
-)
-
-# Results Categorization
-STATUS_PASS = "Tests PASSED"
-STATUS_NO_WAKE = "No wake up"
-STATUS_CRASH = "Tests failed/crashed"
-
-history = []
-
-def run_stress_test(port):
-    """Sends a medium-length prompt to verify KV cache stability."""
-    url = f"http://127.0.0.1:{port}/v1/chat/completions"
-    payload = {
-        "model": "Qwen/Qwen2.5-0.5B-Instruct",
-        "messages": [{"role": "user", "content": "Write a very long, detailed story about a space explorer. Repeat the word 'EXPLORE' 100 times to inflate the context."}],
-        "max_tokens": 512,
-        "temperature": 0
-    }
-    try:
-        resp = requests.post(url, json=payload, timeout=60)
-        return resp.status_code == 200
-    except:
-        return False
-
-def test_allocation(gb, model_id):
-    cfg = load_config()
-    total_vram = get_gpu_total_vram()
-    vllm_port = cfg['ports'].get('vllm', 8300)
-    utilization = min(0.95, max(0.05, gb / total_vram))
+def run_calibration_step(model_name, util, max_len=32768):
+    """Attempts to start vLLM with specific settings and returns success/failure."""
+    port = 8300
+    kill_process_on_port(port)
     
-    print(f"\n[Trial] Testing {gb:.2f} GB (Util: {utilization:.3f})...")
+    hf_cache = get_hf_home()
+    docker_name = "vllm-calibration"
     
-    # 1. Clean environment
-    kill_all_jarvis_services()
-    time.sleep(2)
+    # Clean up previous calibration container
+    subprocess.run(["docker", "rm", "-f", docker_name], capture_output=True)
     
-    # 2. Start vLLM
-    hf_cache = os.path.join(os.path.expanduser("~"), ".cache", "huggingface")
     cmd = [
         "docker", "run", "--gpus", "all", "-d", 
-        "--name", "vllm-server", 
-        "-p", f"{vllm_port}:8000", 
+        "--name", docker_name, 
+        "-p", f"{port}:8000", 
         "-v", f"{hf_cache}:/root/.cache/huggingface", 
         "vllm/vllm-openai", 
-        "--model", model_id,
-        "--gpu-memory-utilization", str(utilization)
+        "--model", model_name,
+        "--gpu-memory-utilization", f"{util:.3f}",
+        "--max-model-len", str(max_len)
     ]
     
-    start_server(cmd)
-    
-    # 3. Wait for boot (300s timeout)
-    print(f"  ... waiting for boot...", flush=True)
     start_time = time.time()
-    off_count = 0
-    boot_success = False
+    print(f"  ↳ Testing Util: {util:.3f}, MaxLen: {max_len}... ", end="", flush=True)
     
-    while time.time() - start_time < 300:
-        status, info = get_service_status(vllm_port)
-        if status == "ON":
-            boot_success = True
+    subprocess.run(cmd, capture_output=True)
+    
+    # Wait for port or failure
+    success = False
+    error_msg = ""
+    timeout = 300
+    
+    while time.time() - start_time < timeout:
+        # Check if container is still running
+        res = subprocess.run(["docker", "inspect", "-f", "{{.State.Running}}", docker_name], capture_output=True, text=True)
+        if "false" in res.stdout:
+            logs = subprocess.run(["docker", "logs", docker_name], capture_output=True, text=True)
+            error_msg = "Engine failed to start. Check logs."
+            if "ValueError" in logs.stdout:
+                # Extract the specific ValueError message
+                for line in logs.stdout.split('\n'):
+                    if "ValueError:" in line:
+                        error_msg = line.strip()
             break
-        if status == "OFF":
-            off_count += 1
-            if off_count >= 2:
-                print(f"  ❌ FAILED: Container exited/crashed (OFF status twice).")
-                break
-        else:
-            off_count = 0 # Reset if we see STARTUP
             
-        time.sleep(2)
+        if is_port_in_use(port):
+            try:
+                resp = requests.get(f"http://127.0.0.1:{port}/v1/models", timeout=5)
+                if resp.status_code == 200:
+                    success = True
+                    break
+            except: pass
+        time.sleep(5)
     
-    if not boot_success:
-        print(f"  ❌ FAILED: {STATUS_NO_WAKE}")
-        # Dump logs to see WHY
-        res = subprocess.run(["docker", "logs", "vllm-server"], capture_output=True, text=True, encoding='utf-8', errors='replace')
-        print("--- DOCKER LOGS ---")
-        print(res.stdout[-1000:]) # Last 1000 chars
-        print("-------------------")
-        stop_vllm_docker()
-        history.append({"gb": gb, "status": STATUS_NO_WAKE})
-        return False
+    # Cleanup
+    subprocess.run(["docker", "rm", "-f", docker_name], capture_output=True)
     
-    # 4. Stress Test
-    print(f"  🔥 Boot successful. Running stress test...")
-    stress_success = run_stress_test(vllm_port)
-    
-    if stress_success:
-        print(f"  ✅ {STATUS_PASS}")
-        history.append({"gb": gb, "status": STATUS_PASS})
+    if success:
+        print("✅ SUCCESS")
     else:
-        print(f"  ❌ FAILED: {STATUS_CRASH}")
-        history.append({"gb": gb, "status": STATUS_CRASH})
-    
-    stop_vllm_docker()
-    return stress_success
+        print(f"❌ FAILED ({error_msg})")
+        
+    return success, error_msg, round(time.time() - start_time, 2)
 
-def calibrate(model_id, min_gb, max_gb, precision=0.1):
-    print(f"🚀 Starting VRAM Calibration for {model_id}")
-    print(f"Target range: {min_gb}GB - {max_gb}GB | Precision: {precision}GB")
-    
-    # Initial Baseline Check
-    print(f"\n--- BASELINE CHECK: {max_gb} GB ---")
-    if not test_allocation(max_gb, model_id):
-        print(f"❌ ERROR: Even the maximum allocation ({max_gb}GB) failed. Cannot calibrate.")
-        return
+def main():
+    parser = argparse.ArgumentParser(description="Jarvis VRAM Calibration Tool")
+    parser.add_argument("model", type=str, help="HuggingFace model ID")
+    parser.add_argument("--max-len", type=int, default=32768)
+    parser.add_argument("--step", type=float, default=0.05)
+    args = parser.parse_args()
 
-    low = min_gb
-    high = max_gb
-    best_stable = max_gb
+    if not is_docker_daemon_running():
+        print("❌ Docker daemon is not running. Calibration aborted."); return
+
+    total_vram = get_gpu_total_vram()
+    model_safe_name = args.model.replace("/", "--").replace(":", "-")
+    artifact_path = os.path.join("tests", "artifacts", "calibration", f"{model_safe_name}_trajectory.json")
     
-    while (high - low) > precision:
-        mid = (low + high) / 2
-        if test_allocation(mid, model_id):
-            best_stable = mid
-            high = mid 
-        else:
-            low = mid
-            
-    print("\n" + "="*80)
-    print(f"{'CALIBRATION HISTORY':^80}")
-    print("-" * 80)
-    print(f"{'Memory Size':<20} | {'Result':<30}")
-    print("-" * 80)
-    # Sort history by memory size descending
-    sorted_history = sorted(history, key=lambda x: x['gb'], reverse=True)
-    for entry in sorted_history:
-        print(f"{entry['gb']:>10.2f} GB        | {entry['status']}")
+    trajectory = {
+        "model": args.model,
+        "date": datetime.now().isoformat(),
+        "gpu_total_vram_gb": total_vram,
+        "max_model_len": args.max_len,
+        "steps": []
+    }
+
+    print(f"🚀 Starting Calibration for {args.model}")
+    print(f"📊 Total VRAM: {total_vram:.1f} GB")
+
+    # Start at 0.1 and go up to 0.95
+    current_util = 0.1
+    best_util = None
     
-    print("-" * 80)
-    print(f"Model: {model_id}")
-    print(f"Absolute Breaking Point: ~{low:.2f} GB")
-    print(f"Minimum Stable Allocation: {best_stable:.2f} GB")
-    print(f"Recommended (with safety margin): {best_stable + 0.2:.2f} GB")
-    print("="*80)
+    while current_util <= 0.95:
+        success, error, duration = run_calibration_step(args.model, current_util, args.max_len)
+        
+        step_entry = {
+            "utilization": round(current_util, 3),
+            "vram_gb": round(current_util * total_vram, 2),
+            "success": success,
+            "error": error,
+            "duration_s": duration
+        }
+        trajectory["steps"].append(step_entry)
+        
+        if success:
+            best_util = current_util
+            # If we found a success, we can stop or keep going to find the "ceiling"
+            # For now, let's keep going to map the whole trajectory
+        
+        current_util += args.step
+
+    # Final summary
+    trajectory["best_utilization"] = best_util
+    if best_util:
+        trajectory["recommended_vram_gb"] = round(best_util * total_vram, 2)
+        print(f"\n✅ CALIBRATION COMPLETE: Best utilization for {args.model} is {best_util:.3f} ({trajectory['recommended_vram_gb']} GB)")
+    else:
+        print(f"\n❌ CALIBRATION FAILED: No successful utilization found up to 0.95.")
+
+    # Save artifact
+    with open(artifact_path, "w") as f:
+        json.dump(trajectory, f, indent=2)
+    print(f"📁 Trajectory saved to {artifact_path}")
 
 if __name__ == "__main__":
-    # For now, hardcoded for the requested test
-    calibrate("Qwen/Qwen2.5-0.5B-Instruct", 0.5, 4.0, 0.2)
+    main()
