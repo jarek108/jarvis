@@ -69,18 +69,6 @@ def trigger_report_generation(upload=True, session_dir=None):
         sys.stderr.write(f"⚠️ Auto-report failed: {e}\n")
         return None
 
-class ProgressionLogger:
-    """Logs clean, timestamped events to progression.log in the session directory."""
-    def __init__(self, session_dir):
-        self.session_dir = session_dir
-        self.log_path = os.path.join(session_dir, "progression.log")
-        
-    def log(self, message, level="INFO"):
-        timestamp = time.strftime("%H:%M:%S")
-        entry = f"[{timestamp}] [{level:7}] {message}\n"
-        with open(self.log_path, "a", encoding="utf-8") as f:
-            f.write(entry)
-
 class GDriveAssetManager:
     def __init__(self, service):
         self.service = service

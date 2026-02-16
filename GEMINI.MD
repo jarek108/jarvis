@@ -7,9 +7,11 @@
 - **Debug Startup**: Add `--loud` to any `manage_loadout.py` command to show server windows.
 
 ## [Section] : Testing Workflow
-- **Domain Testing**: `python tests/runner.py --domain [sts|stt|tts|llm|vlm]`
+- **Domain Testing**: `python tests/runner.py tests/plans/[DOMAIN]_fast.yaml` (Start here!)
 - **Specific Setup**: `python tests/runner.py --domain sts --setup tiny_ol_qwen_0.5`
-- **Batch Testing**: `python tests/runner.py --domain llm --setup OL_QWEN_0.5B,VL_QWEN_0.5B`
+- **Fast Health Check**: `python tests/runner.py tests/plans/ALL_fast.yaml` (Run before commit)
+- **Exhaustive Sweep**: `python tests/runner.py tests/plans/ALL_exhaustive.yaml` (Run before release)
+- **Mock Mode**: Add `--mock` to any plan to simulate execution for UI/Artifact testing.
 - **Debug Mode**: Use `--keep-alive` to prevent cleanup after a test, or `--dirty` to skip initial cleanup.
 - **Visual Tweaks**: Use `python tests/generate_report.py --upload` to re-style reports without rerunning tests.
 

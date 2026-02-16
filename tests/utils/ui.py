@@ -30,14 +30,15 @@ def ensure_utf8_output():
             sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8')
 
 class LiveFilter(io.StringIO):
-    """Captures everything, but only writes non-machine lines to the real stdout in TTY mode."""
+    """Captures everything to a buffer. It's intended that the dashboard pulls the raw logs from files."""
     def __init__(self):
         super().__init__()
         ensure_utf8_output()
-        self.out = sys.stdout
+        self.out = sys.stdout # The original stdout
 
     def write(self, s):
-        # Machine lines are ignored for dashboard
+        # We don't write anything to self.out here, as it's intended to be completely silent.
+        # The dashboard reads from the log files.
         return super().write(s)
 
 def fmt_with_chunks(text, chunks):
@@ -73,11 +74,76 @@ class RichDashboard:
         self.vram_usage = 0.0
         self.vram_total = 1.0
         self.recent_logs = []
+        
+        self.snapshot_path = None
+        self._stop_event = None
+        self._snapshot_thread = None
+
         # Use screen=False to allow the final frame to persist in the scrollback buffer
         self.live = Live(self, console=self.console, refresh_per_second=4, screen=False)
 
     def __rich__(self) -> Layout:
         return self.make_layout()
+
+    def make_clean_layout(self):
+        """Pure text hierarchical view for progression.log (human readable)."""
+        from rich.console import Group
+        lines = [Text(f"JARVIS TEST SESSION: {self.session_id}", style="bold")]
+        lines.append(Text(f"PLAN: {self.plan_name}\n"))
+        
+        lines.append(Text("EXECUTION HIERARCHY:", style="bold underline"))
+        for d_name, d_data in self.test_data.items():
+            d_status = d_data['status'].upper()
+            d_dur = d_data['duration'] or (time.perf_counter() - d_data['start_time'] if d_data['start_time'] else 0)
+            lines.append(Text(f"â€¢ {d_name.upper()} [{d_status}] - {d_dur:.1f}s ({d_data['models_done']}/{len(d_data['loadouts'])} models)"))
+            
+            for l_name, l_data in d_data['loadouts'].items():
+                l_status = l_data['status'].upper()
+                stp = self.get_phase_time(l_data, "setup")
+                exe = self.get_phase_time(l_data, "execution")
+                cln = self.get_phase_time(l_data, "cleanup")
+                
+                l_line = Text(f"  âž¤ {l_name} [{l_status}] ({l_data['done']}/{l_data['total']})")
+                l_line.append(f" - stp: {stp:.1f}s, exec: {exe:.1f}s, cln: {cln:.1f}s")
+                if l_data.get('error_message'):
+                    l_line.append(f" ERROR: {l_data['error_message']}", style="bold")
+                lines.append(l_line)
+
+        # System
+        vram_pct = (self.vram_usage / self.vram_total) * 100 if self.vram_total > 0 else 0
+        project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        session_path = os.path.join(project_root, "tests", "logs", self.session_id)
+        
+        lines.append(Text(f"\nSYSTEM STATUS:", style="bold underline"))
+        lines.append(Text(f"VRAM: {self.vram_usage:.1f}/{self.vram_total:.1f} GB ({vram_pct:.1f}%)"))
+        lines.append(Text(f"Path: {session_path}"))
+        
+        if hasattr(self, 'report_url') and self.report_url:
+            lines.append(Text(f"REPORT: {self.report_url}"))
+
+        return Group(*lines)
+
+    def save_snapshot(self, path=None):
+        """Dumps current dashboard state to a file (Truly clean text)."""
+        target = path or self.snapshot_path
+        if not target: return
+
+        # Use a console with color_system=None to strip ANSI but KEEP the structure
+        capture_console = Console(width=LINE_LEN, force_terminal=False, color_system=None)
+        with capture_console.capture() as capture:
+            capture_console.print(self.make_clean_layout())
+        
+        content = capture.get()
+        try:
+            with open(target, "w", encoding="utf-8") as f:
+                f.write(content)
+        except: pass
+
+    def _snapshot_loop(self):
+        import time
+        while not self._stop_event.is_set():
+            self.save_snapshot()
+            time.sleep(2.0)
 
     def init_plan_structure(self, structure):
         self.test_data = structure
@@ -135,7 +201,7 @@ class RichDashboard:
         total_all = sum(d['total'] for d in self.test_data.values())
         self.overall_progress.update(self.overall_task, completed=total_done, total=total_all)
 
-    def finalize_loadout(self, domain, loadout, duration):
+    def finalize_loadout(self, domain, loadout, duration, status="passed", error_message=""):
         d_data = self.test_data.get(domain.lower())
         l_data = d_data['loadouts'].get(loadout)
         
@@ -146,8 +212,9 @@ class RichDashboard:
             l_data['timers'][key] = dur
 
         l_data['duration'] = duration
-        if l_data['status'] == "wip":
-            l_data['status'] = "passed"
+        if l_data['status'] == "wip": # Only update if not already failed
+            l_data['status'] = status
+        l_data['error_message'] = error_message
         l_data['phase'] = None
         d_data['models_done'] += 1
         
@@ -241,6 +308,8 @@ class RichDashboard:
                 
                 if l_status == "passed":
                     l_text.append(" [PASSED]", style="bold green")
+                elif l_data.get('error_message'):
+                    l_text.append(f" [{l_data['error_message']}]", style="bold red")
                 elif l_status == "failed" or l_data.get('errors', 0) > 0:
                     l_text.append(f" [{l_data['errors']} FAILED]", style="bold red")
                 table.add_row(l_text)
@@ -310,7 +379,20 @@ class RichDashboard:
         
         return Group(header_panel, overall_panel, hierarchy_panel, system_panel, footer_panel)
 
-    def start(self): 
-        self.console.clear()
+    def start(self, snapshot_path=None): 
+        self.snapshot_path = snapshot_path
+        if self.snapshot_path:
+            import threading
+            self._stop_event = threading.Event()
+            self._snapshot_thread = threading.Thread(target=self._snapshot_loop, daemon=True)
+            self._snapshot_thread.start()
+
+        # self.console.clear() # Removed to prevent scrollback corruption
         self.live.start()
-    def stop(self): self.live.stop()
+
+    def stop(self):
+        if self._stop_event:
+            self._stop_event.set()
+        self.live.stop()
+        # Final snapshot
+        self.save_snapshot()

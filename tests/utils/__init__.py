@@ -19,8 +19,7 @@ from .vram import (
 from .llm import check_and_pull_model, warmup_llm, is_model_local
 from .reporting import (
     format_status, fmt_with_chunks, report_llm_result, 
-    report_scenario_result, save_artifact, trigger_report_generation,
-    ProgressionLogger
+    report_scenario_result, save_artifact, trigger_report_generation
 )
 from .lifecycle import LifecycleManager, run_test_lifecycle
 from .session import init_session
