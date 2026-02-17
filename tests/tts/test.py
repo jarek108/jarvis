@@ -28,7 +28,10 @@ def run_test_suite(variant_id, scenarios_to_run=None, trim_length=80, output_dir
     
     for s in scenarios_to_run:
         payload = {"text": s['text'], "voice": "default", "language_id": s.get('lang', 'en')}
-        out_path = os.path.join(final_results_dir, f"{variant_id}_{s['name']}.wav")
+        
+        # Sanitize name for filesystem
+        safe_id = variant_id.replace("/", "--").replace(":", "-")
+        out_path = os.path.join(final_results_dir, f"{safe_id}_{s['name']}.wav")
         # Relative to project root
         project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
         rel_path = os.path.relpath(out_path, project_root)

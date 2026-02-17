@@ -27,7 +27,10 @@ def run_test_suite(loadout_id, scenarios_to_run=None, stream=False, trim_length=
     for s in scenarios_to_run:
         audio_path = os.path.join(input_base, s['input'])
         suffix = "_stream" if stream else ""
-        output_path = os.path.join(final_results_dir, f"{loadout_id}_{s['name']}{suffix}.wav")
+        
+        # Sanitize model name for filesystem (Windows doesn't allow '/' or ':')
+        safe_id = loadout_id.replace("/", "--").replace(":", "-")
+        output_path = os.path.join(final_results_dir, f"{safe_id}_{s['name']}{suffix}.wav")
 
         # Initialize result object with metadata immediately
         # loadout_id usually looks like "stt_llm_tts"

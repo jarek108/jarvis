@@ -17,7 +17,7 @@ execution:
 
   # - domain: vlm
   #   loadouts:
-  #     # - ["OL_moondream"]
+  #     - ["OL_moondream"]
   #     # - ["OL_qwen3-vl:30b-a3b-instruct"]
   #     - ["VL_Qwen/Qwen2-VL-2B-Instruct"]
   #     # - ["VL_QuantTrio/Qwen3-VL-30B-A3B-Instruct-AWQ"]
@@ -28,7 +28,7 @@ execution:
   #     - ["faster-whisper-tiny"]
   #     # - ["faster-whisper-base"]
   #     # - ["faster-whisper-medium"]
-  #     # - ["faster-whisper-large"]
+  #     - ["faster-whisper-large"]
   #   scenarios: [all]
 
   # - domain: tts
