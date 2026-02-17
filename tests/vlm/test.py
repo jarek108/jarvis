@@ -55,8 +55,19 @@ def run_test_suite(model_name, scenarios_to_run=None, output_dir=None):
     vram_baseline = get_gpu_vram_usage()
 
     for s in scenarios_to_run:
+        file_path = os.path.join(input_base, s['media'])
+        
+        # Initialize result object with metadata immediately
+        res_obj = {
+            "name": s['name'],
+            "llm_model": model_name,
+            "input_file": file_path,
+            "input_text": s['text'],
+            "streaming": True,
+            "mode": "VLM"
+        }
+
         try:
-            file_path = os.path.join(input_base, s['media'])
             ext = os.path.splitext(s['media'])[1].lower()
             if ext in [".png", ".jpg", ".jpeg", ".webp"]:
                 with open(file_path, "rb") as bf: b64_frames = [base64.b64encode(bf.read()).decode('utf-8')]
@@ -72,7 +83,8 @@ def run_test_suite(model_name, scenarios_to_run=None, output_dir=None):
             chunks = []; sentence_buffer = ""
             with requests.post(url, json=payload, stream=True) as resp:
                 if resp.status_code != 200:
-                    report_llm_result({"name": s['name'], "status": "FAILED", "text": f"HTTP {resp.status_code}", "input_file": file_path, "input_text": s['text']})
+                    res_obj.update({"status": "FAILED", "result": f"HTTP {resp.status_code}"})
+                    report_llm_result(res_obj)
                     continue
                 for line in resp.iter_lines():
                     if line:
@@ -97,14 +109,16 @@ def run_test_suite(model_name, scenarios_to_run=None, output_dir=None):
 
             total_dur = time.perf_counter() - start_time
             ttft = (first_token_time - start_time) if first_token_time else 0
-            report_llm_result({
-                "name": s['name'], "status": "PASSED", "ttft": ttft, "tps": total_tokens / total_dur, 
-                "text": full_text, "chunks": chunks, "duration": total_dur, "llm_model": model_name, "input_file": file_path, 
-                "input_text": s['text'], "vram_peak": get_gpu_vram_usage(), "streaming": True,
+            res_obj.update({
+                "status": "PASSED", "ttft": ttft, "tps": total_tokens / total_dur, 
+                "text": full_text, "chunks": chunks, "duration": total_dur, 
+                "vram_peak": get_gpu_vram_usage(),
                 "vram_prior": 0.0 # Will be injected by runner
             })
+            report_llm_result(res_obj)
         except Exception as e:
-            report_llm_result({"name": s['name'], "status": "FAILED", "text": str(e), "input_file": s.get('media'), "input_text": s.get('text')})
+            res_obj.update({"status": "FAILED", "result": str(e)})
+            report_llm_result(res_obj)
 
 if __name__ == "__main__":
     script_dir = os.path.dirname(os.path.abspath(__file__))

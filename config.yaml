@@ -43,7 +43,7 @@ vllm:
     "default": 16384
   # Multi-modal limits (JSON strings)
   model_mm_limit_map:
-    "default": '{"image": 1}'
+    "default": '{"image": 8}'
 
 system:
   health_check_interval: 1.0

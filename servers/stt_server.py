@@ -12,7 +12,10 @@ import numpy as np
 
 # Allow importing from parent directory
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from tests.utils import load_config
+from tests.utils import load_config, ensure_utf8_output
+
+# Ensure UTF-8 output for Windows console
+ensure_utf8_output()
 
 # 1. Parse CLI arguments
 parser = argparse.ArgumentParser(description="Faster Whisper STT Server")

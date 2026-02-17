@@ -37,8 +37,13 @@ class LiveFilter(io.StringIO):
         self.out = sys.stdout # The original stdout
 
     def write(self, s):
-        # We don't write anything to self.out here, as it's intended to be completely silent.
-        # The dashboard reads from the log files.
+        for line in s.splitlines(keepends=True):
+            is_machine = line.startswith("SCENARIO_RESULT: ") or line.startswith("LIFECYCLE_RECEIPT: ") or line.startswith("VRAM_AUDIT_RESULT: ")
+            if is_machine:
+                # If it's a machine line, echo it to original stdout for runner to process
+                self.out.write(line)
+                self.out.flush()
+            # Everything else is swallowed by LiveFilter's internal string buffer
         return super().write(s)
 
 def fmt_with_chunks(text, chunks):

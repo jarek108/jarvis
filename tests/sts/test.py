@@ -40,7 +40,8 @@ def run_test_suite(loadout_id, scenarios_to_run=None, stream=False, trim_length=
             "tts_model": parts[2] if len(parts) > 2 else "N/A",
             "input_file": audio_path,
             "output_file": output_path,
-            "streaming": stream
+            "streaming": stream,
+            "vram_prior": 0.0 # Placeholder
         }
 
         if not os.path.exists(audio_path):
@@ -56,28 +57,26 @@ def run_test_suite(loadout_id, scenarios_to_run=None, stream=False, trim_length=
                         response = requests.post(url, files=files, data=data, stream=True)
                         if response.status_code != 200:
                             res_obj.update({"status": "FAILED", "duration": time.perf_counter() - start_time, "result": f"HTTP {response.status_code}"})
-                            report_scenario_result(res_obj)
-                            continue
-
-                        audio_content = b""; metrics = {}; llm_text = ""; stt_text = ""
-                        chunks = []; stream_reader = response.raw
-                        while True:
-                            header = stream_reader.read(5)
-                            if not header or len(header) < 5: break
-                            type_char = chr(header[0]); length = int.from_bytes(header[1:], 'little')
-                            payload = stream_reader.read(length)
-                            if type_char == 'T': 
-                                frame_data = json.loads(payload.decode())
-                                if frame_data['role'] == "user": stt_text = frame_data['text']
-                                else: 
-                                    llm_text += " " + frame_data['text']
-                                    chunks.append({"text": frame_data['text'], "end": time.perf_counter() - start_time})
-                            elif type_char == 'A': audio_content += payload
-                            elif type_char == 'M': metrics = json.loads(payload.decode()); break
-                        
-                        duration = time.perf_counter() - start_time
-                        with open(output_path, "wb") as f_out: f_out.write(audio_content)
-                        res_obj.update({"status": "PASSED", "duration": duration, "result": os.path.relpath(output_path, os.path.dirname(os.path.dirname(os.path.dirname(__file__)))), "metrics": metrics, "vram_peak": get_gpu_vram_usage(), "stt_text": stt_text, "llm_text": llm_text, "chunks": chunks})
+                        else:
+                            audio_content = b""; metrics = {}; llm_text = ""; stt_text = ""
+                            chunks = []; stream_reader = response.raw
+                            while True:
+                                header = stream_reader.read(5)
+                                if not header or len(header) < 5: break
+                                type_char = chr(header[0]); length = int.from_bytes(header[1:], 'little')
+                                payload = stream_reader.read(length)
+                                if type_char == 'T': 
+                                    frame_data = json.loads(payload.decode())
+                                    if frame_data['role'] == "user": stt_text = frame_data['text']
+                                    else: 
+                                        llm_text += " " + frame_data['text']
+                                        chunks.append({"text": frame_data['text'], "end": time.perf_counter() - start_time})
+                                elif type_char == 'A': audio_content += payload
+                                elif type_char == 'M': metrics = json.loads(payload.decode()); break
+                            
+                            duration = time.perf_counter() - start_time
+                            with open(output_path, "wb") as f_out: f_out.write(audio_content)
+                            res_obj.update({"status": "PASSED", "duration": duration, "result": os.path.relpath(output_path, os.path.dirname(os.path.dirname(os.path.dirname(__file__)))), "metrics": metrics, "vram_peak": get_gpu_vram_usage(), "stt_text": stt_text, "llm_text": llm_text, "chunks": chunks})
                     else:
                         response = requests.post(url, files=files, data=data)
                         duration = time.perf_counter() - start_time

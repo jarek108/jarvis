@@ -36,7 +36,10 @@ script_dir = os.path.dirname(os.path.abspath(__file__))
 project_root = os.path.dirname(script_dir)
 sys.path.append(project_root)
 
-from tests.utils import load_config, is_port_in_use, kill_process_on_port, start_server, get_service_status
+from tests.utils import load_config, is_port_in_use, kill_process_on_port, start_server, get_service_status, ensure_utf8_output
+
+# Ensure UTF-8 output for Windows console
+ensure_utf8_output()
 
 # Global config and state
 cfg = load_config()
@@ -158,6 +161,9 @@ async def lifespan(app: FastAPI):
     elif isinstance(active_llm, str) and active_llm.startswith("vllm:"):
         llm_engine = "vllm"
         llm_model_name = active_llm[5:]
+    elif isinstance(active_llm, str) and active_llm.startswith("VL_"):
+        llm_engine = "vllm"
+        llm_model_name = active_llm[3:]
     elif isinstance(active_llm, str) and active_llm.startswith("OL_"):
         llm_engine = "ollama"
         llm_model_name = active_llm[3:]
