@@ -187,6 +187,11 @@ def main():
             structure[d_name]['loadouts'][s_name] = {"status": "pending", "done": 0, "total": len(scenarios), "duration": 0, "errors": 0, "phase": None, "models": models}
     
     dashboard.init_plan_structure(structure)
+    
+    # Perform integrity checks BEFORE dashboard starts to avoid artifacts
+    j_utils.get_hf_home()
+    j_utils.get_ollama_models()
+
     log_file_path = os.path.join(session_dir, "progression.log")
     dashboard.start(snapshot_path=log_file_path)
 
@@ -207,19 +212,19 @@ def main():
                 start_l = time.perf_counter()
                 res = run_domain_tests(domain, s_name, models, scenarios, settings, session_dir, dashboard, mock=args.mock, on_scenario=dashboard_capture, on_phase=lambda p: dashboard.update_phase(domain, s_name, p))
                 
-                status = "FAILED"; error_message = ""
+                status = "failed"; error_message = ""
                 if not res:
-                    status = "FAILED"
+                    status = "failed"
                 else:
                     lifecycle_fail = next((r for r in res if r.get('name') in ["SETUP", "LIFECYCLE"] and r.get('status') != "PASSED"), None)
                     if lifecycle_fail:
-                        status = lifecycle_fail['status']
+                        status = lifecycle_fail['status'].lower()
                         error_message = lifecycle_fail.get('result', "Lifecycle error")
                     else:
                         all_passed = all(r.get('status') == "PASSED" for r in res)
-                        status = "PASSED" if all_passed else "FAILED"
+                        status = "passed" if all_passed else "failed"
                 
-                domain_results = [{"loadout": s_name, "scenarios": res or [], "status": status}]
+                domain_results = [{"loadout": s_name, "scenarios": res or [], "status": status.upper()}]
                 save_artifact(domain, domain_results, session_dir=session_dir)
                 dashboard.finalize_loadout(domain, s_name, time.perf_counter() - start_l, status=status, error_message=error_message)
                 

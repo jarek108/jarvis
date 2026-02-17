@@ -221,12 +221,25 @@ class LifecycleManager:
                 if status != "OFF": kill_process_on_port(s['port'])
                 log_path = os.path.join(log_dir, f"svc_{s['type']}_{s['id'].replace(':', '-').replace('/', '--')}_{timestamp}.log")
                 if self.on_phase: self.on_phase(f"log_path:{s['type']}:{log_path}")
+                
                 f_log = open(log_path, "w")
                 proc = start_server(s['cmd'], log_file=f_log)
                 self.owned_processes.append((s['port'], proc))
+                
                 is_vllm = 'docker' in str(s['cmd'])
+                
+                if is_vllm:
+                    time.sleep(1) # Moment for container creation
+                    log_streamer = subprocess.Popen(
+                        ["docker", "logs", "-f", "vllm-server"],
+                        stdout=f_log, stderr=f_log,
+                        creationflags=0x08000000 if os.name == 'nt' else 0
+                    )
+                    self.owned_processes.append((None, log_streamer))
+
                 wait_proc = None if is_vllm else proc
                 timeout = self.cfg.get('vllm', {}).get('model_startup_timeout', 600)
+                
                 if not wait_for_port(s['port'], process=wait_proc, timeout=timeout):
                     if is_vllm:
                         from .infra import get_vllm_logs
@@ -247,7 +260,18 @@ class LifecycleManager:
             kill_all_jarvis_services(); return 0
         if not self.owned_processes: return 0
         start_c = time.perf_counter()
-        for port, _ in self.owned_processes: kill_process_on_port(port)
+        for port, proc in self.owned_processes:
+            if port:
+                kill_process_on_port(port)
+            
+            # Explicitly kill the process object if it's still alive
+            if proc and proc.poll() is None:
+                try:
+                    proc.terminate()
+                    proc.wait(timeout=2)
+                except:
+                    try: proc.kill()
+                    except: pass
         return time.perf_counter() - start_c
 
 def run_test_lifecycle(domain, setup_name, models, purge_on_entry, purge_on_exit, full, test_func, benchmark_mode=False, force_download=False, track_prior_vram=True, session_dir=None, on_phase=None):

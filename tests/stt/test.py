@@ -33,18 +33,26 @@ def run_test_suite(model_id, scenarios_to_run=None, trim_length=80, output_dir=N
     
     for s in scenarios_to_run:
         audio_path = os.path.join(input_dir, s['input'])
+        ground_truth = s.get('expected', '')
+        
+        # Initialize result object with metadata immediately
+        res_obj = {
+            "name": s['name'],
+            "stt_model": model_id,
+            "input_file": audio_path,
+            "input_text": ground_truth,
+            "mode": "WAV"
+        }
+
         if not os.path.exists(audio_path):
-            res_obj = { "name": s['name'], "status": "FAILED", "duration": 0, "result": f"Input file missing: {s['input']}" }
+            res_obj.update({"status": "FAILED", "duration": 0, "result": f"Input file missing: {s['input']}"})
             report_scenario_result(res_obj)
             continue
-
-        ground_truth = s.get('expected', '')
         
         try:
             start_time = time.perf_counter()
             with open(audio_path, "rb") as f:
                 files = {"file": f}
-                # Support optional hint if provided in scenario (legacy or future)
                 data = {"language": s.get('hint')} if s.get('hint') else {}
                 response = requests.post(url, files=files, data=data)
             duration = time.perf_counter() - start_time
@@ -58,22 +66,18 @@ def run_test_suite(model_id, scenarios_to_run=None, trim_length=80, output_dir=N
                 if len(display_text) > trim_length:
                     display_text = display_text[:trim_length] + "..."
 
-                res_obj = {
-                    "name": s['name'],
+                res_obj.update({
                     "status": "PASSED",
                     "duration": duration,
                     "result": f"Match: {similarity:.1%} | [{display_text}]",
                     "match_pct": similarity,
-                    "stt_model": model_id,
-                    "input_file": audio_path,
-                    "input_text": ground_truth,
                     "output_text": transcription,
                     "vram_peak": get_gpu_vram_usage()
-                }
+                })
             else:
-                res_obj = { "name": s['name'], "status": "FAILED", "duration": duration, "result": f"HTTP {response.status_code}", "input_file": audio_path }
+                res_obj.update({ "status": "FAILED", "duration": duration, "result": f"HTTP {response.status_code}" })
         except Exception as e:
-            res_obj = { "name": s['name'], "status": "FAILED", "duration": 0, "result": str(e) }
+            res_obj.update({ "status": "FAILED", "duration": 0, "result": str(e) })
         
         report_scenario_result(res_obj)
 

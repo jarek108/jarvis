@@ -95,7 +95,7 @@ class RichDashboard:
         for d_name, d_data in self.test_data.items():
             d_status = d_data['status'].upper()
             d_dur = d_data['duration'] or (time.perf_counter() - d_data['start_time'] if d_data['start_time'] else 0)
-            lines.append(Text(f"â€¢ {d_name.upper()} [{d_status}] - {d_dur:.1f}s ({d_data['models_done']}/{len(d_data['loadouts'])} models)"))
+            lines.append(Text(f"- {d_name.upper()} [{d_status}] - {d_dur:.1f}s ({d_data['models_done']}/{len(d_data['loadouts'])} models)"))
             
             for l_name, l_data in d_data['loadouts'].items():
                 l_status = l_data['status'].upper()
@@ -103,7 +103,7 @@ class RichDashboard:
                 exe = self.get_phase_time(l_data, "execution")
                 cln = self.get_phase_time(l_data, "cleanup")
                 
-                l_line = Text(f"  âž¤ {l_name} [{l_status}] ({l_data['done']}/{l_data['total']})")
+                l_line = Text(f"  > {l_name} [{l_status}] ({l_data['done']}/{l_data['total']})")
                 l_line.append(f" - stp: {stp:.1f}s, exec: {exe:.1f}s, cln: {cln:.1f}s")
                 if l_data.get('error_message'):
                     l_line.append(f" ERROR: {l_data['error_message']}", style="bold")
@@ -252,8 +252,9 @@ class RichDashboard:
         session_path = os.path.join(project_root, "tests", "logs", self.session_id)
 
         for d_name, d_data in self.test_data.items():
-            d_status = d_data['status']
+            d_status = d_data['status'].lower()
             d_color = "green" if d_status == "passed" else ("red" if d_status == "failed" else ("blue" if d_status == "wip" else "bright_black"))
+            
             d_dur = d_data['duration'] or (time.perf_counter() - d_data['start_time'] if d_data['start_time'] else 0)
             
             # Aggregate timers for domain
@@ -275,7 +276,7 @@ class RichDashboard:
             table.add_row(d_text)
             
             for l_name, l_data in d_data['loadouts'].items():
-                l_status = l_data['status']
+                l_status = l_data['status'].lower()
                 l_color = "green" if l_status == "passed" else ("red" if l_status == "failed" else ("blue" if l_status == "wip" else "bright_black"))
                 stp = self.get_phase_time(l_data, "setup")
                 exe = self.get_phase_time(l_data, "execution")
@@ -313,6 +314,7 @@ class RichDashboard:
                 elif l_status == "failed" or l_data.get('errors', 0) > 0:
                     l_text.append(f" [{l_data['errors']} FAILED]", style="bold red")
                 table.add_row(l_text)
+        return table
         return table
 
     def make_layout(self):

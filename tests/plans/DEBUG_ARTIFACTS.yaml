@@ -1,0 +1,18 @@
+name: "Artifact Debug Plan"
+description: "Targeted verification of STT metadata and vLLM log capture."
+
+settings:
+  purge_on_entry: true
+  purge_on_exit: true
+  track_prior_vram: true
+
+execution:
+  - domain: stt
+    loadouts:
+      - ["faster-whisper-tiny"]
+      - ["faster-whisper-base"]
+    scenarios: [english_std, chinese_std]
+  - domain: vlm
+    loadouts:
+      - ["VL_Qwen/Qwen2-VL-2B-Instruct"]
+    scenarios: [jarvis_logo]
