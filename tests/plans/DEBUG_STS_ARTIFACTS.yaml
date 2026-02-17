@@ -1,0 +1,13 @@
+name: "STS Artifact Debug Plan"
+description: "Targeted verification of STS metadata capture."
+
+settings:
+  purge_on_entry: true
+  purge_on_exit: true
+  track_prior_vram: true
+
+execution:
+  - domain: sts
+    loadouts:
+      - ["faster-whisper-tiny", "OL_qwen2.5:0.5b", "chatterbox-turbo"]
+    scenarios: [english_std]

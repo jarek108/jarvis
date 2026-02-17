@@ -29,8 +29,22 @@ def run_test_suite(loadout_id, scenarios_to_run=None, stream=False, trim_length=
         suffix = "_stream" if stream else ""
         output_path = os.path.join(final_results_dir, f"{loadout_id}_{s['name']}{suffix}.wav")
 
+        # Initialize result object with metadata immediately
+        # loadout_id usually looks like "stt_llm_tts"
+        parts = loadout_id.split("_")
+        res_obj = {
+            "name": s['name'],
+            "mode": "STREAM" if stream else "WAV",
+            "stt_model": parts[0] if len(parts) > 0 else "N/A",
+            "llm_model": parts[1] if len(parts) > 1 else "N/A",
+            "tts_model": parts[2] if len(parts) > 2 else "N/A",
+            "input_file": audio_path,
+            "output_file": output_path,
+            "streaming": stream
+        }
+
         if not os.path.exists(audio_path):
-            res_obj = {"name": s['name'], "status": "FAILED", "duration": 0, "result": f"Input missing: {s['input']}", "mode": "STREAM" if stream else "WAV"}
+            res_obj.update({"status": "FAILED", "duration": 0, "result": f"Input missing: {s['input']}"})
         else:
             try:
                 start_time = time.perf_counter()
@@ -41,7 +55,7 @@ def run_test_suite(loadout_id, scenarios_to_run=None, stream=False, trim_length=
                     if stream:
                         response = requests.post(url, files=files, data=data, stream=True)
                         if response.status_code != 200:
-                            res_obj = {"name": s['name'], "status": "FAILED", "duration": time.perf_counter() - start_time, "result": f"HTTP {response.status_code}", "mode": "STREAM"}
+                            res_obj.update({"status": "FAILED", "duration": time.perf_counter() - start_time, "result": f"HTTP {response.status_code}"})
                             report_scenario_result(res_obj)
                             continue
 
@@ -63,17 +77,25 @@ def run_test_suite(loadout_id, scenarios_to_run=None, stream=False, trim_length=
                         
                         duration = time.perf_counter() - start_time
                         with open(output_path, "wb") as f_out: f_out.write(audio_content)
-                        res_obj = {"name": s['name'], "status": "PASSED", "duration": duration, "result": os.path.relpath(output_path, os.path.dirname(os.path.dirname(os.path.dirname(__file__)))), "mode": "STREAM", "metrics": metrics, "stt_model": response.headers.get("X-Model-STT"), "llm_model": response.headers.get("X-Model-LLM"), "tts_model": response.headers.get("X-Model-TTS"), "input_file": audio_path, "output_file": output_path, "streaming": True, "vram_peak": get_gpu_vram_usage(), "stt_text": stt_text, "llm_text": llm_text, "chunks": chunks}
+                        res_obj.update({"status": "PASSED", "duration": duration, "result": os.path.relpath(output_path, os.path.dirname(os.path.dirname(os.path.dirname(__file__)))), "metrics": metrics, "vram_peak": get_gpu_vram_usage(), "stt_text": stt_text, "llm_text": llm_text, "chunks": chunks})
                     else:
                         response = requests.post(url, files=files, data=data)
                         duration = time.perf_counter() - start_time
                         if response.status_code == 200:
                             with open(output_path, "wb") as f_out: f_out.write(response.content)
-                            res_obj = {"name": s['name'], "status": "PASSED", "duration": duration, "result": os.path.relpath(output_path, os.path.dirname(os.path.dirname(os.path.dirname(__file__)))), "mode": "WAV", "stt_inf": float(response.headers.get("X-Metric-STT-Inference", 0)), "llm_tot": float(response.headers.get("X-Metric-LLM-Total", 0)), "tts_inf": float(response.headers.get("X-Metric-TTS-Inference", 0)), "stt_text": response.headers.get("X-Result-STT"), "llm_text": response.headers.get("X-Result-LLM"), "stt_model": response.headers.get("X-Model-STT"), "llm_model": response.headers.get("X-Model-LLM"), "tts_model": response.headers.get("X-Model-TTS"), "input_file": audio_path, "output_file": output_path, "streaming": False, "vram_peak": get_gpu_vram_usage()}
+                            res_obj.update({
+                                "status": "PASSED", "duration": duration, "result": os.path.relpath(output_path, os.path.dirname(os.path.dirname(os.path.dirname(__file__)))), 
+                                "stt_inf": float(response.headers.get("X-Metric-STT-Inference", 0)), 
+                                "llm_tot": float(response.headers.get("X-Metric-LLM-Total", 0)), 
+                                "tts_inf": float(response.headers.get("X-Metric-TTS-Inference", 0)), 
+                                "stt_text": response.headers.get("X-Result-STT"), 
+                                "llm_text": response.headers.get("X-Result-LLM"), 
+                                "vram_peak": get_gpu_vram_usage()
+                            })
                         else:
-                            res_obj = {"name": s['name'], "status": "FAILED", "duration": duration, "result": f"HTTP {response.status_code}", "mode": "WAV", "input_file": audio_path}
+                            res_obj.update({"status": "FAILED", "duration": duration, "result": f"HTTP {response.status_code}"})
             except Exception as e:
-                res_obj = {"name": s['name'], "status": "FAILED", "duration": 0, "result": str(e), "mode": "STREAM" if stream else "WAV"}
+                res_obj.update({"status": "FAILED", "duration": 0, "result": str(e)})
 
         report_scenario_result(res_obj)
 
