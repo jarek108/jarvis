@@ -2,7 +2,8 @@ import json
 import sys
 import os
 import time
-from .ui import GREEN, RED, RESET, fmt_with_chunks as _fmt_with_chunks
+from utils.console import GREEN, RED, RESET
+from .ui import fmt_with_chunks as _fmt_with_chunks
 
 def format_status(status):
     if status == "PASSED": return f"{GREEN}[PASS]{RESET}"

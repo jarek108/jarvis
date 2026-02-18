@@ -78,25 +78,37 @@ def get_service_status(port: int):
     except:
         return "UNHEALTHY", None
 
+import asyncio
+
 def get_system_health():
+    """Polls all Jarvis services in parallel (Synchronous wrapper)."""
+    from .infra import get_system_health_async
+    health_raw = asyncio.run(get_system_health_async())
+    
     cfg = load_config()
     health = {}
-    sts_status, sts_info = get_service_status(cfg['ports']['sts'])
-    health[cfg['ports']['sts']] = {"status": sts_status, "info": sts_info, "label": "sts", "type": "sts"}
     
-    ollama_status, ollama_info = get_service_status(cfg['ports']['ollama'])
-    health[cfg['ports']['ollama']] = {"status": ollama_status, "info": ollama_info, "label": "Ollama", "type": "llm"}
-    
+    # Map raw results to the expected UI format
+    port_map = {
+        cfg['ports']['sts']: {"label": "sts", "type": "sts"},
+        cfg['ports']['ollama']: {"label": "Ollama", "type": "llm"},
+    }
     if 'vllm' in cfg['ports']:
-        vllm_status, vllm_info = get_service_status(cfg['ports']['vllm'])
-        health[cfg['ports']['vllm']] = {"status": vllm_status, "info": vllm_info, "label": "vLLM", "type": "llm"}
-
+        port_map[cfg['ports']['vllm']] = {"label": "vLLM", "type": "llm"}
+    
     for name, port in cfg['stt_loadout'].items():
-        status, info = get_service_status(port)
-        health[port] = {"status": status, "info": info, "label": name, "type": "stt"}
+        port_map[port] = {"label": name, "type": "stt"}
     for name, port in cfg['tts_loadout'].items():
-        status, info = get_service_status(port)
-        health[port] = {"status": status, "info": info, "label": name, "type": "tts"}
+        port_map[port] = {"label": name, "type": "tts"}
+
+    for port, meta in port_map.items():
+        res = health_raw.get(port, {"status": "OFF", "info": None})
+        health[port] = {
+            "status": res['status'],
+            "info": res['info'],
+            "label": meta['label'],
+            "type": meta['type']
+        }
     return health
 
 def get_gpu_vram_usage():
@@ -107,12 +119,19 @@ def get_gpu_vram_usage():
     except:
         return 0.0
 
+_total_vram_cache = None
+
 def get_gpu_total_vram():
     """Returns total GPU VRAM in GB."""
+    global _total_vram_cache
+    if _total_vram_cache is not None:
+        return _total_vram_cache
+        
     try:
         cmd = ["nvidia-smi", "--query-gpu=memory.total", "--format=csv,nounits,noheader"]
         output = subprocess.check_output(cmd, text=True).strip()
-        return float(output) / 1024.0
+        _total_vram_cache = float(output) / 1024.0
+        return _total_vram_cache
     except:
         return 32.0 # Fallback for RTX 5090 if command fails
 

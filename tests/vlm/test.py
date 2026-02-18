@@ -13,10 +13,11 @@ from PIL import Image
 
 # Allow importing utils from parent levels
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from utils import report_llm_result, ensure_utf8_output, run_test_lifecycle, get_gpu_vram_usage, check_ollama_offload, load_config
+import utils
+import test_utils
 
 # Ensure UTF-8 output
-ensure_utf8_output()
+utils.ensure_utf8_output()
 
 def extract_frames(video_path, max_frames=8):
     frames = []
@@ -42,7 +43,7 @@ def extract_frames(video_path, max_frames=8):
     return frames
 
 def run_test_suite(model_name, scenarios_to_run=None, output_dir=None):
-    cfg = load_config()
+    cfg = utils.load_config()
     is_vllm = model_name.startswith("VL_") or model_name.startswith("vllm:")
     if model_name.startswith("VL_"): clean_model_name = model_name[3:]
     elif model_name.startswith("vllm:"): clean_model_name = model_name[5:]
@@ -52,7 +53,7 @@ def run_test_suite(model_name, scenarios_to_run=None, output_dir=None):
     url = f"http://127.0.0.1:{cfg['ports']['vllm'] if is_vllm else cfg['ports']['ollama']}/v1/chat/completions" if is_vllm else f"http://127.0.0.1:{cfg['ports']['ollama']}/api/chat"
     
     input_base = os.path.join(os.path.dirname(__file__), "input_data")
-    vram_baseline = get_gpu_vram_usage()
+    vram_baseline = utils.get_gpu_vram_usage()
 
     for s in scenarios_to_run:
         file_path = os.path.join(input_base, s['media'])
@@ -84,8 +85,9 @@ def run_test_suite(model_name, scenarios_to_run=None, output_dir=None):
             with requests.post(url, json=payload, stream=True) as resp:
                 if resp.status_code != 200:
                     res_obj.update({"status": "FAILED", "result": f"HTTP {resp.status_code}"})
-                    report_llm_result(res_obj)
+                    test_utils.report_llm_result(res_obj)
                     continue
+                
                 for line in resp.iter_lines():
                     if line:
                         line_text = line.decode('utf-8').strip()
@@ -112,13 +114,13 @@ def run_test_suite(model_name, scenarios_to_run=None, output_dir=None):
             res_obj.update({
                 "status": "PASSED", "ttft": ttft, "tps": total_tokens / total_dur, 
                 "text": full_text, "chunks": chunks, "duration": total_dur, 
-                "vram_peak": get_gpu_vram_usage(),
+                "vram_peak": utils.get_gpu_vram_usage(),
                 "vram_prior": 0.0 # Will be injected by runner
             })
-            report_llm_result(res_obj)
+            test_utils.report_llm_result(res_obj)
         except Exception as e:
             res_obj.update({"status": "FAILED", "result": str(e)})
-            report_llm_result(res_obj)
+            test_utils.report_llm_result(res_obj)
 
 if __name__ == "__main__":
     script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -133,7 +135,7 @@ if __name__ == "__main__":
     # Simple standalone support
     target_model = args.loadout # Assume direct model ID for standalone
     
-    run_test_lifecycle(
+    test_utils.run_test_lifecycle(
         domain="vlm", setup_name="manual", models=[target_model], 
         purge_on_entry=True, purge_on_exit=True, full=False, 
         test_func=lambda: run_test_suite(target_model, scenarios_to_run=scenarios)

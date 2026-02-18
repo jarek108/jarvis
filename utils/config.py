@@ -2,11 +2,18 @@ import os
 import yaml
 import sys
 
+_config_cache = None
+
 def load_config():
-    base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    global _config_cache
+    if _config_cache is not None:
+        return _config_cache
+        
+    base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     config_path = os.path.join(base_dir, "config.yaml")
     with open(config_path, "r") as f:
-        return yaml.safe_load(f)
+        _config_cache = yaml.safe_load(f)
+    return _config_cache
 
 def resolve_path(path_str):
     """Expands ~ and resolves relative paths against project root."""
@@ -15,10 +22,10 @@ def resolve_path(path_str):
     if os.path.isabs(expanded):
         return os.path.normpath(expanded)
     
-    project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     return os.path.normpath(os.path.join(project_root, expanded))
 
-def get_hf_home():
+def get_hf_home(silent=False):
     """Strictly resolves HuggingFace cache path from system environment."""
     env = os.environ.get('HF_HOME')
     if not env:
@@ -30,10 +37,11 @@ def get_hf_home():
         sys.exit(1)
     
     path = os.path.normpath(env)
-    print(f"  ↳ ✅ System Integrity: HF_HOME detected -> {path}")
+    if not silent:
+        print(f"  ↳ ✅ System Integrity: HF_HOME detected -> {path}")
     return path
 
-def get_ollama_models():
+def get_ollama_models(silent=False):
     """Strictly resolves Ollama models path from system environment."""
     env = os.environ.get('OLLAMA_MODELS')
     if not env:
@@ -45,5 +53,6 @@ def get_ollama_models():
         sys.exit(1)
     
     path = os.path.normpath(env)
-    print(f"  ↳ ✅ System Integrity: OLLAMA_MODELS detected -> {path}")
+    if not silent:
+        print(f"  ↳ ✅ System Integrity: OLLAMA_MODELS detected -> {path}")
     return path

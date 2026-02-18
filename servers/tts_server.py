@@ -8,6 +8,7 @@ import sys
 import time
 import argparse
 import soundfile as sf
+import numpy as np
 from loguru import logger
 
 # --- EMERGENCY HOTFIX: Monkey-patch perth ---
@@ -36,11 +37,12 @@ parser = argparse.ArgumentParser(description="Chatterbox TTS Server")
 parser.add_argument("--port", type=int, default=8200, help="Port to run on")
 parser.add_argument("--variant", type=str, default="chatterbox-eng", help="chatterbox-eng, chatterbox-multilingual, or chatterbox-turbo")
 parser.add_argument("--benchmark-mode", action="store_true", help="Enable deterministic output for benchmarking")
+parser.add_argument("--stub", action="store_true", help="Run in stub mode (no model loading, static responses)")
 args, unknown = parser.parse_known_args()
 
 # Allow importing from parent directory
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from tests.utils import load_config
+from utils import load_config
 
 cfg = load_config()
 VARIANT_ID = args.variant
@@ -49,6 +51,15 @@ device = cfg['device'] if torch.cuda.is_available() else "cpu"
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # --- STARTUP ---
+    if args.stub:
+        logger.info(f"🚀 TTS Server starting in STUB MODE (Variant: {VARIANT_ID})")
+        app.state.model = None
+        app.state.internal_variant = "stub"
+        app.state.benchmark_mode = args.benchmark_mode
+        app.state.is_ready = True
+        yield
+        return
+
     logger.info(f"🚀 Loading TTS Variant: {VARIANT_ID} on {device} (Benchmark Mode: {args.benchmark_mode})...")
 
     # Strip prefix and map 'eng' to 'vanilla' internal logic
@@ -115,18 +126,26 @@ async def tts(request: Request):
         
         start_time = time.perf_counter()
         
-        if app.state.benchmark_mode:
-            torch.manual_seed(42)
-
-        if internal_variant == "multilingual":
-            wav = model.generate(text, language_id)
+        if internal_variant == "stub":
+            # Generate 1 second of silence at 24kHz
+            sr = 24000
+            wav_numpy = np.zeros(sr, dtype=np.float32)
+            out = io.BytesIO()
+            sf.write(out, wav_numpy, sr, format="WAV")
+            processing_time = 0.01
         else:
-            wav = model.generate(text)
-        processing_time = time.perf_counter() - start_time
-        
-        wav_numpy = wav.squeeze().cpu().numpy()
-        out = io.BytesIO()
-        sf.write(out, wav_numpy, model.sr, format="WAV")
+            if app.state.benchmark_mode:
+                torch.manual_seed(42)
+
+            if internal_variant == "multilingual":
+                wav = model.generate(text, language_id)
+            else:
+                wav = model.generate(text)
+            processing_time = time.perf_counter() - start_time
+            
+            wav_numpy = wav.squeeze().cpu().numpy()
+            out = io.BytesIO()
+            sf.write(out, wav_numpy, model.sr, format="WAV")
         
         return Response(
             content=out.getvalue(), 

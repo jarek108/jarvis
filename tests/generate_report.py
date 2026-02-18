@@ -12,8 +12,8 @@ from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
 
 # Use the consolidated manager from utils
-from utils.reporting import GDriveAssetManager
-from utils.ui import fmt_with_chunks
+from test_utils.reporting import GDriveAssetManager
+from test_utils.ui import fmt_with_chunks
 
 # If modifying these scopes, delete the file token.pickle.
 SCOPES = ['https://www.googleapis.com/auth/drive.file']

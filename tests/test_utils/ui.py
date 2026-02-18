@@ -11,23 +11,10 @@ from rich.table import Table
 from rich.text import Text
 from rich.align import Align
 
-# --- SHARED UI CONSTANTS ---
-CYAN = "\033[96m"
-GREEN = "\033[92m"
-RED = "\033[91m"
-YELLOW = "\033[93m"
-GRAY = "\033[90m"
-RESET = "\033[0m"
-BOLD = "\033[1m"
-LINE_LEN = 120
-
-def ensure_utf8_output():
-    """Forces UTF-8 for console output on Windows to prevent UnicodeEncodeErrors."""
-    if sys.platform == "win32":
-        if not isinstance(sys.stdout, io.TextIOWrapper) or sys.stdout.encoding.lower() != 'utf-8':
-            sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
-        if not isinstance(sys.stderr, io.TextIOWrapper) or sys.stderr.encoding.lower() != 'utf-8':
-            sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8')
+from utils.console import (
+    ensure_utf8_output,
+    CYAN, GREEN, RED, YELLOW, GRAY, RESET, BOLD, LINE_LEN
+)
 
 class LiveFilter(io.StringIO):
     """Captures everything to a buffer. It's intended that the dashboard pulls the raw logs from files."""
@@ -36,14 +23,16 @@ class LiveFilter(io.StringIO):
         ensure_utf8_output()
         self.out = sys.stdout # The original stdout
 
+    @property
+    def buffer(self):
+        # Some libraries (like requests) expect a buffer attribute on stdout
+        return self
+
     def write(self, s):
-        for line in s.splitlines(keepends=True):
-            is_machine = line.startswith("SCENARIO_RESULT: ") or line.startswith("LIFECYCLE_RECEIPT: ") or line.startswith("VRAM_AUDIT_RESULT: ")
-            if is_machine:
-                # If it's a machine line, echo it to original stdout for runner to process
-                self.out.write(line)
-                self.out.flush()
-            # Everything else is swallowed by LiveFilter's internal string buffer
+        # Silence all output to the real stdout while the dashboard is active.
+        # Scenario results are now captured via the AccumulatingReporter callback.
+        if isinstance(s, bytes):
+            s = s.decode('utf-8', errors='replace')
         return super().write(s)
 
 def fmt_with_chunks(text, chunks):
@@ -55,11 +44,11 @@ def fmt_with_chunks(text, chunks):
     return "".join(out)
 
 class RichDashboard:
-    def __init__(self, plan_name, session_id, system_info):
+    def __init__(self, plan_name, session_id="PENDING", system_info=None):
         self.console = Console()
         self.plan_name = plan_name
         self.session_id = session_id
-        self.system_info = system_info
+        self.system_info = system_info or {"host": {"gpu": "Detecting..."}}
         self.test_data = {}
         
         self.overall_progress = Progress(
@@ -71,6 +60,7 @@ class RichDashboard:
             "•",
             TimeElapsedColumn(),
         )
+        self.boot_task = self.overall_progress.add_task("Booting / Pre-flight", total=1)
         self.overall_task = self.overall_progress.add_task("Total Scenarios", total=100)
         self.models_task = self.overall_progress.add_task("Total Models   ", total=100)
         
@@ -152,6 +142,11 @@ class RichDashboard:
 
     def init_plan_structure(self, structure):
         self.test_data = structure
+
+    def finalize_boot(self, session_id=None, system_info=None):
+        if session_id: self.session_id = session_id
+        if system_info: self.system_info = system_info
+        self.overall_progress.update(self.boot_task, completed=1)
 
     def update_phase(self, domain, loadout, phase, status="wip"):
         d_data = self.test_data.get(domain.lower())
@@ -373,13 +368,20 @@ class RichDashboard:
 
         system_panel = Panel(Align.left(vram_text), title="System Status", border_style="cyan")
         
-        # 5. Model Log Tail
+        # 5. Model Log Tail (Efficient Seek-based tail)
         log_content = ""
         if self.active_log_path and os.path.exists(self.active_log_path):
             try:
-                with open(self.active_log_path, "r", encoding="utf-8", errors="ignore") as f:
-                    lines = f.readlines()
-                    log_content = "".join(lines[-18:])
+                with open(self.active_log_path, "rb") as f:
+                    # Seek to end and read last 2048 bytes
+                    f.seek(0, os.SEEK_END)
+                    size = f.tell()
+                    to_read = min(size, 4096)
+                    f.seek(size - to_read)
+                    chunk = f.read(to_read).decode('utf-8', errors='ignore')
+                    # Get last 18 lines
+                    lines = chunk.splitlines()
+                    log_content = "\n".join(lines[-18:])
             except: pass
         
         footer_panel = Panel(Text(log_content, style="bright_black"), title=f"Model Log: {os.path.basename(self.active_log_path or 'None')}", border_style="bright_black")

@@ -8,17 +8,22 @@ import yaml
 
 # Allow importing utils from parent levels
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from utils import load_config, report_scenario_result, ensure_utf8_output, run_test_lifecycle, get_gpu_vram_usage
+import utils
+import test_utils
+from test_utils.collectors import BaseReporter, StdoutReporter
 
 # Ensure UTF-8 output
-ensure_utf8_output()
+utils.ensure_utf8_output()
 
 def calculate_similarity(a, b):
     import difflib
     return difflib.SequenceMatcher(None, a.lower(), b.lower()).ratio()
 
-def run_test_suite(model_id, scenarios_to_run=None, trim_length=80, output_dir=None):
-    cfg = load_config()
+def run_test_suite(model_id, scenarios_to_run=None, trim_length=80, output_dir=None, reporter: BaseReporter = None):
+    cfg = utils.load_config()
+    if not reporter:
+        reporter = StdoutReporter()
+
     port = cfg['stt_loadout'].get(model_id)
     if not port:
         print(f"FAILED: Model ID '{model_id}' not found in configuration.")
@@ -72,14 +77,14 @@ def run_test_suite(model_id, scenarios_to_run=None, trim_length=80, output_dir=N
                     "result": f"Match: {similarity:.1%} | [{display_text}]",
                     "match_pct": similarity,
                     "output_text": transcription,
-                    "vram_peak": get_gpu_vram_usage()
+                    "vram_peak": utils.get_gpu_vram_usage()
                 })
             else:
                 res_obj.update({ "status": "FAILED", "duration": duration, "result": f"HTTP {response.status_code}" })
         except Exception as e:
             res_obj.update({ "status": "FAILED", "duration": 0, "result": str(e) })
         
-        report_scenario_result(res_obj)
+        reporter.report(res_obj)
 
 if __name__ == "__main__":
     # Note: Standalone mode updated to load default scenarios
@@ -101,7 +106,7 @@ if __name__ == "__main__":
     with open(l_path, "r", encoding="utf-8") as f:
         target_model = yaml.safe_load(f).get('stt')[0]
 
-    run_test_lifecycle(
+    test_utils.run_test_lifecycle(
         domain="stt", setup_name=args.loadout, models=[target_model],
         purge_on_entry=True, purge_on_exit=True, full=False,
         test_func=lambda: run_test_suite(target_model, scenarios_to_run=scenarios)

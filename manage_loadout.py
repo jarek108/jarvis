@@ -38,23 +38,13 @@ import yaml
 import time
 from loguru import logger
 
-# Ensure we can import from tests/
-sys.path.append(os.path.join(os.getcwd(), "tests"))
 from utils import (
     get_system_health, load_config, kill_process_on_port, wait_for_port, 
     start_server, is_vllm_docker_running, stop_vllm_docker, 
     kill_all_jarvis_services, get_gpu_vram_usage, resolve_path,
     get_hf_home, get_ollama_models
 )
-
-# ANSI Colors
-GREEN = "\033[92m"
-RED = "\033[91m"
-YELLOW = "\033[93m"
-GRAY = "\033[90m"
-RESET = "\033[0m"
-BOLD = "\033[1m"
-CYAN = "\033[96m"
+from utils.console import GREEN, RED, YELLOW, GRAY, RESET, BOLD, CYAN
 
 def print_status():
     health = get_system_health()

@@ -8,13 +8,14 @@ import yaml
 
 # Allow importing utils from parent levels
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from utils import load_config, report_scenario_result, ensure_utf8_output, run_test_lifecycle, get_gpu_vram_usage
+import utils
+import test_utils
 
 # Ensure UTF-8 output
-ensure_utf8_output()
+utils.ensure_utf8_output()
 
 def run_test_suite(variant_id, scenarios_to_run=None, trim_length=80, output_dir=None):
-    cfg = load_config()
+    cfg = utils.load_config()
     port = cfg['tts_loadout'].get(variant_id)
     if not port:
         print(f"FAILED: Variant ID '{variant_id}' not found in configuration.")
@@ -57,14 +58,14 @@ def run_test_suite(variant_id, scenarios_to_run=None, trim_length=80, output_dir
                     "tts_model": variant_id,
                     "output_file": out_path,
                     "input_text": s['text'],
-                    "vram_peak": get_gpu_vram_usage()
+                    "vram_peak": utils.get_gpu_vram_usage()
                 }
             else:
                 res_obj = {"name": s['name'], "status": "FAILED", "duration": duration, "result": f"HTTP {response.status_code}", "input_text": s['text']}
         except Exception as e:
             res_obj = {"name": s['name'], "status": "FAILED", "duration": 0, "result": str(e)}
 
-        report_scenario_result(res_obj)
+        test_utils.report_scenario_result(res_obj)
 
 if __name__ == "__main__":
     script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -76,12 +77,12 @@ if __name__ == "__main__":
     parser.add_argument("--loadout", type=str, required=True, help="Loadout YAML name")
     args = parser.parse_args()
 
-    cfg = load_config()
+    cfg = utils.load_config()
     l_path = os.path.join(os.path.dirname(script_dir), "loadouts", f"{args.loadout}.yaml")
     with open(l_path, "r") as f:
         target_variant = yaml.safe_load(f).get('tts')[0]
 
-    run_test_lifecycle(
+    test_utils.run_test_lifecycle(
         domain="tts", setup_name=args.loadout, models=[target_variant],
         purge_on_entry=True, purge_on_exit=True, full=False,
         test_func=lambda: run_test_suite(target_variant, scenarios_to_run=scenarios)

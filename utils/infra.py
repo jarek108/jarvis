@@ -7,21 +7,76 @@ import requests
 import sys
 from .config import load_config
 
+import aiohttp
+import asyncio
+
+async def get_service_status_async(session, port: int):
+    """Asynchronous version of get_service_status for batch checks."""
+    # PRE-FLIGHT: If port isn't even open, don't waste time on a request + timeout
+    if not is_port_in_use(port):
+        return port, "OFF", None
+    
+    cfg = load_config()
+    url = f"http://127.0.0.1:{port}/health"
+    if port == cfg['ports']['ollama']: url = f"http://127.0.0.1:{port}/api/tags"
+    elif port == cfg['ports'].get('vllm'): url = f"http://127.0.0.1:{port}/v1/models"
+
+    try:
+        # We know it's in use, so a 1s timeout is safe for a local responsive server
+        async with session.get(url, timeout=1.0) as response:
+            if response.status == 200:
+                data = await response.json()
+                if port == cfg['ports']['ollama']: return port, "ON", "Ollama"
+                if port == cfg['ports'].get('vllm'): 
+                    models = data.get("data", [])
+                    return port, "ON", (models[0]["id"] if models else "vLLM")
+                name = data.get("model") or data.get("variant") or "Ready"
+                return port, ("BUSY" if data.get("status") == "busy" else "ON"), name
+            elif response.status == 503:
+                data = await response.json()
+                if data.get("status") == "STARTUP": return port, "STARTUP", "Loading..."
+            return port, "UNHEALTHY", None
+    except Exception:
+        if port == cfg['ports']['ollama'] or port == cfg['ports'].get('vllm'):
+            return port, "STARTUP", "Connecting..."
+        return port, "OFF", None
+
+async def get_system_health_async():
+    """Polls all Jarvis services in parallel."""
+    ports = get_jarvis_ports()
+    async with aiohttp.ClientSession() as session:
+        tasks = [get_service_status_async(session, p) for p in ports]
+        results = await asyncio.gather(*tasks)
+    return {r[0]: {"status": r[1], "info": r[2]} for r in results}
+
+async def wait_for_ports_parallel(ports, timeout=120):
+    """Waits for multiple ports to be ON in parallel."""
+    if not ports: return True
+    start_time = time.time()
+    async with aiohttp.ClientSession() as session:
+        while time.time() - start_time < timeout:
+            tasks = [get_service_status_async(session, p) for p in ports]
+            results = await asyncio.gather(*tasks)
+            # Check if all statuses are 'ON'
+            if all(r[1] == "ON" for r in results):
+                return True
+            await asyncio.sleep(0.5)
+    return False
+
 def is_port_in_use(port: int) -> bool:
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         return s.connect_ex(('127.0.0.1', port)) == 0
 
 def start_server(cmd, loud=False, log_file=None):
     flags = subprocess.CREATE_NEW_CONSOLE if loud else (0x08000000 if os.name == 'nt' else 0)
-    project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     
-    # On Windows, list-based Popen is more reliable for complex arguments like JSON
-    # if shell=False. However, we use shell=True for some legacy reasons.
-    # Let's try to pass the list directly and let Python handle the quoting.
     stdout = log_file if log_file else None
     stderr = log_file if log_file else None
     
-    return subprocess.Popen(cmd, creationflags=flags, shell=True, cwd=project_root, stdout=stdout, stderr=stderr)
+    # If cmd is a list, use shell=False for better reliability on Windows
+    use_shell = not isinstance(cmd, list)
+    return subprocess.Popen(cmd, creationflags=flags, shell=use_shell, cwd=project_root, stdout=stdout, stderr=stderr)
 
 def wait_for_port(port: int, timeout: int = 120, process=None) -> bool:
     # Local import to avoid circular dependency if get_service_status moves elsewhere
@@ -45,7 +100,7 @@ def wait_for_port(port: int, timeout: int = 120, process=None) -> bool:
         #    print(f"  ... waiting for port {port} ({elapsed}s elapsed, status: {status})", flush=True)
             
         if process and process.poll() is not None: return False
-        time.sleep(1)
+        time.sleep(0.2)
     return False
 
 def get_vllm_logs():
@@ -112,31 +167,53 @@ def is_vllm_model_local(model_name):
     
     return False
 
+def kill_jarvis_ports(ports_to_kill):
+    """Efficiently kills processes on multiple ports in a single pass."""
+    if not ports_to_kill: return
+    
+    ports_to_kill = set(ports_to_kill)
+    cfg = load_config()
+    
+    # Special handling for Ollama on Windows
+    ollama_port = cfg['ports']['ollama']
+    if ollama_port in ports_to_kill and os.name == 'nt':
+        if is_port_in_use(ollama_port):
+            subprocess.run(["taskkill", "/F", "/IM", "ollama*", "/T"], capture_output=True)
+            time.sleep(0.5)
+        ports_to_kill.remove(ollama_port)
+    
+    # Special handling for vLLM Docker
+    vllm_port = cfg['ports'].get('vllm')
+    if vllm_port in ports_to_kill:
+        stop_vllm_docker()
+        ports_to_kill.remove(vllm_port)
+
+    if not ports_to_kill: return
+
+    try:
+        # Use process_iter which is generally faster on Windows than net_connections
+        for proc in psutil.process_iter(['pid', 'name']):
+            try:
+                # Only check connections if it's likely a python or service process
+                # this filters out thousands of irrelevant system processes
+                name = proc.info['name'].lower()
+                if 'python' in name or 'ollama' in name or 'uvicorn' in name:
+                    for conn in proc.connections(kind='inet'):
+                        if conn.laddr.port in ports_to_kill:
+                            proc.kill()
+                            break
+            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                continue
+        
+        # Short breather for OS to reclaim ports
+        time.sleep(0.3)
+    except Exception:
+        pass
+
 def kill_process_on_port(port: int):
     try:
-        cfg = load_config()
-        if port == cfg['ports']['ollama'] and os.name == 'nt':
-            # Kill everything related to ollama
-            subprocess.run(["taskkill", "/F", "/IM", "ollama*", "/T"], capture_output=True)
-            time.sleep(1.0)
-        
-        # If port is vLLM port, try to stop docker container
-        if port == cfg['ports'].get('vllm'):
-            stop_vllm_docker()
-
-        # Kill python processes if it's a vLLM or custom server port
-        pids = {conn.pid for conn in psutil.net_connections(kind='inet') if conn.laddr.port == port and conn.pid}
-        for pid in pids:
-            try:
-                proc = psutil.Process(pid)
-                # If it's a vLLM process, we might want to be more aggressive or specific
-                # but general kill usually works.
-                for child in proc.children(recursive=True):
-                    try: child.kill()
-                    except: pass
-                proc.kill()
-                proc.wait(timeout=2)
-            except: pass
+        if not is_port_in_use(port): return True
+        kill_jarvis_ports({port})
         return not is_port_in_use(port)
     except: return not is_port_in_use(port)
 
@@ -153,5 +230,4 @@ def get_jarvis_ports():
 def kill_all_jarvis_services():
     """Kills every service defined in config.yaml."""
     ports = get_jarvis_ports()
-    for port in ports:
-        kill_process_on_port(port)
+    kill_jarvis_ports(ports)

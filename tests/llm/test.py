@@ -8,13 +8,18 @@ import yaml
 
 # Allow importing utils from parent levels
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from utils import report_llm_result, ensure_utf8_output, run_test_lifecycle, get_gpu_vram_usage, check_ollama_offload, load_config
+import utils
+import test_utils
+from test_utils.collectors import BaseReporter, StdoutReporter
 
 # Ensure UTF-8 output
-ensure_utf8_output()
+utils.ensure_utf8_output()
 
-def run_test_suite(model_name, scenarios_to_run=None, output_dir=None):
-    cfg = load_config()
+def run_test_suite(model_name, scenarios_to_run=None, output_dir=None, reporter: BaseReporter = None):
+    cfg = utils.load_config()
+    if not reporter:
+        reporter = StdoutReporter()
+
     is_vllm = model_name.startswith("VL_") or model_name.startswith("vllm:")
     if model_name.startswith("VL_"): clean_model_name = model_name[3:]
     elif model_name.startswith("vllm:"): clean_model_name = model_name[5:]
@@ -24,7 +29,7 @@ def run_test_suite(model_name, scenarios_to_run=None, output_dir=None):
     url = f"http://127.0.0.1:{cfg['ports']['vllm'] if is_vllm else cfg['ports']['ollama']}/v1/chat/completions" if is_vllm else f"http://127.0.0.1:{cfg['ports']['ollama']}/api/chat"
     
     # Audit Start
-    vram_baseline = get_gpu_vram_usage()
+    vram_baseline = utils.get_gpu_vram_usage()
 
     for s in scenarios_to_run:
         if is_vllm:
@@ -56,7 +61,7 @@ def run_test_suite(model_name, scenarios_to_run=None, output_dir=None):
 
             with requests.post(url, json=payload, stream=True) as resp:
                 if resp.status_code != 200:
-                    report_llm_result({"name": s['name'], "status": "FAILED", "text": f"HTTP {resp.status_code}"})
+                    reporter.report({"name": s['name'], "status": "FAILED", "text": f"HTTP {resp.status_code}"})
                     continue
 
                 for line in resp.iter_lines():
@@ -123,17 +128,17 @@ def run_test_suite(model_name, scenarios_to_run=None, output_dir=None):
                 "llm_model": model_name,
                 "input_text": s['text'],
                 "streaming": True,
-                "vram_peak": get_gpu_vram_usage(),
+                "vram_peak": utils.get_gpu_vram_usage(),
                 "vram_prior": 0.0 # Will be injected by runner
             }
-            report_llm_result(res_obj)
+            reporter.report(res_obj)
 
         except Exception as e:
-            report_llm_result({"name": s['name'], "status": "FAILED", "text": str(e)})
+            reporter.report({"name": s['name'], "status": "FAILED", "text": str(e)})
 
     # Audit End
-    vram_peak = get_gpu_vram_usage()
-    is_ok, vram_used, total_size = check_ollama_offload(model_name)
+    vram_peak = utils.get_gpu_vram_usage()
+    is_ok, vram_used, total_size = utils.check_ollama_offload(model_name)
     
     audit_data = {
         "model": model_name,
@@ -165,12 +170,12 @@ if __name__ == "__main__":
     parser.add_argument("--loadout", type=str, required=True)
     args = parser.parse_args()
 
-    cfg = load_config()
+    cfg = utils.load_config()
     l_path = os.path.join(os.path.dirname(script_dir), "loadouts", f"{args.loadout}.yaml")
     with open(l_path, "r") as f:
         target_model = yaml.safe_load(f).get('llm')
 
-    run_test_lifecycle(
+    test_utils.run_test_lifecycle(
         domain="llm", setup_name=args.loadout, models=[target_model],
         purge_on_entry=True, purge_on_exit=True, full=False,
         test_func=lambda: run_test_suite(target_model, scenarios_to_run=scenarios)

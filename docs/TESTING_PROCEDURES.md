@@ -6,9 +6,17 @@ This document outlines the standard operating procedures for verifying changes, 
 
 To optimize for both speed and coverage, testing should follow a strict hierarchy. Always start small and expand only after success.
 
+### Level 0: Refactor Guard (Plumbing Check)
+**When to run:** Immediately after ANY code change or refactor.
+**Goal:** Verify that imports, network ports, JSON schemas, and server coordination are still functional. **Does not require a GPU.**
+
+*   **Command:** `python tests/runner.py tests/plans/ALL_fast.yaml --plumbing`
+*   **Behavior:** Runs real server scripts (`stt_server.py`, `tts_server.py`, etc.) but uses lightweight stubs instead of loading model weights.
+*   **Duration:** ~15-30 seconds.
+
 ### Level 1: Domain-Specific Fast Checks
 **When to run:** After making changes to a specific component (e.g., updating `llm.py` or `stt_server.py`).
-**Goal:** Instant feedback loop (< 30 seconds).
+**Goal:** Verify logic against actual AI kernels on hardware.
 
 *   **LLM Focus:** `python tests/runner.py tests/plans/LLM_fast.yaml`
 *   **STT Focus:** `python tests/runner.py tests/plans/STT_fast.yaml`
@@ -17,42 +25,46 @@ To optimize for both speed and coverage, testing should follow a strict hierarch
 *   **STS Focus:** `python tests/runner.py tests/plans/STS_fast.yaml`
 
 ### Level 2: The "Fast Health Check"
-**When to run:** Before committing code, after integrating multiple components, or when performing a general system sanity check.
-**Goal:** Verify that all core services (LLM, STT, TTS, VLM, STS) can start up and handle at least one request.
+**When to run:** Before committing code or after integrating multiple components.
+**Goal:** Verify full stack hardware compatibility.
 
 *   **Command:** `python tests/runner.py tests/plans/ALL_fast.yaml`
-*   **Scope:** Runs the lightest model for each domain (e.g., `qwen2.5:0.5b`, `faster-whisper-base`).
 *   **Duration:** ~2-3 minutes.
 
 ### Level 3: The "Exhaustive Global Comparison"
-**When to run:** Before a major release, after significant hardware/driver updates, or when generating official benchmark reports.
-**Goal:** Stress-test the system, verify all model permutations, and generate a comprehensive performance matrix.
+**When to run:** Before a major release or after significant hardware/driver updates.
+**Goal:** Stress-test the system and generate official performance benchmarks.
 
 *   **Command:** `python tests/runner.py tests/plans/ALL_exhaustive.yaml`
-*   **Scope:** Runs EVERY defined model loadout against ALL scenarios.
-*   **Duration:** 20+ minutes (depends on hardware).
+*   **Duration:** 20+ minutes.
 
 ---
 
-## 2. Mock Mode (UI & Artifact Testing)
+## 2. Mock vs. Plumbing Mode
 
-**When to run:** When iterating on the Test Runner UI, dashboard, logging, or Excel report generation logic, without waiting for actual models to load.
+Both modes allow testing without loading actual model weights, but they operate at different depths:
 
-*   **Command:** `python tests/runner.py tests/plans/ALL_fast.yaml --mock`
-*   **Behavior:** Simulates model loading times, execution durations, and failures based on `config.yaml` settings (`mock` section).
-*   **Use Case:** Perfect for testing the `RichDashboard`, file persistence, or GDrive upload workflows.
+| Feature | Mock Mode (`--mock`) | Plumbing Mode (`--plumbing`) |
+| :--- | :--- | :--- |
+| **Logic Layer** | Simulator (in Runner) | **Real Servers** (FastAPI) |
+| **Network** | None (simulated) | **Actual TCP/HTTP** |
+| **JSON API** | Not tested | **Fully Tested** |
+| **Dashboard** | Full Display | Full Display |
+| **Artifacts** | Mocked Data | **Real Structure** (WAVs, JSON) |
+| **Primary Use** | UI/Reporting tweaks | **Refactor Guard / Plumbing** |
 
 ---
 
 ## 3. Artifact & Report Management
 
-Every test run (real or mock) generates a unique session directory in `tests/logs/RUN_YYYYMMDD_HHMMSS/`.
+Every test run (real, mock, or plumbing) generates a unique session directory in `tests/logs/RUN_YYYYMMDD_HHMMSS/`.
 
 ### Persistent Artifacts
 *   **`system_info.yaml`**: Host specs (GPU, RAM, CPU) and the plan executed.
 *   **`progression.log`**: A human-readable textual snapshot of the execution flow.
-*   **`svc_*.log`**: Full stdout/stderr capture for every spawned service (Ollama, vLLM, etc.).
-*   **`domain.json`**: Incremental result data for each domain (saved in real-time).
+*   **`svc_*.log`**: Full stdout/stderr capture for every spawned service.
+    *   **vLLM Note**: Captured in real-time from the Docker container via `docker logs -f`.
+*   **`domain.json`**: Incremental result data for each domain.
 *   **`Jarvis_Benchmark_Report_*.xlsx`**: The final stylized Excel report.
 
 ### Excel Reporting

@@ -36,7 +36,8 @@ script_dir = os.path.dirname(os.path.abspath(__file__))
 project_root = os.path.dirname(script_dir)
 sys.path.append(project_root)
 
-from tests.utils import load_config, is_port_in_use, kill_process_on_port, start_server, get_service_status, ensure_utf8_output
+from utils import load_config, is_port_in_use, kill_process_on_port, start_server, get_service_status
+from utils.console import ensure_utf8_output
 
 # Ensure UTF-8 output for Windows console
 ensure_utf8_output()
@@ -59,6 +60,7 @@ def get_args():
     parser.add_argument("--llm", type=str, help="LLM model override")
     parser.add_argument("--host", type=str, default="127.0.0.1")
     parser.add_argument("--benchmark-mode", action="store_true", help="Enable deterministic output for benchmarking")
+    parser.add_argument("--stub", action="store_true", help="Run in stub mode (skip warmup)")
     return parser.parse_known_args()[0]
 
 args = get_args()
@@ -83,7 +85,7 @@ async def wait_for_service_ready(name, url, timeout=120):
                         return True
             except Exception:
                 pass
-            await asyncio.sleep(2)
+            await asyncio.sleep(0.5)
     logger.error(f"  ↳ ❌ {name} TIMEOUT")
     return False
 
@@ -219,14 +221,15 @@ async def lifespan(app: FastAPI):
             logger.info(f"  ℹ️  {s['name']} is already running.")
 
     # Wait for all
-    ready_tasks = [wait_for_service_ready(s['name'], s['health']) for s in services]
+    wait_timeout = 5 if args.stub else 120
+    ready_tasks = [wait_for_service_ready(s['name'], s['health'], timeout=wait_timeout) for s in services]
     results = await asyncio.gather(*ready_tasks)
     
     if not all(results):
         logger.critical("🚨 DEPENDENCY FAILURE: Pipeline entry blocked.")
 
     # 4. LLM Warmup (External)
-    if llm_engine == "ollama":
+    if llm_engine == "ollama" and not args.stub:
         await warmup_ollama(f"http://127.0.0.1:{llm_port}", llm_model_name)
     
     app.state.is_ready = True

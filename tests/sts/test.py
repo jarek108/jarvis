@@ -9,13 +9,14 @@ from typing import Optional
 
 # Allow importing utils from parent levels
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from utils import load_config, report_scenario_result, ensure_utf8_output, run_test_lifecycle, get_gpu_vram_usage, check_ollama_offload
+import utils
+import test_utils
 
 # Ensure UTF-8 output
-ensure_utf8_output()
+utils.ensure_utf8_output()
 
 def run_test_suite(loadout_id, scenarios_to_run=None, stream=False, trim_length=80, output_dir=None):
-    cfg = load_config()
+    cfg = utils.load_config()
     endpoint = "/process_stream" if stream else "/process"
     url = f"http://127.0.0.1:{cfg['ports']['sts']}{endpoint}"
     
@@ -79,8 +80,9 @@ def run_test_suite(loadout_id, scenarios_to_run=None, stream=False, trim_length=
                             
                             duration = time.perf_counter() - start_time
                             with open(output_path, "wb") as f_out: f_out.write(audio_content)
-                            res_obj.update({"status": "PASSED", "duration": duration, "result": os.path.relpath(output_path, os.path.dirname(os.path.dirname(os.path.dirname(__file__)))), "metrics": metrics, "vram_peak": get_gpu_vram_usage(), "stt_text": stt_text, "llm_text": llm_text, "chunks": chunks})
+                            res_obj.update({"status": "PASSED", "duration": duration, "result": os.path.relpath(output_path, os.path.dirname(os.path.dirname(os.path.dirname(__file__)))), "metrics": metrics, "vram_peak": utils.get_gpu_vram_usage(), "stt_text": stt_text, "llm_text": llm_text, "chunks": chunks})
                     else:
+                            
                         response = requests.post(url, files=files, data=data)
                         duration = time.perf_counter() - start_time
                         if response.status_code == 200:
@@ -92,14 +94,14 @@ def run_test_suite(loadout_id, scenarios_to_run=None, stream=False, trim_length=
                                 "tts_inf": float(response.headers.get("X-Metric-TTS-Inference", 0)), 
                                 "stt_text": response.headers.get("X-Result-STT"), 
                                 "llm_text": response.headers.get("X-Result-LLM"), 
-                                "vram_peak": get_gpu_vram_usage()
+                                "vram_peak": utils.get_gpu_vram_usage()
                             })
                         else:
                             res_obj.update({"status": "FAILED", "duration": duration, "result": f"HTTP {response.status_code}"})
             except Exception as e:
                 res_obj.update({"status": "FAILED", "duration": 0, "result": str(e)})
 
-        report_scenario_result(res_obj)
+        test_utils.report_scenario_result(res_obj)
 
 if __name__ == "__main__":
     script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -111,7 +113,7 @@ if __name__ == "__main__":
     parser.add_argument("--loadout", type=str, required=True)
     args = parser.parse_args()
 
-    run_test_lifecycle(
+    test_utils.run_test_lifecycle(
         domain="sts", setup_name=args.loadout, models=[], purge_on_entry=True, purge_on_exit=True, full=False,
         test_func=lambda: (run_test_suite(args.loadout, scenarios_to_run=scenarios, stream=False), run_test_suite(args.loadout, scenarios_to_run=scenarios, stream=True))
     )
