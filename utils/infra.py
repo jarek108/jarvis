@@ -26,11 +26,18 @@ async def get_service_status_async(session, port: int):
         async with session.get(url, timeout=1.0) as response:
             if response.status == 200:
                 data = await response.json()
-                if port == cfg['ports']['ollama']: return port, "ON", "Ollama"
+                
+                # Check for Stub Signature
+                is_stub = data.get("service") == "llm_stub"
+                
+                if port == cfg['ports']['ollama']: 
+                    return port, "ON", "Stub" if is_stub else "Ollama"
                 if port == cfg['ports'].get('vllm'): 
+                    if is_stub: return port, "ON", "Stub"
                     models = data.get("data", [])
                     return port, "ON", (models[0]["id"] if models else "vLLM")
-                name = data.get("model") or data.get("variant") or "Ready"
+                
+                name = data.get("model") or data.get("variant") or data.get("service") or "Ready"
                 return port, ("BUSY" if data.get("status") == "busy" else "ON"), name
             elif response.status == 503:
                 data = await response.json()
@@ -194,14 +201,12 @@ def kill_jarvis_ports(ports_to_kill):
         # Use process_iter which is generally faster on Windows than net_connections
         for proc in psutil.process_iter(['pid', 'name']):
             try:
-                # Only check connections if it's likely a python or service process
-                # this filters out thousands of irrelevant system processes
-                name = proc.info['name'].lower()
-                if 'python' in name or 'ollama' in name or 'uvicorn' in name:
-                    for conn in proc.connections(kind='inet'):
-                        if conn.laddr.port in ports_to_kill:
-                            proc.kill()
-                            break
+                # Get connections for ALL processes if we have ports to kill
+                # psutil.Process.connections() can be slow, but it's the only way to be sure
+                for conn in proc.connections(kind='inet'):
+                    if conn.laddr.port in ports_to_kill:
+                        proc.kill()
+                        break
             except (psutil.NoSuchProcess, psutil.AccessDenied):
                 continue
         

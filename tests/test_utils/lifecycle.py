@@ -219,9 +219,14 @@ class LifecycleManager:
                                 if port not in required_ports and svc['status'] != 'OFF'})
         
         for s in required_services:
-            svc = health_snapshot.get(s['port'], {"status": "OFF"})
+            svc = health_snapshot.get(s['port'], {"status": "OFF", "info": None})
+            # If not ON/OFF, it's unhealthy or starting -> Kill it
             if svc['status'] not in ["ON", "OFF"]:
                 ports_to_kill.add(s['port'])
+            # If we need a STUB but the port is currently a real service -> Kill it
+            elif self.stub_mode and svc['status'] == "ON" and svc.get('info') != "Stub":
+                if s['type'] in ["llm", "vlm"]: # Only LLM/VLM stubs use the same ports as real services
+                    ports_to_kill.add(s['port'])
         
         if ports_to_kill:
             utils.kill_jarvis_ports(ports_to_kill)
