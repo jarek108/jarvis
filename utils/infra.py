@@ -187,25 +187,21 @@ def kill_jarvis_ports(ports_to_kill):
         if is_port_in_use(ollama_port):
             # Target both the tray app and the server core
             subprocess.run(["taskkill", "/F", "/IM", "ollama*", "/T"], capture_output=True)
-            # Also target the specific app executable just in case
             subprocess.run(["taskkill", "/F", "/IM", "ollama app.exe", "/T"], capture_output=True)
-            time.sleep(1.0) # Give it more time to release the socket
-        ports_to_kill.remove(ollama_port)
+            time.sleep(1.5) # Give it more time to release the socket
+        # Do NOT remove from ports_to_kill yet, let the psutil loop double-check
     
     # Special handling for vLLM Docker
     vllm_port = cfg['ports'].get('vllm')
     if vllm_port in ports_to_kill:
         stop_vllm_docker()
-        ports_to_kill.remove(vllm_port)
-
-    if not ports_to_kill: return
+        # Do NOT remove from ports_to_kill yet, let the psutil loop double-check
 
     try:
-        # Use process_iter which is generally faster on Windows than net_connections
+        # psutil.process_iter is faster than net_connections
         for proc in psutil.process_iter(['pid', 'name']):
             try:
-                # Get connections for ALL processes if we have ports to kill
-                # psutil.Process.connections() can be slow, but it's the only way to be sure
+                # We check connections for ANY process that might be holding our ports
                 for conn in proc.connections(kind='inet'):
                     if conn.laddr.port in ports_to_kill:
                         proc.kill()
@@ -213,8 +209,8 @@ def kill_jarvis_ports(ports_to_kill):
             except (psutil.NoSuchProcess, psutil.AccessDenied):
                 continue
         
-        # Short breather for OS to reclaim ports
-        time.sleep(0.3)
+        # Breather for OS socket reclamation
+        time.sleep(0.5)
     except Exception:
         pass
 

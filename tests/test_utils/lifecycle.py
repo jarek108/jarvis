@@ -268,7 +268,7 @@ class LifecycleManager:
             if self.stub_mode and domain == "sts":
                 ports_to_wait = [s['port'] for s in services_to_start if s['type'] == "sts"]
             
-            if not asyncio.run(utils.wait_for_ports_parallel(ports_to_wait)):
+            if not asyncio.run(utils.wait_for_ports_parallel(ports_to_wait, require_stub=self.stub_mode)):
                 raise RuntimeError("Parallel startup timeout")
         
         # 5. Warmup (Real mode only)
@@ -299,20 +299,28 @@ class LifecycleManager:
                     except: pass
         return time.perf_counter() - start_c
 
-def run_test_lifecycle(domain, setup_name, models, purge_on_entry, purge_on_exit, full, test_func, benchmark_mode=False, force_download=False, track_prior_vram=True, session_dir=None, on_phase=None, stub_mode=False):
+def run_test_lifecycle(domain, setup_name, models, purge_on_entry, purge_on_exit, full, test_func, benchmark_mode=False, force_download=False, track_prior_vram=True, session_dir=None, on_phase=None, stub_mode=False, reporter=None):
     ensure_utf8_output()
     manager = LifecycleManager(setup_name, models=models, purge_on_entry=purge_on_entry, purge_on_exit=purge_on_exit, full=full, benchmark_mode=benchmark_mode, force_download=force_download, track_prior_vram=track_prior_vram, session_dir=session_dir, on_phase=on_phase, stub_mode=stub_mode)
     model_display = manager.format_models_for_display()
     f = LiveFilter()
     
+    log_dir = session_dir if session_dir else os.path.join(manager.project_root, "tests", "artifacts", "logs")
+    os.makedirs(log_dir, exist_ok=True)
+    debug_log_path = os.path.join(log_dir, f"lifecycle_{domain}_{setup_name}.log")
+
     with redirect_stdout(f):
         try:
             if on_phase: on_phase("setup")
             setup_time, prior_vram = manager.reconcile(domain)
             if setup_time == -1:
-                from .reporting import report_scenario_result
-                res_obj = {"name": "SETUP", "status": "MISSING", "duration": 0, "result": f"Missing models: {', '.join(manager.missing_models)}", "mode": domain.upper(), "vram_prior": prior_vram, "llm_model": model_display, "stt_model": model_display, "tts_model": model_display}
-                report_scenario_result(res_obj); return 0, 0, prior_vram, model_display
+                err_msg = f"Missing models: {', '.join(manager.missing_models)}"
+                res_obj = {"name": "SETUP", "status": "MISSING", "duration": 0, "result": err_msg, "mode": domain.upper(), "vram_prior": prior_vram, "llm_model": model_display, "stt_model": model_display, "tts_model": model_display}
+                if reporter: reporter.report(res_obj)
+                else: 
+                    from .reporting import report_scenario_result
+                    report_scenario_result(res_obj)
+                return 0, 0, prior_vram, model_display
             
             if on_phase: on_phase("execution")
             proc_start = time.perf_counter()
@@ -321,12 +329,30 @@ def run_test_lifecycle(domain, setup_name, models, purge_on_entry, purge_on_exit
             
             if on_phase: on_phase("cleanup")
             cleanup_time = manager.cleanup()
+            
+            # Save successful log too for traceability
+            with open(debug_log_path, "w", encoding="utf-8") as lf:
+                lf.write(f.getvalue())
+                
             return setup_time, cleanup_time, prior_vram, model_display
         except Exception as e:
-            from .reporting import report_scenario_result
             err_msg = str(e); status = "FAILED"
             if "NO-DOCKER" in err_msg: status = "NO-DOCKER"
             elif "NO-OLLAMA" in err_msg: status = "NO-OLLAMA"
             res_obj = {"name": "LIFECYCLE", "status": status, "duration": 0, "result": err_msg, "mode": domain.upper(), "vram_prior": 0.0, "llm_model": model_display, "stt_model": model_display, "tts_model": model_display}
-            report_scenario_result(res_obj); cleanup_time = manager.cleanup()
+            
+            if reporter: reporter.report(res_obj)
+            else:
+                from .reporting import report_scenario_result
+                report_scenario_result(res_obj)
+            
+            cleanup_time = manager.cleanup()
+            
+            # CRITICAL: Save the buffer so we can see what went wrong!
+            with open(debug_log_path, "w", encoding="utf-8") as lf:
+                lf.write(f.getvalue())
+                lf.write(f"\nFATAL EXCEPTION: {err_msg}\n")
+                import traceback
+                traceback.print_exc(file=lf)
+                
             return 0, cleanup_time, 0.0, model_display

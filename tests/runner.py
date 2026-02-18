@@ -99,7 +99,8 @@ def run_domain_tests(domain, setup_name, models, scenarios, settings, session_di
             track_prior_vram=settings.get('track_prior_vram', True),
             session_dir=session_dir,
             on_phase=on_phase,
-            stub_mode=plumbing
+            stub_mode=plumbing,
+            reporter=reporter
         )
     except Exception as e:
         reporter.report({"name": "LIFECYCLE", "status": "FAILED", "result": str(e)})
