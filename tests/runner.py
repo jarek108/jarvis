@@ -141,17 +141,14 @@ def main():
     # 2. Perform slow pre-flight checks and init session
     utils.get_hf_home(silent=True)
     utils.get_ollama_models(silent=True)
-    session_dir, session_id = init_session(plan_path, skip_gpu=args.plumbing)
+    session_dir, session_id = init_session(plan_path)
     log_file_path = os.path.join(session_dir, "progression.log")
     dashboard.snapshot_path = log_file_path # Triggers background thread in UI
     
     with open(os.path.join(session_dir, "system_info.yaml"), "r") as f: system_info = yaml.safe_load(f)
     dashboard.finalize_boot(session_id, system_info)
     
-    if not args.plumbing:
-        dashboard.vram_total = utils.get_gpu_total_vram()
-    else:
-        dashboard.vram_total = 32.0 # Placeholder for RTX 5090
+    dashboard.vram_total = utils.get_gpu_total_vram()
     
     structure = {}
     execution_blocks = plan.get('execution', [])

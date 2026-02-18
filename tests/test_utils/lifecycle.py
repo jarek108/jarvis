@@ -203,7 +203,7 @@ class LifecycleManager:
         # 1. Bulk health check (ONCE)
         health_snapshot = asyncio.run(utils.get_system_health_async())
         
-        if self.track_prior_vram and not self.stub_mode:
+        if self.track_prior_vram:
             if any(svc['status'] != 'OFF' for svc in health_snapshot.values()):
                 utils.kill_all_jarvis_services()
                 prior_vram = utils.get_gpu_vram_usage()
