@@ -134,14 +134,15 @@ def main():
     
     with open(plan_path, "r") as f: plan = yaml.safe_load(f)
     
-    # 1. Start Dashboard EARLY
-    dashboard = RichDashboard(plan.get('name', 'Unnamed'))
-    dashboard.start()
-    
-    # 2. Perform slow pre-flight checks
+    # 1. Perform pre-flight checks and init session
     utils.get_hf_home(silent=True)
     utils.get_ollama_models(silent=True)
     session_dir, session_id = init_session(plan_path, skip_gpu=args.plumbing)
+    log_file_path = os.path.join(session_dir, "progression.log")
+
+    # 2. Start Dashboard with session info
+    dashboard = RichDashboard(plan.get('name', 'Unnamed'))
+    dashboard.start(snapshot_path=log_file_path)
     
     with open(os.path.join(session_dir, "system_info.yaml"), "r") as f: system_info = yaml.safe_load(f)
     dashboard.finalize_boot(session_id, system_info)
@@ -171,9 +172,6 @@ def main():
     total_models = sum(len(d['loadouts']) for d in structure.values())
     dashboard.overall_progress.update(dashboard.overall_task, total=total_scenarios)
     dashboard.overall_progress.update(dashboard.models_task, total=total_models)
-
-    log_file_path = os.path.join(session_dir, "progression.log")
-    dashboard.snapshot_path = log_file_path # Update snapshot path now that session_dir is known
 
     def execution_worker():
         try:

@@ -20,8 +20,8 @@ class LiveFilter(io.StringIO):
     """Captures everything to a buffer. It's intended that the dashboard pulls the raw logs from files."""
     def __init__(self):
         super().__init__()
-        ensure_utf8_output()
-        self.out = sys.stdout # The original stdout
+        # Use the raw OS stdout to ensure we always have a path to the terminal
+        self.out = sys.__stdout__ or sys.stdout
 
     @property
     def buffer(self):
@@ -45,11 +45,15 @@ def fmt_with_chunks(text, chunks):
 
 class RichDashboard:
     def __init__(self, plan_name, session_id="PENDING", system_info=None):
-        self.console = Console()
+        # Force console to use the original stdout to bypass any redirections in worker threads
+        self.console = Console(file=sys.__stdout__ or sys.stdout)
         self.plan_name = plan_name
         self.session_id = session_id
         self.system_info = system_info or {"host": {"gpu": "Detecting..."}}
         self.test_data = {}
+        
+        self.project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        self._session_path = None
         
         self.overall_progress = Progress(
             TextColumn("[bold blue]{task.description}", justify="right"),
@@ -74,8 +78,9 @@ class RichDashboard:
         self._stop_event = None
         self._snapshot_thread = None
 
-        # Use screen=False to allow the final frame to persist in the scrollback buffer
-        self.live = Live(self, console=self.console, refresh_per_second=4, screen=False)
+        # Use screen=False to allow the final frame to persist in the scrollback buffer.
+        # Disable Live's internal redirection as we handle it ourselves in the lifecycle.
+        self.live = Live(self, console=self.console, refresh_per_second=4, screen=False, redirect_stdout=False)
 
     def __rich__(self) -> Layout:
         return self.make_layout()
@@ -106,8 +111,7 @@ class RichDashboard:
 
         # System
         vram_pct = (self.vram_usage / self.vram_total) * 100 if self.vram_total > 0 else 0
-        project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-        session_path = os.path.join(project_root, "tests", "logs", self.session_id)
+        session_path = self._session_path or ""
         
         lines.append(Text(f"\nSYSTEM STATUS:", style="bold underline"))
         lines.append(Text(f"VRAM: {self.vram_usage:.1f}/{self.vram_total:.1f} GB ({vram_pct:.1f}%)"))
@@ -144,7 +148,9 @@ class RichDashboard:
         self.test_data = structure
 
     def finalize_boot(self, session_id=None, system_info=None):
-        if session_id: self.session_id = session_id
+        if session_id: 
+            self.session_id = session_id
+            self._session_path = os.path.join(self.project_root, "tests", "logs", self.session_id)
         if system_info: self.system_info = system_info
         self.overall_progress.update(self.boot_task, completed=1)
 
@@ -247,9 +253,7 @@ class RichDashboard:
     def make_progress_view(self):
         """Renders the hierarchical domain/model list with clickable log links."""
         table = Table.grid(padding=(0, 1), expand=True)
-        
-        project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-        session_path = os.path.join(project_root, "tests", "logs", self.session_id)
+        session_path = self._session_path or ""
 
         for d_name, d_data in self.test_data.items():
             d_status = d_data['status'].lower()
@@ -315,7 +319,6 @@ class RichDashboard:
                     l_text.append(f" [{l_data['errors']} FAILED]", style="bold red")
                 table.add_row(l_text)
         return table
-        return table
 
     def make_layout(self):
         from rich.console import Group
@@ -346,8 +349,7 @@ class RichDashboard:
         vram_pct = (self.vram_usage / self.vram_total) * 100 if self.vram_total > 0 else 0
         vram_color = "green" if vram_pct < 70 else ("yellow" if vram_pct < 90 else "red")
         
-        project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-        session_path = os.path.join(project_root, "tests", "logs", self.session_id)
+        session_path = self._session_path or ""
         file_url = f"file:///{session_path.replace(os.sep, '/')}"
 
         vram_text = Text.assemble(
@@ -389,8 +391,9 @@ class RichDashboard:
         return Group(header_panel, overall_panel, hierarchy_panel, system_panel, footer_panel)
 
     def start(self, snapshot_path=None): 
-        self.snapshot_path = snapshot_path
-        if self.snapshot_path:
+        if snapshot_path: self.snapshot_path = snapshot_path
+        
+        if self.snapshot_path and not self._snapshot_thread:
             import threading
             self._stop_event = threading.Event()
             self._snapshot_thread = threading.Thread(target=self._snapshot_loop, daemon=True)
