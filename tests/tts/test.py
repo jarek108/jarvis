@@ -14,8 +14,12 @@ import test_utils
 # Ensure UTF-8 output
 utils.ensure_utf8_output()
 
-def run_test_suite(variant_id, scenarios_to_run=None, trim_length=80, output_dir=None):
+def run_test_suite(variant_id, scenarios_to_run=None, trim_length=80, output_dir=None, reporter=None):
     cfg = utils.load_config()
+    if not reporter:
+        from test_utils.collectors import StdoutReporter
+        reporter = StdoutReporter()
+
     port = cfg['tts_loadout'].get(variant_id)
     if not port:
         print(f"FAILED: Variant ID '{variant_id}' not found in configuration.")
@@ -65,7 +69,7 @@ def run_test_suite(variant_id, scenarios_to_run=None, trim_length=80, output_dir
         except Exception as e:
             res_obj = {"name": s['name'], "status": "FAILED", "duration": 0, "result": str(e)}
 
-        test_utils.report_scenario_result(res_obj)
+        reporter.report(res_obj)
 
 if __name__ == "__main__":
     script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -85,5 +89,5 @@ if __name__ == "__main__":
     test_utils.run_test_lifecycle(
         domain="tts", setup_name=args.loadout, models=[target_variant],
         purge_on_entry=True, purge_on_exit=True, full=False,
-        test_func=lambda: run_test_suite(target_variant, scenarios_to_run=scenarios)
+        test_func=lambda reporter=None: run_test_suite(target_variant, scenarios_to_run=scenarios, reporter=reporter)
     )

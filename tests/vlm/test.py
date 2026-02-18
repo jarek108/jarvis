@@ -42,8 +42,12 @@ def extract_frames(video_path, max_frames=8):
     except: pass
     return frames
 
-def run_test_suite(model_name, scenarios_to_run=None, output_dir=None):
+def run_test_suite(model_name, scenarios_to_run=None, output_dir=None, reporter=None):
     cfg = utils.load_config()
+    if not reporter:
+        from test_utils.collectors import StdoutReporter
+        reporter = StdoutReporter()
+
     is_vllm = model_name.startswith("VL_") or model_name.startswith("vllm:")
     if model_name.startswith("VL_"): clean_model_name = model_name[3:]
     elif model_name.startswith("vllm:"): clean_model_name = model_name[5:]
@@ -85,7 +89,7 @@ def run_test_suite(model_name, scenarios_to_run=None, output_dir=None):
             with requests.post(url, json=payload, stream=True) as resp:
                 if resp.status_code != 200:
                     res_obj.update({"status": "FAILED", "result": f"HTTP {resp.status_code}"})
-                    test_utils.report_llm_result(res_obj)
+                    reporter.report(res_obj)
                     continue
                 
                 for line in resp.iter_lines():
@@ -117,10 +121,10 @@ def run_test_suite(model_name, scenarios_to_run=None, output_dir=None):
                 "vram_peak": utils.get_gpu_vram_usage(),
                 "vram_prior": 0.0 # Will be injected by runner
             })
-            test_utils.report_llm_result(res_obj)
+            reporter.report(res_obj)
         except Exception as e:
             res_obj.update({"status": "FAILED", "result": str(e)})
-            test_utils.report_llm_result(res_obj)
+            reporter.report(res_obj)
 
 if __name__ == "__main__":
     script_dir = os.path.dirname(os.path.abspath(__file__))

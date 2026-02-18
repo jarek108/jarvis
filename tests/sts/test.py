@@ -15,8 +15,12 @@ import test_utils
 # Ensure UTF-8 output
 utils.ensure_utf8_output()
 
-def run_test_suite(loadout_id, scenarios_to_run=None, stream=False, trim_length=80, output_dir=None):
+def run_test_suite(loadout_id, scenarios_to_run=None, stream=False, trim_length=80, output_dir=None, reporter=None):
     cfg = utils.load_config()
+    if not reporter:
+        from test_utils.collectors import StdoutReporter
+        reporter = StdoutReporter()
+
     endpoint = "/process_stream" if stream else "/process"
     url = f"http://127.0.0.1:{cfg['ports']['sts']}{endpoint}"
     
@@ -101,7 +105,7 @@ def run_test_suite(loadout_id, scenarios_to_run=None, stream=False, trim_length=
             except Exception as e:
                 res_obj.update({"status": "FAILED", "duration": 0, "result": str(e)})
 
-        test_utils.report_scenario_result(res_obj)
+        reporter.report(res_obj)
 
 if __name__ == "__main__":
     script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -115,5 +119,8 @@ if __name__ == "__main__":
 
     test_utils.run_test_lifecycle(
         domain="sts", setup_name=args.loadout, models=[], purge_on_entry=True, purge_on_exit=True, full=False,
-        test_func=lambda: (run_test_suite(args.loadout, scenarios_to_run=scenarios, stream=False), run_test_suite(args.loadout, scenarios_to_run=scenarios, stream=True))
+        test_func=lambda reporter=None: (
+            run_test_suite(args.loadout, scenarios_to_run=scenarios, stream=False, reporter=reporter), 
+            run_test_suite(args.loadout, scenarios_to_run=scenarios, stream=True, reporter=reporter)
+        )
     )

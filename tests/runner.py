@@ -83,7 +83,7 @@ def run_domain_tests(domain, setup_name, models, scenarios, settings, session_di
             if domain == "tts" and m in cfg['tts_loadout']: target_id = m; break
 
         def execution_wrapper():
-            if domain in ["stt", "llm"]:
+            if domain in ["stt", "llm", "vlm", "sts", "tts"]:
                 test_func_to_run(target_id, scenarios_to_run=scenarios, output_dir=session_dir, reporter=reporter)
             else:
                 test_func_to_run(target_id, scenarios_to_run=scenarios, output_dir=session_dir)
