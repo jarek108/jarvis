@@ -113,14 +113,31 @@ def get_ollama_info():
     """Returns (status, version) for Ollama."""
     version = "N/A"
     try:
-        res = subprocess.run(["ollama", "--version"], capture_output=True, text=True, check=True)
-        version = res.stdout.strip().replace("ollama version is ", "")
+        # Get CLI version. On some platforms, it prints a multi-line warning if the server is off.
+        # We explicitly capture stdout and stderr separately.
+        res = subprocess.run(["ollama", "--version"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        
+        # Check stdout first, then stderr (version might be in either depending on state)
+        raw = (res.stdout or res.stderr or "").strip()
+        
+        # We want the actual version string (e.g., 0.5.7). 
+        # It's usually the last token of a line like "ollama version is 0.5.7" 
+        # or just "0.5.7".
+        for line in raw.split('\n'):
+            if "version" in line.lower():
+                version = line.split()[-1]
+                break
+            # Fallback for just a raw version number
+            if line and line[0].isdigit():
+                version = line.strip()
+                break
     except:
         return "Missing", "N/A"
     
     try:
         import requests
-        resp = requests.get("http://127.0.0.1:11434/api/tags", timeout=1)
+        # Check if the LOCAL API is actually responding (The [On/Off] part)
+        resp = requests.get("http://127.0.0.1:11434/api/tags", timeout=0.5)
         if resp.status_code == 200:
             return "On", version
         else:

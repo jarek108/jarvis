@@ -223,9 +223,10 @@ class LifecycleManager:
             # If not ON/OFF, it's unhealthy or starting -> Kill it
             if svc['status'] not in ["ON", "OFF"]:
                 ports_to_kill.add(s['port'])
-            # If we need a STUB but the port is currently a real service -> Kill it
-            elif self.stub_mode and svc['status'] == "ON" and svc.get('info') != "Stub":
-                if s['type'] in ["llm", "vlm"]: # Only LLM/VLM stubs use the same ports as real services
+            # If we need a STUB but the port is occupied (by ANYTHING) -> Kill it
+            # This is critical to clear native Ollama instances before starting the stub.
+            elif self.stub_mode and svc['status'] == "ON":
+                if s['type'] in ["llm", "vlm"]: 
                     ports_to_kill.add(s['port'])
         
         if ports_to_kill:

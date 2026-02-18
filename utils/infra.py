@@ -185,8 +185,11 @@ def kill_jarvis_ports(ports_to_kill):
     ollama_port = cfg['ports']['ollama']
     if ollama_port in ports_to_kill and os.name == 'nt':
         if is_port_in_use(ollama_port):
+            # Target both the tray app and the server core
             subprocess.run(["taskkill", "/F", "/IM", "ollama*", "/T"], capture_output=True)
-            time.sleep(0.5)
+            # Also target the specific app executable just in case
+            subprocess.run(["taskkill", "/F", "/IM", "ollama app.exe", "/T"], capture_output=True)
+            time.sleep(1.0) # Give it more time to release the socket
         ports_to_kill.remove(ollama_port)
     
     # Special handling for vLLM Docker
