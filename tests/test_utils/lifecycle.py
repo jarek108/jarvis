@@ -98,13 +98,11 @@ class LifecycleManager:
                 })
             elif engine == "vllm":
                 if self.cfg.get('vllm', {}).get('check_docker', True):
-                    from .infra import is_docker_daemon_running
-                    if not is_docker_daemon_running():
+                    if not utils.is_docker_daemon_running():
                         raise RuntimeError("NO-DOCKER")
 
                 vllm_port = self.cfg['ports'].get('vllm', 8300)
-                from .vram import get_gpu_total_vram
-                total_vram = get_gpu_total_vram()
+                total_vram = utils.get_gpu_total_vram()
                 
                 vram_gb = self.cfg.get('vllm', {}).get('gpu_memory_utilization', 0.5) 
                 vram_map = self.cfg.get('vllm', {}).get('model_vram_map', {})
@@ -133,8 +131,8 @@ class LifecycleManager:
 
                 hf_cache = utils.get_hf_home(silent=True)
                 cmd = [
-                    "docker", "run", "--gpus", "all", "-d", 
-                    "--name", "vllm-server", 
+                    "docker", "run", "--gpus", "all", "--rm",
+                    "--name", "vllm-server",
                     "-p", f"{vllm_port}:8000", 
                     "-v", f"{hf_cache}:/root/.cache/huggingface", 
                     "vllm/vllm-openai", 
@@ -224,9 +222,17 @@ class LifecycleManager:
             if svc['status'] not in ["ON", "OFF"]:
                 ports_to_kill.add(s['port'])
             # If we need a STUB but the port is occupied (by ANYTHING) -> Kill it
-            # This is critical to clear native Ollama instances before starting the stub.
             elif self.stub_mode and svc['status'] == "ON":
                 if s['type'] in ["llm", "vlm"]: 
+                    ports_to_kill.add(s['port'])
+            # If we are doing a REAL run and the port is occupied -> Kill it
+            # (Ensures we don't reuse a port running the WRONG model)
+            elif not self.stub_mode and svc['status'] == "ON":
+                # Always kill vLLM to ensure fresh model load
+                if s['type'] == "llm" and self.cat['llm']['engine'] == "vllm":
+                    ports_to_kill.add(s['port'])
+                # Always kill STT/TTS servers to ensure they are using the right model/variant
+                if s['type'] in ["stt", "tts"]:
                     ports_to_kill.add(s['port'])
         
         if ports_to_kill:
@@ -251,25 +257,15 @@ class LifecycleManager:
             proc = utils.start_server(s['cmd'], log_file=f_log)
             self.owned_processes.append((s['port'], proc))
             
-        # 3.1. Post-spawn: Attach log streamers if needed (e.g. for Docker)
-        for s in services_to_start:
-            if 'docker' in str(s['cmd']):
-                # Find the log file we just opened
-                # (Simple approach: we just opened it, so we can re-open or keep track)
-                # For now, let's just use the same logic but without the sleep
-                log_path = os.path.join(log_dir, f"svc_{s['type']}_{s['id'].replace(':', '-').replace('/', '--')}_{timestamp}.log")
-                f_log = open(log_path, "a") # Open in append mode
-                log_streamer = subprocess.Popen(["docker", "logs", "-f", "vllm-server"], stdout=f_log, stderr=f_log, creationflags=0x08000000 if os.name == 'nt' else 0)
-                self.owned_processes.append((None, log_streamer))
-
         # 4. Parallel Wait
         if services_to_start:
             ports_to_wait = [s['port'] for s in services_to_start]
             if self.stub_mode and domain == "sts":
                 ports_to_wait = [s['port'] for s in services_to_start if s['type'] == "sts"]
             
-            if not asyncio.run(utils.wait_for_ports_parallel(ports_to_wait, require_stub=self.stub_mode)):
-                raise RuntimeError("Parallel startup timeout")
+            timeout = self.cfg.get('vllm', {}).get('model_startup_timeout', 120)
+            if not asyncio.run(utils.wait_for_ports_parallel(ports_to_wait, timeout=timeout, require_stub=self.stub_mode)):
+                raise RuntimeError(f"Parallel startup timeout after {timeout}s")
         
         # 5. Warmup (Real mode only)
         if not self.stub_mode and (domain in ["llm", "vlm", "sts"] or self.full):

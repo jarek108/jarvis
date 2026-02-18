@@ -56,7 +56,7 @@ async def get_system_health_async():
         results = await asyncio.gather(*tasks)
     return {r[0]: {"status": r[1], "info": r[2]} for r in results}
 
-async def wait_for_ports_parallel(ports, timeout=120):
+async def wait_for_ports_parallel(ports, timeout, require_stub=False):
     """Waits for multiple ports to be ON in parallel."""
     if not ports: return True
     start_time = time.time()
@@ -65,7 +65,16 @@ async def wait_for_ports_parallel(ports, timeout=120):
             tasks = [get_service_status_async(session, p) for p in ports]
             results = await asyncio.gather(*tasks)
             # Check if all statuses are 'ON'
-            if all(r[1] == "ON" for r in results):
+            # If require_stub is True, also check that the info contains 'Stub'
+            all_on = True
+            for r in results:
+                port, status, info = r
+                if status != "ON": 
+                    all_on = False; break
+                if require_stub and "Stub" not in str(info):
+                    all_on = False; break
+            
+            if all_on:
                 return True
             await asyncio.sleep(0.5)
     return False
@@ -131,7 +140,7 @@ def stop_vllm_docker():
 
 def is_docker_daemon_running():
     try:
-        res = subprocess.run(["docker", "info"], capture_output=True, text=True, timeout=5)
+        res = subprocess.run(["docker", "info"], capture_output=True, text=True, timeout=10)
         return res.returncode == 0
     except: return False
 
