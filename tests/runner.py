@@ -121,16 +121,20 @@ def run_domain_tests(domain, setup_name, models, scenarios, settings, session_di
     return final_results
 
 def main():
-    parser = argparse.ArgumentParser(description="Jarvis Plan-Driven Test Runner")
+    parser = argparse.ArgumentParser(description="Jarvis Plan-Driven Test Runner", fromfile_prefix_chars='@')
     parser.add_argument("plan", type=str, help="Path to a .yaml test plan (e.g., tests/plan_fast_check.yaml)")
     parser.add_argument("--no-cleanup", action="store_true", help="Skip stale artifact cleanup at start")
     parser.add_argument("--plumbing", action="store_true", help="Run in plumbing mode (real servers with stubs)")
     args = parser.parse_args()
 
     report_path = None
-    plan_path = utils.resolve_path(args.plan)
+    # Support both literal paths and '@' prefixed paths if argparse didn't consume it
+    raw_plan = args.plan[1:] if args.plan.startswith('@') else args.plan
+    plan_path = utils.resolve_path(raw_plan)
+    
     if not os.path.exists(plan_path):
-        print(f"âŒ ERROR: Plan not found at {plan_path}"); return
+        print(f"\n❌ ERROR: Plan not found at {plan_path}")
+        return
     
     with open(plan_path, "r") as f: plan = yaml.safe_load(f)
     

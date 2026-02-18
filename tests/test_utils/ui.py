@@ -176,8 +176,6 @@ class RichDashboard:
             host = system_info.get('host', {})
             self.vram_total = host.get('vram_total_gb', self.vram_total)
             self.vram_usage = host.get('vram_used_gb', self.vram_usage)
-            self.ram_total = host.get('ram_total_gb', self.ram_total) or host.get('ram_total_gb') or 1.0
-            # Some fields might have different names in system_info.yaml
             self.ram_total = host.get('ram_total_gb', self.ram_total)
             self.ram_usage = host.get('ram_used_gb', self.ram_usage)
             self.cpu_info = host.get('cpu', self.cpu_info)

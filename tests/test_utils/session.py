@@ -73,14 +73,14 @@ def gather_system_info(plan_path):
             plan_content = yaml.safe_load(f)
 
     # Initial RAM and VRAM snapshots
-    from utils.vram import get_gpu_total_vram, get_gpu_vram_usage
+    import utils.vram
     
     mem = psutil.virtual_memory()
     total_ram = mem.total / (1024**3)
     used_ram = mem.used / (1024**3)
     
-    total_vram = get_gpu_total_vram()
-    used_vram = get_gpu_vram_usage()
+    total_vram = utils.vram.get_gpu_total_vram()
+    used_vram = utils.vram.get_gpu_vram_usage()
 
     info = {
         "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
