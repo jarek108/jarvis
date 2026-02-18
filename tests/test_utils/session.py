@@ -9,10 +9,38 @@ from utils import load_config, get_hf_home, get_ollama_models
 _gpu_info_cache = None
 _cpu_info_cache = None
 
+def get_cache_path():
+    project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    return os.path.join(project_root, "tests", ".system_cache.yaml")
+
+def load_system_cache():
+    path = get_cache_path()
+    if os.path.exists(path):
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                return yaml.safe_load(f) or {}
+        except: pass
+    return {}
+
+def save_system_cache(data):
+    path = get_cache_path()
+    try:
+        # Load existing to merge
+        existing = load_system_cache()
+        existing.update(data)
+        with open(path, "w", encoding="utf-8") as f:
+            yaml.dump(existing, f)
+    except: pass
+
 def get_gpu_info():
     """Retrieves GPU model name using nvidia-smi (cached)."""
     global _gpu_info_cache
     if _gpu_info_cache is not None:
+        return _gpu_info_cache
+    
+    cache = load_system_cache()
+    if 'gpu' in cache:
+        _gpu_info_cache = cache['gpu']
         return _gpu_info_cache
         
     try:
@@ -21,6 +49,7 @@ def get_gpu_info():
             capture_output=True, text=True, check=True
         )
         _gpu_info_cache = res.stdout.strip()
+        save_system_cache({'gpu': _gpu_info_cache})
         return _gpu_info_cache
     except:
         return "Unknown GPU"
@@ -29,6 +58,11 @@ def get_cpu_info():
     """Retrieves CPU model name (cached)."""
     global _cpu_info_cache
     if _cpu_info_cache is not None:
+        return _cpu_info_cache
+    
+    cache = load_system_cache()
+    if 'cpu' in cache:
+        _cpu_info_cache = cache['cpu']
         return _cpu_info_cache
         
     try:
@@ -41,12 +75,14 @@ def get_cpu_info():
             lines = res.stdout.strip().split("\n")
             if len(lines) > 1:
                 _cpu_info_cache = lines[1].strip()
+                save_system_cache({'cpu': _cpu_info_cache})
                 return _cpu_info_cache
         elif platform.system() == "Linux":
             with open("/proc/cpuinfo", "r") as f:
                 for line in f:
                     if "model name" in line:
                         _cpu_info_cache = line.split(":")[1].strip()
+                        save_system_cache({'cpu': _cpu_info_cache})
                         return _cpu_info_cache
     except:
         pass
@@ -54,9 +90,24 @@ def get_cpu_info():
     _cpu_info_cache = platform.processor() or "Unknown CPU"
     return _cpu_info_cache
 
+def get_docker_version():
+    try:
+        res = subprocess.run(["docker", "--version"], capture_output=True, text=True, check=True)
+        return res.stdout.strip()
+    except:
+        return "Not installed"
+
+def get_ollama_version():
+    try:
+        res = subprocess.run(["ollama", "--version"], capture_output=True, text=True, check=True)
+        return res.stdout.strip()
+    except:
+        return "Not installed"
+
 def gather_system_info(plan_path):
     """Gathers host machine and test plan metadata."""
     cfg = load_config()
+    cache = load_system_cache()
     
     # Git info
     git_hash = "Unknown"
@@ -76,11 +127,19 @@ def gather_system_info(plan_path):
     import utils.vram
     
     mem = psutil.virtual_memory()
-    total_ram = mem.total / (1024**3)
-    used_ram = mem.used / (1024**3)
+    total_ram = cache.get('ram_total_gb')
+    if not total_ram:
+        total_ram = round(mem.total / (1024**3), 2)
+        save_system_cache({'ram_total_gb': total_ram})
     
-    total_vram = utils.vram.get_gpu_total_vram()
-    used_vram = utils.vram.get_gpu_vram_usage()
+    used_ram = round(mem.used / (1024**3), 2)
+    
+    total_vram = cache.get('vram_total_gb')
+    if not total_vram:
+        total_vram = round(utils.vram.get_gpu_total_vram(), 2)
+        save_system_cache({'vram_total_gb': total_vram})
+        
+    used_vram = round(utils.vram.get_gpu_vram_usage(), 2)
 
     info = {
         "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
@@ -88,11 +147,13 @@ def gather_system_info(plan_path):
             "os": platform.platform(),
             "cpu": get_cpu_info(),
             "cpu_count": psutil.cpu_count(logical=True),
-            "ram_total_gb": round(total_ram, 2),
-            "ram_used_gb": round(used_ram, 2),
+            "ram_total_gb": total_ram,
+            "ram_used_gb": used_ram,
             "gpu": get_gpu_info(),
-            "vram_total_gb": round(total_vram, 2),
-            "vram_used_gb": round(used_vram, 2),
+            "vram_total_gb": total_vram,
+            "vram_used_gb": used_vram,
+            "docker": get_docker_version(),
+            "ollama": get_ollama_version(),
         },
         "environment": {
             "HF_HOME": get_hf_home(silent=True),

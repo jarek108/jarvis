@@ -74,7 +74,7 @@ class RichDashboard:
         self.vram_total = 1.0
         self.ram_usage = 0.0
         self.ram_total = 1.0
-        self.cpu_usage = 0.0
+        self.cpu_info = "Detecting..."
         self.recent_logs = []
         
         self._snapshot_path = None
@@ -135,6 +135,8 @@ class RichDashboard:
         lines.append(Text(f"CPU: {self.cpu_info}"))
         lines.append(Text(f"RAM: {self.ram_usage:.1f}/{self.ram_total:.1f} GB ({ram_pct:.1f}%)"))
         lines.append(Text(f"VRAM: {self.vram_usage:.1f}/{self.vram_total:.1f} GB ({vram_pct:.1f}%)"))
+        lines.append(Text(f"Docker: {self.system_info.get('host', {}).get('docker', 'N/A')}"))
+        lines.append(Text(f"Ollama: {self.system_info.get('host', {}).get('ollama', 'N/A')}"))
         lines.append(Text(f"Path: {session_path}"))
         
         if hasattr(self, 'report_url') and self.report_url:
@@ -351,81 +353,79 @@ class RichDashboard:
     def make_layout(self):
         from rich.console import Group
         
-        # 1. Header
-        host = self.system_info['host']
+        # 1. Header (Simple)
         header_text = Text.assemble(
             (f" JARVIS: ", "bold white on blue"),
             (f" {self.plan_name} ", "bold green on blue"),
             (f" | SESSION: ", "white on blue"),
             (f" {self.session_id} ", "bold yellow on blue"),
-            (f" | CPU: ", "white on blue"),
-            (f" {self.cpu_info} ", "bold white on blue"),
-            (f" | GPU: ", "white on blue"),
-            (f" {host['gpu']} ", "bold cyan on blue"),
         )
         header_panel = Panel(Align.center(header_text), style="blue")
+
+        # 2. Specs Section
+        vram_pct = (self.vram_usage / self.vram_total) * 100 if self.vram_total > 0 else 0
+        ram_pct = (self.ram_usage / self.ram_total) * 100 if self.ram_total > 0 else 0
         
-        # 2. Overall Status
+        host = self.system_info.get('host', {})
+        gpu_name = host.get('gpu', 'Detecting...')
+
+        specs_text = Text.assemble(
+            (f"GPU: ", "bold cyan"), (f"{gpu_name} "), 
+            (f"({self.vram_usage:.1f}/{self.vram_total:.1f} GB VRAM)", "cyan"), ("\n"),
+            (f"CPU: ", "bold white"), (f"{self.cpu_info}\n"),
+            (f"RAM: ", "bold green"), (f"{self.ram_usage:.1f}/{self.ram_total:.1f} GB ({ram_pct:.1f}%)\n"),
+            (f"Docker: ", "bold blue"), (f"{host.get('docker', 'N/A')} | "),
+            (f"Ollama: ", "bold yellow"), (f"{host.get('ollama', 'N/A')}")
+        )
+        specs_panel = Panel(specs_text, title="Starting system snapshot", border_style="blue")
+        
+        # 3. Overall Status
         overall_panel = Panel(self.overall_progress, title="Overall Status", border_style="blue")
         
-        # 3. Hierarchy
+        # 4. Hierarchy
         hierarchy_panel = Panel(
             self.make_progress_view(),
             title="Execution Hierarchy (Click models to open log)",
             border_style="blue"
         )
         
-        # 4. System Status
-        vram_pct = (self.vram_usage / self.vram_total) * 100 if self.vram_total > 0 else 0
-        vram_color = "green" if vram_pct < 70 else ("yellow" if vram_pct < 90 else "red")
-        
-        ram_pct = (self.ram_usage / self.ram_total) * 100 if self.ram_total > 0 else 0
-        ram_color = "green" if ram_pct < 70 else ("yellow" if ram_pct < 90 else "red")
-        
+        # 5. System Status (Condensed)
         session_path = self._session_path or ""
         file_url = f"file:///{session_path.replace(os.sep, '/')}"
 
-        vram_text = Text.assemble(
-            (f"CPU: ", "bold"),
-            (f"{self.cpu_info} ", "white"),
-            (f" | RAM: ", "bold"),
-            (f"{self.ram_usage:.1f}/{self.ram_total:.1f} GB ({ram_pct:.1f}%) ", ram_color),
-            (f" | VRAM: ", "bold"),
-            (f"{self.vram_usage:.1f}/{self.vram_total:.1f} GB ({vram_pct:.1f}%) ", vram_color),
-            (f" | Active: ", "bold"),
+        status_text = Text.assemble(
+            (f"Active Loadout: ", "bold"),
             (f"{str(self.current_loadout or 'Idle'):<30}", "cyan"),
-            (f"\nPath: ", "bold"),
+            (f" | Path: ", "bold"),
             (f"{session_path}", f"bright_black link {file_url}")
         )
         
         if hasattr(self, 'report_url') and self.report_url:
             url = self.report_url
             if not url.startswith("http"): url = f"file:///{url.replace(os.sep, '/')}"
-            vram_text.append("\n")
-            vram_text.append("📊 REPORT: ", style="bold green")
-            vram_text.append(self.report_url, style=f"underline green link {url}")
+            status_text.append("\n")
+            status_text.append("📊 REPORT: ", style="bold green")
+            status_text.append(self.report_url, style=f"underline green link {url}")
 
-        system_panel = Panel(Align.left(vram_text), title="System Status", border_style="cyan")
+        system_panel = Panel(Align.left(status_text), title="Session Info", border_style="cyan")
         
-        # 5. Model Log Tail (Efficient Seek-based tail)
+        # 6. Model Log Tail
         log_content = ""
         if self.active_log_path and os.path.exists(self.active_log_path):
             try:
                 with open(self.active_log_path, "rb") as f:
-                    # Seek to end and read last 2048 bytes
                     f.seek(0, os.SEEK_END)
                     size = f.tell()
                     to_read = min(size, 4096)
                     f.seek(size - to_read)
                     chunk = f.read(to_read).decode('utf-8', errors='ignore')
-                    # Get last 18 lines
                     lines = chunk.splitlines()
                     log_content = "\n".join(lines[-18:])
             except: pass
         
         footer_panel = Panel(Text(log_content, style="bright_black"), title=f"Model Log: {os.path.basename(self.active_log_path or 'None')}", border_style="bright_black")
         
-        return Group(header_panel, overall_panel, hierarchy_panel, system_panel, footer_panel)
+        return Group(header_panel, specs_panel, overall_panel, hierarchy_panel, system_panel, footer_panel)
 
     def start(self, snapshot_path=None): 
         if snapshot_path: 
