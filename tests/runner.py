@@ -130,6 +130,7 @@ def main():
     report_path = None
     session_id = "ERROR"
     session_dir = "ERROR"
+    vram_summary = {} # domain -> {loadout -> peak_vram}
     
     try:
         # Support both literal paths and '@' prefixed paths
@@ -206,6 +207,13 @@ def main():
                             start_l = time.perf_counter()
                             res = run_domain_tests(domain, s_name, models, scenarios, settings, session_dir, dashboard, plumbing=args.plumbing, on_scenario=dashboard_capture, on_phase=lambda p: dashboard.update_phase(domain, s_name, p))
                             
+                            # Aggregate Peak VRAM
+                            if res:
+                                peaks = [r.get('vram_peak', 0) for r in res if 'vram_peak' in r]
+                                if peaks:
+                                    if domain not in vram_summary: vram_summary[domain] = {}
+                                    vram_summary[domain][s_name] = max(peaks)
+
                             status = "failed"; error_message = ""
                             if not res:
                                 status = "failed"
@@ -246,6 +254,14 @@ def main():
             time.sleep(1) 
         finally:
             dashboard.stop()
+            
+            if vram_summary:
+                print(f"\n{BOLD}{CYAN}󰢮  HARDWARE IMPACT SUMMARY (Peak VRAM usage){RESET}")
+                for domain, loadouts in vram_summary.items():
+                    print(f"  • {BOLD}{domain.upper()}{RESET}")
+                    for loadout, peak in loadouts.items():
+                        print(f"    - {loadout:<40} : {BOLD}{peak:.2f} GB{RESET}")
+
             print(f"\n✅ Session Complete: {session_id}")
             print(f"📁 Artifacts: {session_dir}")
             if report_path: print(f"📊 Report: {report_path}")
