@@ -121,130 +121,139 @@ def run_domain_tests(domain, setup_name, models, scenarios, settings, session_di
     return final_results
 
 def main():
-    parser = argparse.ArgumentParser(description="Jarvis Plan-Driven Test Runner", fromfile_prefix_chars='@')
+    parser = argparse.ArgumentParser(description="Jarvis Plan-Driven Test Runner")
     parser.add_argument("plan", type=str, help="Path to a .yaml test plan (e.g., tests/plan_fast_check.yaml)")
     parser.add_argument("--no-cleanup", action="store_true", help="Skip stale artifact cleanup at start")
     parser.add_argument("--plumbing", action="store_true", help="Run in plumbing mode (real servers with stubs)")
     args = parser.parse_args()
 
     report_path = None
-    # Support both literal paths and '@' prefixed paths if argparse didn't consume it
-    raw_plan = args.plan[1:] if args.plan.startswith('@') else args.plan
-    plan_path = utils.resolve_path(raw_plan)
+    session_id = "ERROR"
+    session_dir = "ERROR"
     
-    if not os.path.exists(plan_path):
-        print(f"\n❌ ERROR: Plan not found at {plan_path}")
-        return
-    
-    with open(plan_path, "r") as f: plan = yaml.safe_load(f)
-    
-    # 1. Start Dashboard IMMEDIATELY (Pre-flight transparency)
-    dashboard = RichDashboard(plan.get('name', 'Unnamed'))
-    dashboard.start()
-    
-    # 2. Perform slow pre-flight checks and init session
-    dashboard.overall_progress.update(dashboard.boot_task, advance=1, description="Checking HF Cache")
-    utils.get_hf_home(silent=True)
-    
-    dashboard.overall_progress.update(dashboard.boot_task, advance=1, description="Checking Ollama Models")
-    utils.get_ollama_models(silent=True)
-    
-    dashboard.overall_progress.update(dashboard.boot_task, advance=1, description="Initializing Session")
-    session_dir, session_id = init_session(plan_path)
-    log_file_path = os.path.join(session_dir, "progression.log")
-    dashboard.snapshot_path = log_file_path # Triggers background thread in UI
-    
-    dashboard.overall_progress.update(dashboard.boot_task, advance=1, description="Reading System Info")
-    with open(os.path.join(session_dir, "system_info.yaml"), "r") as f: system_info = yaml.safe_load(f)
-    
-    dashboard.overall_progress.update(dashboard.boot_task, advance=1, description="Finalizing Boot")
-    dashboard.finalize_boot(session_id, system_info)
-    
-    dashboard.vram_total = utils.get_gpu_total_vram()
-    
-    structure = {}
-    execution_blocks = plan.get('execution', [])
-    for block in execution_blocks:
-        d_name = block['domain'].lower()
-        scenarios = load_scenarios(d_name, block.get('scenarios'))
-        loadouts = block.get('loadouts', [])
-        if d_name not in structure:
-            structure[d_name] = {"status": "pending", "done": 0, "total": 0, "models_done": 0, "start_time": None, "duration": 0, "loadouts": {}}
-        structure[d_name]['total'] += len(scenarios) * len(loadouts)
-        for models in loadouts:
-            s_name = "_".join([m.replace(":", "-").replace("/", "--") for m in models])
-            structure[d_name]['loadouts'][s_name] = {"status": "pending", "done": 0, "total": len(scenarios), "duration": 0, "errors": 0, "phase": None, "models": models}
-    
-    dashboard.init_plan_structure(structure)
-    
-    # Update progress bars with actual totals
-    total_scenarios = sum(d['total'] for d in structure.values())
-    total_models = sum(len(d['loadouts']) for d in structure.values())
-    dashboard.overall_progress.update(dashboard.overall_task, total=total_scenarios)
-    dashboard.overall_progress.update(dashboard.models_task, total=total_models)
-
-    def execution_worker():
+    try:
+        # Support both literal paths and '@' prefixed paths
+        raw_plan = args.plan[1:] if args.plan.startswith('@') else args.plan
+        plan_path = utils.resolve_path(raw_plan)
+        
+        if not os.path.exists(plan_path):
+            print(f"\n❌ ERROR: Plan not found at {plan_path}")
+            return
+        
+        with open(plan_path, "r") as f: plan = yaml.safe_load(f)
+        
+        # 1. Start Dashboard IMMEDIATELY (Pre-flight transparency)
+        dashboard = RichDashboard(plan.get('name', 'Unnamed'))
+        dashboard.start()
+        
         try:
-            settings = plan.get('settings', {})
+            # 2. Perform slow pre-flight checks and init session
+            dashboard.overall_progress.update(dashboard.boot_task, advance=1, description="Checking HF Cache")
+            utils.get_hf_home(silent=True)
+            
+            dashboard.overall_progress.update(dashboard.boot_task, advance=1, description="Checking Ollama Models")
+            utils.get_ollama_models(silent=True)
+            
+            dashboard.overall_progress.update(dashboard.boot_task, advance=1, description="Initializing Session")
+            session_dir, session_id = init_session(plan_path)
+            log_file_path = os.path.join(session_dir, "progression.log")
+            dashboard.snapshot_path = log_file_path # Triggers background thread in UI
+            
+            dashboard.overall_progress.update(dashboard.boot_task, advance=1, description="Reading System Info")
+            with open(os.path.join(session_dir, "system_info.yaml"), "r") as f: system_info = yaml.safe_load(f)
+            
+            dashboard.overall_progress.update(dashboard.boot_task, advance=1, description="Finalizing Boot")
+            dashboard.finalize_boot(session_id, system_info)
+            
+            dashboard.vram_total = utils.get_gpu_total_vram()
+            
+            structure = {}
+            execution_blocks = plan.get('execution', [])
             for block in execution_blocks:
-                domain = block['domain']; dashboard.current_domain = domain.upper()
-                scenarios = load_scenarios(domain, block.get('scenarios'))
+                d_name = block['domain'].lower()
+                scenarios = load_scenarios(d_name, block.get('scenarios'))
                 loadouts = block.get('loadouts', [])
+                if d_name not in structure:
+                    structure[d_name] = {"status": "pending", "done": 0, "total": 0, "models_done": 0, "start_time": None, "duration": 0, "loadouts": {}}
+                structure[d_name]['total'] += len(scenarios) * len(loadouts)
                 for models in loadouts:
                     s_name = "_".join([m.replace(":", "-").replace("/", "--") for m in models])
-                    dashboard.current_loadout = s_name
-                    dashboard.update_phase(domain, s_name, "setup", "wip")
-                    
-                    def dashboard_capture(res):
-                        dashboard.update_scenario(domain, s_name, res['name'], res['status'])
+                    structure[d_name]['loadouts'][s_name] = {"status": "pending", "done": 0, "total": len(scenarios), "duration": 0, "errors": 0, "phase": None, "models": models}
+            
+            dashboard.init_plan_structure(structure)
+            
+            # Update progress bars with actual totals
+            total_scenarios = sum(d['total'] for d in structure.values())
+            total_models = sum(len(d['loadouts']) for d in structure.values())
+            dashboard.overall_progress.update(dashboard.overall_task, total=total_scenarios)
+            dashboard.overall_progress.update(dashboard.models_task, total=total_models)
 
-                    start_l = time.perf_counter()
-                    res = run_domain_tests(domain, s_name, models, scenarios, settings, session_dir, dashboard, plumbing=args.plumbing, on_scenario=dashboard_capture, on_phase=lambda p: dashboard.update_phase(domain, s_name, p))
-                    
-                    status = "failed"; error_message = ""
-                    if not res:
-                        status = "failed"
-                    else:
-                        lifecycle_fail = next((r for r in res if r.get('name') in ["SETUP", "LIFECYCLE"] and r.get('status') != "PASSED"), None)
-                        if lifecycle_fail:
-                            status = lifecycle_fail['status'].lower()
-                            error_message = lifecycle_fail.get('result', "Lifecycle error")
-                        else:
-                            all_passed = all(r.get('status') == "PASSED" for r in res)
-                            status = "passed" if all_passed else "failed"
-                    
-                    domain_results = [{"loadout": s_name, "scenarios": res or [], "status": status.upper()}]
-                    save_artifact(domain, domain_results, session_dir=session_dir)
-                    dashboard.finalize_loadout(domain, s_name, time.perf_counter() - start_l, status=status, error_message=error_message)
-                    
-                    if not args.plumbing:
-                        dashboard.vram_usage = utils.get_gpu_vram_usage()
-                dashboard.finalize_domain(domain)
-            dashboard.current_status = "Generating Report..."
-            nonlocal report_path
-            report_path = trigger_report_generation(upload=True, session_dir=session_dir)
-            dashboard.report_url = report_path
-            dashboard.current_status = "Finished"
-        except Exception as e:
-            import traceback
-            dashboard.log(f"CRITICAL WORKER ERROR: {str(e)}")
-            with open(os.path.join(session_dir, "worker_crash.log"), "w") as f:
-                traceback.print_exc(file=f)
+            def execution_worker():
+                try:
+                    settings = plan.get('settings', {})
+                    for block in execution_blocks:
+                        domain = block['domain']; dashboard.current_domain = domain.upper()
+                        scenarios = load_scenarios(domain, block.get('scenarios'))
+                        loadouts = block.get('loadouts', [])
+                        for models in loadouts:
+                            s_name = "_".join([m.replace(":", "-").replace("/", "--") for m in models])
+                            dashboard.current_loadout = s_name
+                            dashboard.update_phase(domain, s_name, "setup", "wip")
+                            
+                            def dashboard_capture(res):
+                                dashboard.update_scenario(domain, s_name, res['name'], res['status'])
 
-    import threading
-    worker_thread = threading.Thread(target=execution_worker, daemon=True)
-    worker_thread.start()
+                            start_l = time.perf_counter()
+                            res = run_domain_tests(domain, s_name, models, scenarios, settings, session_dir, dashboard, plumbing=args.plumbing, on_scenario=dashboard_capture, on_phase=lambda p: dashboard.update_phase(domain, s_name, p))
+                            
+                            status = "failed"; error_message = ""
+                            if not res:
+                                status = "failed"
+                            else:
+                                lifecycle_fail = next((r for r in res if r.get('name') in ["SETUP", "LIFECYCLE"] and r.get('status') != "PASSED"), None)
+                                if lifecycle_fail:
+                                    status = lifecycle_fail['status'].lower()
+                                    error_message = lifecycle_fail.get('result', "Lifecycle error")
+                                else:
+                                    all_passed = all(r.get('status') == "PASSED" for r in res)
+                                    status = "passed" if all_passed else "failed"
+                            
+                            domain_results = [{"loadout": s_name, "scenarios": res or [], "status": status.upper()}]
+                            save_artifact(domain, domain_results, session_dir=session_dir)
+                            dashboard.finalize_loadout(domain, s_name, time.perf_counter() - start_l, status=status, error_message=error_message)
+                            
+                            if not args.plumbing:
+                                dashboard.vram_usage = utils.get_gpu_vram_usage()
+                        dashboard.finalize_domain(domain)
+                    dashboard.current_status = "Generating Report..."
+                    nonlocal report_path
+                    report_path = trigger_report_generation(upload=True, session_dir=session_dir)
+                    dashboard.report_url = report_path
+                    dashboard.current_status = "Finished"
+                except Exception as e:
+                    import traceback
+                    dashboard.log(f"CRITICAL WORKER ERROR: {str(e)}")
+                    with open(os.path.join(session_dir, "worker_crash.log"), "w") as f:
+                        traceback.print_exc(file=f)
 
-    try:
-        # Keep main thread alive while worker is running
-        while worker_thread.is_alive():
-            time.sleep(0.1)
-        time.sleep(1) 
-    finally:
-        dashboard.stop()
-        print(f"\nâœ… Session Complete: {session_id}")
-        print(f"ðŸ“‚ Artifacts: {session_dir}")
-        if report_path: print(f"ðŸ“Š Report: {report_path}")
+            import threading
+            worker_thread = threading.Thread(target=execution_worker, daemon=True)
+            worker_thread.start()
+
+            # Keep main thread alive while worker is running
+            while worker_thread.is_alive():
+                time.sleep(0.1)
+            time.sleep(1) 
+        finally:
+            dashboard.stop()
+            print(f"\n✅ Session Complete: {session_id}")
+            print(f"📁 Artifacts: {session_dir}")
+            if report_path: print(f"📊 Report: {report_path}")
+
+    except Exception as e:
+        import traceback
+        print(f"\n❌ CRITICAL STARTUP ERROR: {str(e)}")
+        traceback.print_exc()
 
 if __name__ == "__main__":
     try:
