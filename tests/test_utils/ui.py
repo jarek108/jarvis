@@ -64,7 +64,7 @@ class RichDashboard:
             "•",
             TimeElapsedColumn(),
         )
-        self.boot_task = self.overall_progress.add_task("Booting / Pre-flight", total=1)
+        self.boot_task = self.overall_progress.add_task("Booting / Pre-flight", total=5)
         self.overall_task = self.overall_progress.add_task("Total Scenarios", total=100)
         self.models_task = self.overall_progress.add_task("Total Models   ", total=100)
         
@@ -72,6 +72,9 @@ class RichDashboard:
         self.active_log_path = None
         self.vram_usage = 0.0
         self.vram_total = 1.0
+        self.ram_usage = 0.0
+        self.ram_total = 1.0
+        self.cpu_usage = 0.0
         self.recent_logs = []
         
         self._snapshot_path = None
@@ -125,9 +128,12 @@ class RichDashboard:
 
         # System
         vram_pct = (self.vram_usage / self.vram_total) * 100 if self.vram_total > 0 else 0
+        ram_pct = (self.ram_usage / self.ram_total) * 100 if self.ram_total > 0 else 0
         session_path = self._session_path or ""
         
         lines.append(Text(f"\nSYSTEM STATUS:", style="bold underline"))
+        lines.append(Text(f"CPU: {self.cpu_info}"))
+        lines.append(Text(f"RAM: {self.ram_usage:.1f}/{self.ram_total:.1f} GB ({ram_pct:.1f}%)"))
         lines.append(Text(f"VRAM: {self.vram_usage:.1f}/{self.vram_total:.1f} GB ({vram_pct:.1f}%)"))
         lines.append(Text(f"Path: {session_path}"))
         
@@ -165,8 +171,18 @@ class RichDashboard:
         if session_id: 
             self.session_id = session_id
             self._session_path = os.path.join(self.project_root, "tests", "logs", self.session_id)
-        if system_info: self.system_info = system_info
-        self.overall_progress.update(self.boot_task, completed=1)
+        if system_info: 
+            self.system_info = system_info
+            host = system_info.get('host', {})
+            self.vram_total = host.get('vram_total_gb', self.vram_total)
+            self.vram_usage = host.get('vram_used_gb', self.vram_usage)
+            self.ram_total = host.get('ram_total_gb', self.ram_total) or host.get('ram_total_gb') or 1.0
+            # Some fields might have different names in system_info.yaml
+            self.ram_total = host.get('ram_total_gb', self.ram_total)
+            self.ram_usage = host.get('ram_used_gb', self.ram_usage)
+            self.cpu_info = host.get('cpu', self.cpu_info)
+
+        self.overall_progress.update(self.boot_task, completed=5)
 
     def update_phase(self, domain, loadout, phase, status="wip"):
         d_data = self.test_data.get(domain.lower())
@@ -344,6 +360,8 @@ class RichDashboard:
             (f" {self.plan_name} ", "bold green on blue"),
             (f" | SESSION: ", "white on blue"),
             (f" {self.session_id} ", "bold yellow on blue"),
+            (f" | CPU: ", "white on blue"),
+            (f" {self.cpu_info} ", "bold white on blue"),
             (f" | GPU: ", "white on blue"),
             (f" {host['gpu']} ", "bold cyan on blue"),
         )
@@ -363,15 +381,22 @@ class RichDashboard:
         vram_pct = (self.vram_usage / self.vram_total) * 100 if self.vram_total > 0 else 0
         vram_color = "green" if vram_pct < 70 else ("yellow" if vram_pct < 90 else "red")
         
+        ram_pct = (self.ram_usage / self.ram_total) * 100 if self.ram_total > 0 else 0
+        ram_color = "green" if ram_pct < 70 else ("yellow" if ram_pct < 90 else "red")
+        
         session_path = self._session_path or ""
         file_url = f"file:///{session_path.replace(os.sep, '/')}"
 
         vram_text = Text.assemble(
-            (f"VRAM: ", "bold"),
+            (f"CPU: ", "bold"),
+            (f"{self.cpu_info} ", "white"),
+            (f" | RAM: ", "bold"),
+            (f"{self.ram_usage:.1f}/{self.ram_total:.1f} GB ({ram_pct:.1f}%) ", ram_color),
+            (f" | VRAM: ", "bold"),
             (f"{self.vram_usage:.1f}/{self.vram_total:.1f} GB ({vram_pct:.1f}%) ", vram_color),
             (f" | Active: ", "bold"),
             (f"{str(self.current_loadout or 'Idle'):<30}", "cyan"),
-            (f" | Path: ", "bold"),
+            (f"\nPath: ", "bold"),
             (f"{session_path}", f"bright_black link {file_url}")
         )
         

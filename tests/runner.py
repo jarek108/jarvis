@@ -139,13 +139,21 @@ def main():
     dashboard.start()
     
     # 2. Perform slow pre-flight checks and init session
+    dashboard.overall_progress.update(dashboard.boot_task, advance=1, description="Checking HF Cache")
     utils.get_hf_home(silent=True)
+    
+    dashboard.overall_progress.update(dashboard.boot_task, advance=1, description="Checking Ollama Models")
     utils.get_ollama_models(silent=True)
+    
+    dashboard.overall_progress.update(dashboard.boot_task, advance=1, description="Initializing Session")
     session_dir, session_id = init_session(plan_path)
     log_file_path = os.path.join(session_dir, "progression.log")
     dashboard.snapshot_path = log_file_path # Triggers background thread in UI
     
+    dashboard.overall_progress.update(dashboard.boot_task, advance=1, description="Reading System Info")
     with open(os.path.join(session_dir, "system_info.yaml"), "r") as f: system_info = yaml.safe_load(f)
+    
+    dashboard.overall_progress.update(dashboard.boot_task, advance=1, description="Finalizing Boot")
     dashboard.finalize_boot(session_id, system_info)
     
     dashboard.vram_total = utils.get_gpu_total_vram()

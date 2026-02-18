@@ -93,6 +93,39 @@ def generate_excel(sync_artifacts=True, session_dir=None):
         sheets = {}
         has_any_data = False
 
+        # 0. Summary Sheet (from system_info.yaml)
+        sys_info_path = os.path.join(artifacts_dir, "system_info.yaml")
+        if os.path.exists(sys_info_path):
+            import yaml
+            with open(sys_info_path, "r", encoding="utf-8") as f:
+                sys_info = yaml.safe_load(f)
+            
+            summary_rows = []
+            # Host Info
+            host = sys_info.get("host", {})
+            for k, v in host.items():
+                summary_rows.append({"Category": "Host", "Metric": k.replace("_", " ").title(), "Value": str(v)})
+            
+            # Environment
+            env = sys_info.get("environment", {})
+            for k, v in env.items():
+                summary_rows.append({"Category": "Environment", "Metric": k, "Value": str(v)})
+            
+            # Git
+            git = sys_info.get("git", {})
+            for k, v in git.items():
+                summary_rows.append({"Category": "Git", "Metric": k.title(), "Value": str(v)})
+            
+            # Plan
+            plan = sys_info.get("plan", {})
+            summary_rows.append({"Category": "Plan", "Metric": "Name", "Value": plan.get("name", "N/A")})
+            summary_rows.append({"Category": "Plan", "Metric": "Description", "Value": plan.get("description", "N/A")})
+            summary_rows.append({"Category": "Session", "Metric": "Timestamp", "Value": sys_info.get("timestamp", "N/A")})
+
+            if summary_rows:
+                sheets["Summary"] = pd.DataFrame(summary_rows)
+                has_any_data = True
+
         # Helper for loading data
         def load_domain_data(domain):
             fname = f"{domain}.json" if session_dir else f"latest_{domain}.json"
@@ -337,6 +370,12 @@ def generate_excel(sync_artifacts=True, session_dir=None):
                 # 3. Column Widths
                 for idx, col in enumerate(df.columns):
                     col_letter = chr(65 + idx)
+                    if name == "Summary":
+                        if col == "Category": worksheet.column_dimensions[col_letter].width = 15
+                        elif col == "Metric": worksheet.column_dimensions[col_letter].width = 25
+                        elif col == "Value": worksheet.column_dimensions[col_letter].width = 60
+                        continue
+
                     if any(x in col.lower() for x in ["wav", "video", "media", "link"]):
                         worksheet.column_dimensions[col_letter].width = 15
                         for row_idx in range(2, len(df) + 2):
