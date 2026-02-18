@@ -172,7 +172,7 @@ class LifecycleManager:
         if domain == "sts":
             sts_port = self.cfg['ports']['sts']
             sts_script = os.path.join(self.project_root, "servers", "sts_server.py")
-            cmd = [self.python_exe, sts_script, "--port", str(sts_port)]
+            cmd = [self.python_exe, sts_script, "--port", str(sts_port), "--trust-deps"]
             if self.cat['stt']: cmd.extend(["--stt", self.cat['stt']])
             if self.cat['tts']: cmd.extend(["--tts", self.cat['tts']])
             if self.cat['llm']: 
@@ -245,8 +245,14 @@ class LifecycleManager:
             proc = utils.start_server(s['cmd'], log_file=f_log)
             self.owned_processes.append((s['port'], proc))
             
+        # 3.1. Post-spawn: Attach log streamers if needed (e.g. for Docker)
+        for s in services_to_start:
             if 'docker' in str(s['cmd']):
-                time.sleep(1)
+                # Find the log file we just opened
+                # (Simple approach: we just opened it, so we can re-open or keep track)
+                # For now, let's just use the same logic but without the sleep
+                log_path = os.path.join(log_dir, f"svc_{s['type']}_{s['id'].replace(':', '-').replace('/', '--')}_{timestamp}.log")
+                f_log = open(log_path, "a") # Open in append mode
                 log_streamer = subprocess.Popen(["docker", "logs", "-f", "vllm-server"], stdout=f_log, stderr=f_log, creationflags=0x08000000 if os.name == 'nt' else 0)
                 self.owned_processes.append((None, log_streamer))
 

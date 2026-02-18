@@ -61,6 +61,7 @@ def get_args():
     parser.add_argument("--host", type=str, default="127.0.0.1")
     parser.add_argument("--benchmark-mode", action="store_true", help="Enable deterministic output for benchmarking")
     parser.add_argument("--stub", action="store_true", help="Run in stub mode (skip warmup)")
+    parser.add_argument("--trust-deps", action="store_true", help="Skip internal dependency health checks and warmup (assumes runner manages infra)")
     return parser.parse_known_args()[0]
 
 args = get_args()
@@ -211,27 +212,30 @@ async def lifespan(app: FastAPI):
         }
     ]
 
-    logger.info("📡 Checking Infrastructure...")
-    for s in services:
-        if not is_port_in_use(s["port"]):
-            logger.info(f"  ✨ Spawning {s['name']} (Port {s['port']})")
-            start_server(s["cmd"], loud=False)
-            owned_ports.append(s["port"])
-        else:
-            logger.info(f"  ℹ️  {s['name']} is already running.")
+    if not args.trust_deps:
+        logger.info("📡 Checking Infrastructure...")
+        for s in services:
+            if not is_port_in_use(s["port"]):
+                logger.info(f"  ✨ Spawning {s['name']} (Port {s['port']})")
+                start_server(s["cmd"], loud=False)
+                owned_ports.append(s["port"])
+            else:
+                logger.info(f"  ℹ️  {s['name']} is already running.")
 
-    # Wait for all
-    wait_timeout = 5 if args.stub else 120
-    ready_tasks = [wait_for_service_ready(s['name'], s['health'], timeout=wait_timeout) for s in services]
-    results = await asyncio.gather(*ready_tasks)
-    
-    if not all(results):
-        logger.critical("🚨 DEPENDENCY FAILURE: Pipeline entry blocked.")
+        # Wait for all
+        wait_timeout = 5 if args.stub else 120
+        ready_tasks = [wait_for_service_ready(s['name'], s['health'], timeout=wait_timeout) for s in services]
+        results = await asyncio.gather(*ready_tasks)
+        
+        if not all(results):
+            logger.critical("🚨 DEPENDENCY FAILURE: Pipeline entry blocked.")
 
-    # 4. LLM Warmup (External)
-    if llm_engine == "ollama" and not args.stub:
-        await warmup_ollama(f"http://127.0.0.1:{llm_port}", llm_model_name)
-    
+        # 4. LLM Warmup (External)
+        if llm_engine == "ollama" and not args.stub:
+            await warmup_ollama(f"http://127.0.0.1:{llm_port}", llm_model_name)
+    else:
+        logger.info("🚀 Trusting Dependencies (Skipping internal checks/warmup)")
+
     app.state.is_ready = True
     logger.info("✨ JARVIS PIPELINE READY")
     yield

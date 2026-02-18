@@ -74,13 +74,27 @@ class RichDashboard:
         self.vram_total = 1.0
         self.recent_logs = []
         
-        self.snapshot_path = None
+        self._snapshot_path = None
         self._stop_event = None
         self._snapshot_thread = None
 
         # Use screen=False to allow the final frame to persist in the scrollback buffer.
         # Disable Live's internal redirection as we handle it ourselves in the lifecycle.
         self.live = Live(self, console=self.console, refresh_per_second=4, screen=False, redirect_stdout=False)
+
+    @property
+    def snapshot_path(self):
+        return self._snapshot_path
+
+    @snapshot_path.setter
+    def snapshot_path(self, path):
+        self._snapshot_path = path
+        # If we are already running and just got a path, start the thread
+        if self._snapshot_path and self.live.is_started and not self._snapshot_thread:
+            import threading
+            self._stop_event = threading.Event()
+            self._snapshot_thread = threading.Thread(target=self._snapshot_loop, daemon=True)
+            self._snapshot_thread.start()
 
     def __rich__(self) -> Layout:
         return self.make_layout()
@@ -391,14 +405,9 @@ class RichDashboard:
         return Group(header_panel, overall_panel, hierarchy_panel, system_panel, footer_panel)
 
     def start(self, snapshot_path=None): 
-        if snapshot_path: self.snapshot_path = snapshot_path
+        if snapshot_path: 
+            self.snapshot_path = snapshot_path # Trigger property setter
         
-        if self.snapshot_path and not self._snapshot_thread:
-            import threading
-            self._stop_event = threading.Event()
-            self._snapshot_thread = threading.Thread(target=self._snapshot_loop, daemon=True)
-            self._snapshot_thread.start()
-
         # self.console.clear() # Removed to prevent scrollback corruption
         self.live.start()
 
