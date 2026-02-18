@@ -135,8 +135,13 @@ class RichDashboard:
         lines.append(Text(f"CPU: {self.cpu_info}"))
         lines.append(Text(f"RAM: {self.ram_usage:.1f}/{self.ram_total:.1f} GB ({ram_pct:.1f}%)"))
         lines.append(Text(f"VRAM: {self.vram_usage:.1f}/{self.vram_total:.1f} GB ({vram_pct:.1f}%)"))
-        lines.append(Text(f"Docker: {self.system_info.get('host', {}).get('docker', 'N/A')}"))
-        lines.append(Text(f"Ollama: {self.system_info.get('host', {}).get('ollama', 'N/A')}"))
+        
+        d = self.system_info.get('host', {}).get('docker', {})
+        lines.append(Text(f"Docker: [{d.get('status', 'Missing')}], {d.get('version', 'N/A')}"))
+        
+        o = self.system_info.get('host', {}).get('ollama', {})
+        lines.append(Text(f"Ollama: [{o.get('status', 'Missing')}], {o.get('version', 'N/A')}"))
+        
         lines.append(Text(f"Path: {session_path}"))
         
         if hasattr(self, 'report_url') and self.report_url:
@@ -369,14 +374,21 @@ class RichDashboard:
         host = self.system_info.get('host', {})
         gpu_name = host.get('gpu', 'Detecting...')
 
+        def fmt_svc(name, info):
+            status = info.get('status', 'Missing')
+            color = "green" if status == "On" else ("red" if status == "Missing" else "yellow")
+            return Text.assemble((f"{name} - ", "bold"), (f"[{status}]", f"bold {color}"), (f", {info.get('version', 'N/A')}"))
+
         specs_text = Text.assemble(
             (f"GPU: ", "bold cyan"), (f"{gpu_name} "), 
             (f"({self.vram_usage:.1f}/{self.vram_total:.1f} GB VRAM)", "cyan"), ("\n"),
             (f"CPU: ", "bold white"), (f"{self.cpu_info}\n"),
-            (f"RAM: ", "bold green"), (f"{self.ram_usage:.1f}/{self.ram_total:.1f} GB ({ram_pct:.1f}%)\n"),
-            (f"Docker: ", "bold blue"), (f"{host.get('docker', 'N/A')} | "),
-            (f"Ollama: ", "bold yellow"), (f"{host.get('ollama', 'N/A')}")
+            (f"RAM: ", "bold green"), (f"{self.ram_usage:.1f}/{self.ram_total:.1f} GB ({ram_pct:.1f}%)\n")
         )
+        specs_text.append(fmt_svc("Docker", host.get('docker', {})))
+        specs_text.append("\n")
+        specs_text.append(fmt_svc("Ollama", host.get('ollama', {})))
+
         specs_panel = Panel(specs_text, title="Starting system snapshot", border_style="blue")
         
         # 3. Overall Status

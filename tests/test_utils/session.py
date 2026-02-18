@@ -90,19 +90,43 @@ def get_cpu_info():
     _cpu_info_cache = platform.processor() or "Unknown CPU"
     return _cpu_info_cache
 
-def get_docker_version():
+def get_docker_info():
+    """Returns (status, version) for Docker."""
+    version = "N/A"
     try:
         res = subprocess.run(["docker", "--version"], capture_output=True, text=True, check=True)
-        return res.stdout.strip()
+        version = res.stdout.strip().replace("Docker version ", "")
     except:
-        return "Not installed"
+        return "Missing", "N/A"
+    
+    try:
+        # Check if daemon is responsive
+        res = subprocess.run(["docker", "info"], capture_output=True, text=True, timeout=2)
+        if res.returncode == 0:
+            return "On", version
+        else:
+            return "Off", version
+    except:
+        return "Off", version
 
-def get_ollama_version():
+def get_ollama_info():
+    """Returns (status, version) for Ollama."""
+    version = "N/A"
     try:
         res = subprocess.run(["ollama", "--version"], capture_output=True, text=True, check=True)
-        return res.stdout.strip()
+        version = res.stdout.strip().replace("ollama version is ", "")
     except:
-        return "Not installed"
+        return "Missing", "N/A"
+    
+    try:
+        import requests
+        resp = requests.get("http://127.0.0.1:11434/api/tags", timeout=1)
+        if resp.status_code == 200:
+            return "On", version
+        else:
+            return "Off", version
+    except:
+        return "Off", version
 
 def gather_system_info(plan_path):
     """Gathers host machine and test plan metadata."""
@@ -141,6 +165,9 @@ def gather_system_info(plan_path):
         
     used_vram = round(utils.vram.get_gpu_vram_usage(), 2)
 
+    d_status, d_ver = get_docker_info()
+    o_status, o_ver = get_ollama_info()
+
     info = {
         "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
         "host": {
@@ -152,8 +179,8 @@ def gather_system_info(plan_path):
             "gpu": get_gpu_info(),
             "vram_total_gb": total_vram,
             "vram_used_gb": used_vram,
-            "docker": get_docker_version(),
-            "ollama": get_ollama_version(),
+            "docker": {"status": d_status, "version": d_ver},
+            "ollama": {"status": o_status, "version": o_ver},
         },
         "environment": {
             "HF_HOME": get_hf_home(silent=True),
