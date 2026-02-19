@@ -23,3 +23,8 @@ This document serves as a scratchpad for future architectural improvements, know
 *   **Issue**: vLLM grabs 90% VRAM by default.
 *   **Current Fix**: Manual tuning via `config.yaml` > `model_vram_map`.
 *   **Goal**: Automated discovery of optimal `gpu_memory_utilization` based on available free VRAM at startup.
+
+### Native Video (vLLM)
+*   **Goal**: Unlock Temporal Positional Embeddings in Qwen2-VL.
+*   **Plan**: See `docs/analysis/NATIVE_VIDEO_PLAN.md`.
+*   **Status**: Research Phase. Need to verify if `vllm-openai` accepts `video_url` payloads.

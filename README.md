@@ -61,6 +61,7 @@ python tests/runner.py tests/plans/ALL_fast.yaml
 ### 🧠 Phase 3: Concepts
 - **[System Architecture](docs/ARCHITECTURE.md)**: High-level component breakdown.
 - **[Performance Analysis](docs/analysis/STREAMING_ANALYSIS.md)**: (Folder) Deep dives into latency, streaming, and startup optimizations.
+- **[Native Video Plan](docs/analysis/NATIVE_VIDEO_PLAN.md)**: Strategy for unlocking temporal embeddings in vLLM.
 
 ### 📚 Phase 4: Reference
 - **[API Reference](docs/API_REFERENCE.md)**: HTTP endpoints and JSON schemas.
