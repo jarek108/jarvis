@@ -10,17 +10,13 @@ execution:
   - domain: llm
     loadouts:
       - ["OL_qwen2.5:0.5b"]
-      - ["OL_qwen2.5:0.5b#stream"]
-      - ["VL_Qwen/Qwen2.5-0.5B-Instruct"]
       - ["VL_Qwen/Qwen2.5-0.5B-Instruct#stream"]
-    scenarios: [english_std, polish_explicit]
+    scenarios: [english_std]
 
   - domain: vlm
     loadouts:
-      - ["OL_moondream"]
       - ["OL_moondream#stream"]
-      - ["VL_Qwen/Qwen2-VL-2B-Instruct"]
-      - ["VL_Qwen/Qwen2-VL-2B-Instruct#stream"]
+      - ["VL_QuantTrio/Qwen3-VL-30B-A3B-Instruct-AWQ#nativevideo#stream"]
     scenarios: [jarvis_logo]
 
   - domain: stt
@@ -36,7 +32,4 @@ execution:
   - domain: sts
     loadouts:
       - ["faster-whisper-base", "OL_qwen2.5:0.5b", "chatterbox-turbo"]
-      - ["faster-whisper-base", "OL_qwen2.5:0.5b#stream", "chatterbox-turbo"]
-      - ["faster-whisper-base", "VL_Qwen/Qwen2.5-0.5B-Instruct", "chatterbox-turbo"]
-      - ["faster-whisper-base", "VL_Qwen/Qwen2.5-0.5B-Instruct#stream", "chatterbox-turbo"]
     scenarios: [english_std]

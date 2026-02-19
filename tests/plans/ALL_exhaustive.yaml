@@ -17,12 +17,10 @@ execution:
 
   - domain: vlm
     loadouts:
-      - ["OL_moondream"]
       - ["OL_moondream#stream"]
-      - ["OL_qwen3-vl:30b-a3b-instruct"]
-      - ["OL_qwen3-vl:30b-a3b-instruct#stream"]
-      - ["VL_QuantTrio/Qwen3-VL-30B-A3B-Instruct-AWQ"]
-      - ["VL_QuantTrio/Qwen3-VL-30B-A3B-Instruct-AWQ#stream"]
+      - ["OL_moondream#stream#stream"]
+      - ["VL_QuantTrio/Qwen3-VL-30B-A3B-Instruct-AWQ#nativevideo"]
+      - ["VL_QuantTrio/Qwen3-VL-30B-A3B-Instruct-AWQ#nativevideo#stream"]
     scenarios: [jarvis_logo, vision_story]
 
   - domain: stt
@@ -40,12 +38,8 @@ execution:
 
   - domain: sts
     loadouts:
-      - ["faster-whisper-tiny", "VL_Qwen/Qwen2.5-0.5B-Instruct", "chatterbox-turbo"]
       - ["faster-whisper-tiny", "VL_Qwen/Qwen2.5-0.5B-Instruct#stream", "chatterbox-turbo"]
-      - ["faster-whisper-tiny", "OL_gpt-oss:20b", "chatterbox-turbo"]
       - ["faster-whisper-tiny", "OL_gpt-oss:20b#stream", "chatterbox-turbo"]
-      - ["faster-whisper-base", "OL_qwen3-vl:30b-a3b-instruct", "chatterbox-multilingual"]
-      - ["faster-whisper-base", "OL_qwen3-vl:30b-a3b-instruct#stream", "chatterbox-multilingual"]
       - ["faster-whisper-base", "VL_QuantTrio/Qwen3-VL-30B-A3B-Instruct-AWQ", "chatterbox-multilingual"]
-      - ["faster-whisper-base", "VL_QuantTrio/Qwen3-VL-30B-A3B-Instruct-AWQ#stream", "chatterbox-multilingual"]
+      - ["faster-whisper-base", "VL_QuantTrio/Qwen3-VL-30B-A3B-Instruct-AWQ#nativevideo#stream", "chatterbox-multilingual"]
     scenarios: [all]

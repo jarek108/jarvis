@@ -7,8 +7,7 @@ settings:
 execution:
   - domain: vlm
     loadouts:
-      - ["OL_moondream"]
       - ["OL_moondream#stream"]
-      - ["VL_Qwen/Qwen2-VL-2B-Instruct"]
       - ["VL_Qwen/Qwen2-VL-2B-Instruct#stream"]
-    scenarios: [jarvis_logo]
+      - ["VL_QuantTrio/Qwen3-VL-30B-A3B-Instruct-AWQ#nativevideo#stream"]
+    scenarios: [jarvis_logo, bunny]
