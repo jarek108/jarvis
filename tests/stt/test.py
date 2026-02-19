@@ -19,7 +19,7 @@ def calculate_similarity(a, b):
     import difflib
     return difflib.SequenceMatcher(None, a.lower(), b.lower()).ratio()
 
-def run_test_suite(model_id, scenarios_to_run=None, trim_length=80, output_dir=None, reporter: BaseReporter = None):
+def run_test_suite(model_id, scenarios_to_run=None, trim_length=80, output_dir=None, reporter: BaseReporter = None, **kwargs):
     cfg = utils.load_config()
     if not reporter:
         reporter = StdoutReporter()

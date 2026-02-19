@@ -15,7 +15,7 @@ import test_utils
 # Ensure UTF-8 output
 utils.ensure_utf8_output()
 
-def run_test_suite(loadout_id, scenarios_to_run=None, stream=False, trim_length=80, output_dir=None, reporter=None):
+def run_test_suite(loadout_id, scenarios_to_run=None, stream=False, trim_length=80, output_dir=None, reporter=None, **kwargs):
     cfg = utils.load_config()
     if not reporter:
         from test_utils.collectors import StdoutReporter
