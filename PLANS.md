@@ -25,6 +25,6 @@ This document serves as a scratchpad for future architectural improvements, know
 *   **Goal**: Automated discovery of optimal `gpu_memory_utilization` based on available free VRAM at startup.
 
 ### Native Video (vLLM)
-*   **Goal**: Unlock Temporal Positional Embeddings in Qwen2-VL.
+*   **Goal**: Unlock Temporal Positional Embeddings in Qwen3-VL.
 *   **Plan**: See `docs/analysis/NATIVE_VIDEO_PLAN.md`.
-*   **Status**: Research Phase. Need to verify if `vllm-openai` accepts `video_url` payloads.
+*   **Status**: VERIFIED. Supported both standalone (`#nativevideo`) and combined with streaming (`#nativevideo#stream`).
