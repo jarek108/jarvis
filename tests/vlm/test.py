@@ -48,8 +48,16 @@ def run_test_suite(model_name, scenarios_to_run=None, output_dir=None, reporter=
         from test_utils.collectors import StdoutReporter
         reporter = StdoutReporter()
 
-    # Streaming defaults to False unless #stream flag is present
+    input_base = os.path.join(os.path.dirname(__file__), "input_data")
+    vram_baseline = utils.get_gpu_vram_usage()
+
+    # Suffix logic
+    native_video = kwargs.get('nativevideo', False)
     stream = kwargs.get('stream', False)
+    
+    mode_suffix = " [Stream]" if stream else " [Batch]"
+    if native_video:
+        mode_suffix = " [Native]" + mode_suffix
 
     is_vllm = model_name.startswith("VL_") or model_name.startswith("vllm:")
     if model_name.startswith("VL_"): clean_model_name = model_name[3:]
@@ -58,17 +66,14 @@ def run_test_suite(model_name, scenarios_to_run=None, output_dir=None, reporter=
     else: clean_model_name = model_name
     
     url = f"http://127.0.0.1:{cfg['ports']['vllm'] if is_vllm else cfg['ports']['ollama']}/v1/chat/completions" if is_vllm else f"http://127.0.0.1:{cfg['ports']['ollama']}/api/chat"
-    
-    input_base = os.path.join(os.path.dirname(__file__), "input_data")
-    vram_baseline = utils.get_gpu_vram_usage()
 
     for s in scenarios_to_run:
         file_path = os.path.join(input_base, s['media'])
-        suffix = " [Stream]" if stream else " [Batch]"
+        filename = s['media']
 
         # Initialize result object with metadata immediately
         res_obj = {
-            "name": s['name'] + suffix,
+            "name": s['name'] + mode_suffix,
             "llm_model": model_name,
             "input_file": file_path,
             "input_text": s['text'],
@@ -77,15 +82,29 @@ def run_test_suite(model_name, scenarios_to_run=None, output_dir=None, reporter=
         }
 
         try:
-            ext = os.path.splitext(s['media'])[1].lower()
-            if ext in [".png", ".jpg", ".jpeg", ".webp"]:
-                with open(file_path, "rb") as bf: b64_frames = [base64.b64encode(bf.read()).decode('utf-8')]
-            else:
-                b64_frames = extract_frames(file_path, max_frames=8)
+            ext = os.path.splitext(filename)[1].lower()
+            is_video = ext in [".mp4", ".mkv", ".avi", ".webm"]
+            
+            b64_frames = []
+            if not (native_video and is_video):
+                if ext in [".png", ".jpg", ".jpeg", ".webp"]:
+                    with open(file_path, "rb") as bf: b64_frames = [base64.b64encode(bf.read()).decode('utf-8')]
+                else:
+                    b64_frames = extract_frames(file_path, max_frames=8)
 
             if is_vllm:
-                payload = {"model": clean_model_name, "messages": [{"role": "user", "content": [{"type": "text", "text": s['text']}, *[{"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{img}"}} for img in b64_frames]]}], "stream": stream, "temperature": 0}
+                content = [{"type": "text", "text": s['text']}]
+                if native_video and is_video:
+                    content.append({
+                        "type": "video_url",
+                        "video_url": {"url": f"file:///data/{filename}"}
+                    })
+                else:
+                    content.extend([{"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{img}"}} for img in b64_frames])
+                
+                payload = {"model": clean_model_name, "messages": [{"role": "user", "content": content}], "stream": stream, "temperature": 0}
             else:
+                # Ollama doesn't support native video yet, fallback to slicing
                 payload = {"model": clean_model_name, "messages": [{"role": "user", "content": s['text'], "images": b64_frames}], "stream": stream, "options": {"temperature": 0}}
 
             start_time = time.perf_counter(); first_token_time = None; full_text = ""; total_tokens = 0

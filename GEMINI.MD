@@ -19,6 +19,7 @@
 
 ## [Section] : Naming Conventions
 - **Prefixes**: Use `ol_` for Ollama and `vl_` or `vllm:` for vLLM in test setups.
+- **Suffixes**: Use `#stream` to enable streaming mode (e.g., `OL_qwen2.5:0.5b#stream`).
 - **Reporting**: Reports in `tests/artifacts/` use the setup name as the primary key.
 - **Filename Sanitization**: When model names are used in file paths (e.g., output audio files), ensure they are sanitized to remove illegal characters like `/` and `:` to maintain cross-platform compatibility (e.g., `qwen/qwen2` becomes `qwen--qwen2`).
 
@@ -30,10 +31,6 @@
 | **vLLM** | `8300` | Docker / OpenAI API |
 | **Ollama** | `11434` | Native / Ollama API |
 | **sts** | `8002` | Pipeline Orchestrator |
-
-## [Section] : Naming Conventions
-- **Prefixes**: Use `ol_` for Ollama and `vl_` or `vllm:` for vLLM in test setups.
-- **Reporting**: Reports in `tests/artifacts/` use the setup name as the primary key.
 
 ## [Section] : Strict Path Policy (Anti-Bloat)
 Jarvis **requires** specific environment variables to be set. It will **exit immediately** if they are missing to prevent accidental model downloads to the C: drive.

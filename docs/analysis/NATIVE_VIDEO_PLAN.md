@@ -1,57 +1,42 @@
-# Plan: Native Video Support in vLLM
+# Plan: Native Video Support in vLLM (Qwen3-VL Pivot)
 
-This document outlines the strategy for researching and potentially implementing "Native Video" processing for vLLM models (specifically Qwen2-VL), moving beyond the current client-side "Video-as-Image" slicing.
+This document outlines the strategy for implementing "Native Video" processing in Jarvis. Based on deep research, we are pivoting our focus from `Qwen2-VL` (which lacks API support) to **`Qwen3-VL-30B-A3B`**, which has first-class support for `video_url` in the vLLM OpenAI server.
 
 ## 1. The Core Objective
-**Unlock Temporal Awareness.**
-Current client-side slicing sends a "Bag of Images" to the model, stripping away temporal metadata. "Native Video" support implies using the model's native input processor (e.g., M-RoPE in Qwen2-VL) to inject frames with **Temporal Positional Embeddings**, allowing the model to understand causality and motion (Time Axis).
+**Unlock Temporal Awareness via Standard API.**
+We want to bypass client-side frame slicing ("Bag of Images") and send a video pointer (`video_url`) to vLLM. This allows the model to use **Interleaved M-RoPE** (Multimodal Rotary Positional Embeddings) to understand time, motion, and causality.
 
-## 2. Research Spike (Phase 1)
+## 2. Research Findings (The Pivot)
 
-### Hypothesis
-vLLM's OpenAI-compatible server (`vllm serve`) might support a non-standard content type (e.g., `{"type": "video_url"}`) or a specific message structure that triggers its internal video loader.
+| Feature | Qwen2-VL | Qwen3-VL-30B-A3B |
+| :--- | :--- | :--- |
+| **Native Video API** | ❌ **Not Supported** | ✅ **Supported** (`video_url`) |
+| **Method** | Python `LLM()` only | Standard `/chat/completions` |
+| **Quantization** | Various | **AWQ** (QuantTrio) fits 24GB+ GPUs |
+| **Strategy** | **Abandon for Native** | **Adopt as Primary Heavy VLM** |
 
-### Experiment A: The API Probe
-Create `research/vllm_video_probe.py` to test payload variations against a running `vllm/vllm-openai` container hosting `Qwen2-VL`.
+**Conclusion:** We do not need a custom server. We will use the standard `vllm/vllm-openai` Docker image with `Qwen3-VL`.
 
-1.  **Variation 1: The "video_url" Extension**
-    ```json
-    "content": [{"type": "video_url", "video_url": {"url": "http://host.docker.internal/video.mp4"}}]
-    ```
-2.  **Variation 2: The "video" type**
-    ```json
-    "content": [{"type": "video", "url": "..."}]
-    ```
-3.  **Variation 3: The Multi-Image Sequence (Control)**
-    Pass 64 frames as `image_url` and measure TTFT. If TTFT is identical to a hypothetical video loader, vLLM might just be slicing internally.
+## 3. Implementation Plan
 
-### Experiment B: The Volume Mount
-vLLM inside Docker cannot see client files.
-*   **Requirement:** We must place a test video in the mapped `%USERPROFILE%\.cache\huggingface` volume (or a new dedicated volume) so the container can access it via `file:///root/.cache/...`.
+### Phase 1: The "Hello World" Probe (STATUS: ✅ SUCCESS)
+The probe script `research/vllm_video_probe.py` successfully triggered native video processing in `Qwen3-VL-30B-AWQ` using the `video_url` payload and `file:///` local paths.
 
-## 3. Implementation (Phase 2)
+### Phase 2: Client Integration (`#nativeVideo`)
+Update `tests/vlm/test.py` to support a new execution mode.
 
-If Phase 1 confirms that vLLM accepts a video pointer:
+*   **Logic:**
+    *   Check for `#nativeVideo` flag in loadout.
+    *   **If True:**
+        1.  Do NOT slice with `PyAV`.
+        2.  Identify video path. If local, ensure it's accessible to Docker (shared volume) or serve it via ephemeral HTTP (complex, prefer volume).
+        3.  Construct payload: `{"type": "video_url", "video_url": {"url": "..."}}`.
+    *   **If False (Default):** Continue using `PyAV` slicing (Bag of Images).
 
-### Step 1: Infrastructure
-*   Update `config.yaml` to define a `temp_data_path`.
-*   Update `utils/lifecycle.py` to mount this path into the vLLM Docker container (e.g., `-v C:\Temp:/data`).
+### Phase 3: Infrastructure Tuning
+*   **Volume Mapping:** Add a dedicated `input_data` volume to `config.yaml` and `lifecycle.py` so Jarvis clients can easily share videos with the Docker container.
+*   **Parameter Tuning:** Experiment with `--limit-mm-per-prompt` and `--media-io-kwargs` to balance VRAM usage (OOM risk) vs. temporal resolution (FPS).
 
-### Step 2: Client Logic (`tests/vlm/test.py`)
-*   Add logic for the `#nativeVideo` flag.
-*   **If Flag Present:**
-    1.  Skip `PyAV` slicing.
-    2.  Copy target video to the shared `temp_data_path`.
-    3.  Construct payload with the discovered "Video Pointer" syntax (pointing to the in-container path `/data/video.mp4`).
-
-## 4. Success Metrics
-How do we know it's "Better"?
-
-1.  **Latency (TTFT):** "Native" loading might be faster (server-side decoding) or slower (processing more frames/embeddings).
-2.  **Accuracy (Qualitative):** Run the `traffic` scenario ("Is traffic moving fast or slow?").
-    *   *Slicing:* Might guess based on blur.
-    *   *Native:* Should see the distance change over time.
-
-## 5. Risks & Blockers
-*   **API Limitation:** vLLM's OpenAI server might strictly enforce the official OpenAI schema (Text/Image only), stripping out unknown types.
-*   **Fallback:** If the API rejects it, we would need to write a custom `vllm_native_server.py` using `AsyncLLMEngine`. **Decision:** This is out of scope for now due to maintenance cost.
+## 4. Risks & Constraints
+*   **VRAM:** 30B AWQ is heavy (~18GB). Running this alongside STT/TTS on a 24GB card might be tight. On an RTX 5090 (32GB), it should be comfortable.
+*   **Local Files:** Docker on Windows has strict volume mounting rules. We must ensure the `temp` directory is correctly shared.

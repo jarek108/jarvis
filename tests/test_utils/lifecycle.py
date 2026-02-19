@@ -124,22 +124,26 @@ class LifecycleManager:
                         max_len = val; break
                 
                 mm_limit_map = self.cfg.get('vllm', {}).get('model_mm_limit_map', {})
-                mm_limit = mm_limit_map.get('default', '{"image": 1}')
+                mm_limit = mm_limit_map.get('default', '{"image": 1, "video": 1}')
                 for key, val in mm_limit_map.items():
                     if key.lower() in model.lower():
                         mm_limit = val; break
 
                 hf_cache = utils.get_hf_home(silent=True)
+                vlm_input_dir = os.path.join(self.project_root, "tests", "vlm", "input_data")
+                
                 cmd = [
                     "docker", "run", "--gpus", "all", "--rm",
                     "--name", "vllm-server",
                     "-p", f"{vllm_port}:8000", 
                     "-v", f"{hf_cache}:/root/.cache/huggingface", 
+                    "-v", f"{vlm_input_dir}:/data",
                     "vllm/vllm-openai", 
                     model,
                     "--gpu-memory-utilization", str(vllm_util),
                     "--max-model-len", str(max_len),
-                    "--limit-mm-per-prompt", mm_limit
+                    "--limit-mm-per-prompt", mm_limit,
+                    "--allowed-local-media-path", "/data"
                 ]
                 required.append({
                     "type": "llm", "id": original_id, "port": vllm_port,
