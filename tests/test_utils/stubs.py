@@ -27,11 +27,19 @@ async def chat(request: Request):
     
     # Extract prompt
     messages = data.get("messages", [])
-    prompt = messages[-1]["content"] if messages else "hi"
-    if isinstance(prompt, list): # VLM format
-        prompt = next((p["text"] for p in prompt if p["type"] == "text"), "image prompt")
+    prompt = "hi"
+    has_video = False
+    if messages:
+        content = messages[-1].get("content", [])
+        if isinstance(content, list):
+            prompt = next((p["text"] for p in content if p.get("type") == "text"), "image prompt")
+            has_video = any(p.get("type") == "video_url" for p in content)
+        else:
+            prompt = content
 
     response_text = f"Stub response to: {prompt}"
+    if has_video:
+        response_text += " [Video Detected]"
 
     if stream:
         async def generate():
@@ -63,14 +71,17 @@ async def chat(request: Request):
     else:
         if "/v1/" in str(request.url):
             return {
-                "choices": [{"message": {"content": response_text}, "finish_reason": "stop"}]
+                "choices": [{"message": {"content": response_text}, "finish_reason": "stop"}],
+                "usage": {"completion_tokens": len(response_text.split()), "prompt_tokens": 10, "total_tokens": 10 + len(response_text.split())}
             }
         else:
             return {
                 "model": model,
                 "message": {"role": "assistant", "content": response_text},
-                "done": True
+                "done": True,
+                "eval_count": len(response_text.split())
             }
+    
 
 @app.get("/health")
 async def health():
