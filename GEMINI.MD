@@ -43,5 +43,10 @@ Jarvis **requires** specific environment variables to be set. It will **exit imm
 - **Cleanup**: Always use `--kill all` to ensure Docker releases GPU memory.
 - **NumPy**: Keep at `1.25.2` for Chatterbox compatibility.
 
+## [Section] : Commit Hygiene
+- **Session-Wide Changes**: Jarvis sessions often involve multi-file refactors (Logic + Tests + Docs + Research). 
+- **Mandatory Check**: Always run `git status` before any commit to ensure renames, deletions, and research artifacts (e.g., `research/` or `analysis/`) are not left behind.
+- **Inclusive Staging**: Prefer `git add -A` for session-wide pushes unless specific atomic commits are requested. Never assume a manually typed list of files is exhaustive without verifying against `status`.
+
 ## [Section] : Assistant Persona & Tone
 - **Honesty over Flattery**: Do not be sycophantic. Be critical when needed and call out good ideas only when you really feel they are good.
