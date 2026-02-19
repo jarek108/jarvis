@@ -21,10 +21,10 @@ Jarvis is a low-latency, modular Speech-to-Speech (STS) and Vision-Language (VLM
 
 ## 🛠️ Quick Start
 
-### 1. Environment Setup
-Jarvis requires a specific Python 3.10 environment and CUDA 12.8+ (for RTX 5090 support).
+### 1. Installation
+See [docs/QUICKSTART.md](docs/QUICKSTART.md) for detailed environment setup.
 ```powershell
-# See docs/HARDWARE_GUIDE.md for specific dependency version requirements
+# Short version (if you have Python 3.10 + CUDA 12.8 ready)
 pip install -r requirements.txt 
 ```
 
@@ -50,11 +50,22 @@ python tests/runner.py tests/plans/ALL_fast.yaml
 
 ## 📖 Documentation Index
 
-- **[Project Overview](docs/PROJECT_OVERVIEW.md)**: System architecture and component breakdown.
-- **[Testing Procedures](docs/TESTING_PROCEDURES.md)**: Standard operating procedures for benchmarks and the Refactor Guard.
-- **[Model Integration](docs/MODEL_INTEGRATION.md)**: Details on Ollama and vLLM integration.
-- **[Hardware Guide](docs/HARDWARE_GUIDE.md)**: RTX 5090 / Blackwell specific compatibility and library versions.
-- **[Utilities Breakdown](docs/UTILS_BREAKDOWN.md)**: Description of general and test utility modules.
+### 🚀 Phase 1: Getting Started
+- **[Quickstart](docs/QUICKSTART.md)**: Installation, dependencies, and Hello World.
+
+### ⚙️ Phase 2: Operations
+- **[Workflows & Testing](docs/WORKFLOWS.md)**: Running benchmarks, managing loadouts, and the testing hierarchy.
+- **[Model Integration](docs/MODEL_INTEGRATION.md)**: Deep dive on Ollama & vLLM lifecycle management.
+- **[Troubleshooting](docs/TROUBLESHOOTING.md)**: Common errors and solutions.
+
+### 🧠 Phase 3: Concepts
+- **[System Architecture](docs/ARCHITECTURE.md)**: High-level component breakdown.
+- **[Performance Analysis](docs/analysis/STREAMING_ANALYSIS.md)**: (Folder) Deep dives into latency, streaming, and startup optimizations.
+
+### 📚 Phase 4: Reference
+- **[API Reference](docs/API_REFERENCE.md)**: HTTP endpoints and JSON schemas.
+- **[Configuration](docs/CONFIGURATION.md)**: `config.yaml` dictionary.
+- **[Hardware Matrix](docs/HARDWARE_MATRIX.md)**: GPU and library compatibility guide.
 
 ---
 *For AI-assisted development instructions, see [GEMINI.MD](GEMINI.MD).*

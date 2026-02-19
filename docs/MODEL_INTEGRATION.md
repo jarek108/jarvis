@@ -79,6 +79,11 @@ To distinguish between engines in reports and configuration, Jarvis uses prefixe
 *   `vl_` or `vllm:`: Explicitly force vLLM (e.g., `vllm:Qwen/Qwen2.5-0.5B-Instruct`).
 *   **Default:** Any model ID containing `:` or `/` without a prefix currently defaults to Ollama.
 
+### Suffix Convention (Runtime Flags)
+To pass runtime parameters to the test runner (without affecting the engine loader), append flags using the `#` delimiter:
+*   `#stream`: Enables streaming mode (Time-To-First-Token measurement).
+*   **Example:** `OL_qwen2.5:0.5b#stream` loads `OL_qwen2.5:0.5b` but executes tests with `stream=True`.
+
 ### Test Setups (`test_setups.yaml`)
 Tests are driven by lists of model IDs. The `LifecycleManager` identifies the engine based on the prefix and the `config.yaml` port definitions.
 

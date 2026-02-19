@@ -79,3 +79,29 @@ Every test run (real, mock, or plumbing) generates a unique session directory in
 *   **"Skipped" Scenarios:** Ensure `LiveFilter` in `ui.py` is correctly passing `SCENARIO_RESULT` lines to stdout.
 *   **Dashboard Duplication:** Ensure all `print` statements in the runner/lifecycle logic are silenced or logged to `progression_logger` instead.
 *   **Missing Logs:** Check `tests/logs/RUN_.../` for `svc_*.log` files. If missing, the service might have failed to start entirely (check `progression.log` for lifecycle errors).
+
+---
+
+## 5. Streaming vs. Batch Benchmarking
+
+Jarvis supports side-by-side comparison of **Streaming** (Token-by-token) and **Batch** (Full response) performance to quantify latency trade-offs (Time-To-First-Token).
+
+### Default Behavior
+*   **Batch Mode:** By default, all LLM and VLM tests run in **Batch Mode** (`stream=False`). This ensures conservative benchmarking by measuring the full request-response cycle without protocol optimizations.
+
+### The Flag Syntax (`#stream`)
+To enable streaming for a specific model loadout, append the `#stream` flag to the model string in the test plan.
+
+**Example (`tests/plans/LLM_fast.yaml`):**
+```yaml
+execution:
+  - domain: llm
+    loadouts:
+      - ["OL_qwen2.5:0.5b"]          # Runs Batch
+      - ["OL_qwen2.5:0.5b#stream"]   # Runs Streaming
+```
+
+### Reporting
+*   **Separation:** The test runner treats these as distinct loadouts.
+*   **Labeling:** In the Excel report and Dashboard, scenarios are automatically suffixed with `[Stream]` or `[Batch]` (e.g., `Story Gen [Stream]`).
+*   **Metrics:** Streaming runs will show a significantly lower **TTFT (Time To First Token)**, while Batch runs provide a baseline for total throughput (TPS).
