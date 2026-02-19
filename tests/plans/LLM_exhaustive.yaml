@@ -10,7 +10,11 @@ execution:
   - domain: llm
     loadouts:
       - ["OL_qwen2.5:0.5b"]
+      - ["OL_qwen2.5:0.5b#stream"]
       - ["VL_Qwen/Qwen2.5-0.5B-Instruct"]
+      - ["VL_Qwen/Qwen2.5-0.5B-Instruct#stream"]
       - ["OL_gpt-oss:20b"]
+      - ["OL_gpt-oss:20b#stream"]
       - ["OL_qwen3-vl:30b-a3b-instruct"]
+      - ["OL_qwen3-vl:30b-a3b-instruct#stream"]
     scenarios: [all]

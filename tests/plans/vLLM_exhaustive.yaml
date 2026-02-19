@@ -1,5 +1,5 @@
-name: "vLLM Fast Check"
-description: "Quick verification of the two core vLLM models."
+name: "vLLM Exhaustive Comparison"
+description: "Detailed benchmarks across all core vLLM models."
 settings:
   purge_on_entry: true
   purge_on_exit: true
@@ -8,10 +8,12 @@ execution:
   - domain: llm
     loadouts:
       - ["VL_Qwen/Qwen2.5-0.5B-Instruct"]
-    scenarios: [english_std]
+      - ["VL_Qwen/Qwen2.5-0.5B-Instruct#stream"]
+    scenarios: [english_std, short2long, long_story]
   - domain: vlm
     loadouts:
       - ["VL_Qwen/Qwen2-VL-2B-Instruct"]
-      - ["VL_Qwen/Qwen3-VL-30B-A3B-Instruct"]
+      - ["VL_Qwen/Qwen2-VL-2B-Instruct#stream"]
       - ["VL_QuantTrio/Qwen3-VL-30B-A3B-Instruct-AWQ"]
-    scenarios: [jarvis_logo]
+      - ["VL_QuantTrio/Qwen3-VL-30B-A3B-Instruct-AWQ#stream"]
+    scenarios: [jarvis_logo, vision_story]

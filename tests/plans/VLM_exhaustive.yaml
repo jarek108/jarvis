@@ -8,4 +8,5 @@ execution:
   - domain: vlm
     loadouts:
       - ["OL_qwen3-vl:30b-a3b-instruct"]
+      - ["OL_qwen3-vl:30b-a3b-instruct#stream"]
     scenarios: [all]

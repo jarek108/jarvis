@@ -2,15 +2,19 @@ name: "vLLM Fast Check"
 description: "Quick verification of the three core vLLM models."
 settings:
   purge_on_entry: true
+  purge_on_entry: true
   purge_on_exit: true
   track_prior_vram: true
 execution:
   - domain: llm
     loadouts:
       - ["VL_Qwen/Qwen2.5-0.5B-Instruct"]
+      - ["VL_Qwen/Qwen2.5-0.5B-Instruct#stream"]
     scenarios: [english_std]
   - domain: vlm
     loadouts:
       - ["VL_Qwen/Qwen2-VL-2B-Instruct"]
+      - ["VL_Qwen/Qwen2-VL-2B-Instruct#stream"]
       - ["VL_QuantTrio/Qwen3-VL-30B-A3B-Instruct-AWQ"]
+      - ["VL_QuantTrio/Qwen3-VL-30B-A3B-Instruct-AWQ#stream"]
     scenarios: [jarvis_logo]

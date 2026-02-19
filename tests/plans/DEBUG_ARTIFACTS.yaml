@@ -15,4 +15,5 @@ execution:
   - domain: vlm
     loadouts:
       - ["VL_Qwen/Qwen2-VL-2B-Instruct"]
+      - ["VL_Qwen/Qwen2-VL-2B-Instruct#stream"]
     scenarios: [jarvis_logo]

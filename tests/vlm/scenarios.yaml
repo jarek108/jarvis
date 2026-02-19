@@ -2,12 +2,20 @@
 bunny:
   media: "bunny.mp4"
   text: "Describe the character in this video."
+
 jarvis_logo:
   media: "jarvis_logo.png"
   text: "What does this logo represent?"
+
 three_objects:
   media: "three_objects.png"
   text: "List the three objects shown in the image."
+
 traffic:
   media: "traffic.mp4"
   text: "Is the traffic moving fast or slow?"
+
+# LONG FORM VLM (Vision to Story)
+vision_story:
+  media: "bunny.mp4"
+  text: "Watch this video carefully and write a long, 500-word whimsical children's story based on the character's adventure. Describe the environment and the emotional journey."

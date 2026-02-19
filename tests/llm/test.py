@@ -15,11 +15,14 @@ from test_utils.collectors import BaseReporter, StdoutReporter
 # Ensure UTF-8 output
 utils.ensure_utf8_output()
 
-def run_test_suite(model_name, scenarios_to_run=None, output_dir=None, reporter: BaseReporter = None):
+def run_test_suite(model_name, scenarios_to_run=None, output_dir=None, reporter: BaseReporter = None, **kwargs):
     cfg = utils.load_config()
     if not reporter:
         reporter = StdoutReporter()
 
+    # Streaming defaults to False unless #stream flag is present
+    stream = kwargs.get('stream', False)
+    
     is_vllm = model_name.startswith("VL_") or model_name.startswith("vllm:")
     if model_name.startswith("VL_"): clean_model_name = model_name[3:]
     elif model_name.startswith("vllm:"): clean_model_name = model_name[5:]
@@ -32,11 +35,13 @@ def run_test_suite(model_name, scenarios_to_run=None, output_dir=None, reporter:
     vram_baseline = utils.get_gpu_vram_usage()
 
     for s in scenarios_to_run:
+        suffix = " [Stream]" if stream else " [Batch]"
+        
         if is_vllm:
             payload = {
                 "model": clean_model_name,
                 "messages": [{"role": "user", "content": s['text']}],
-                "stream": True,
+                "stream": stream,
                 "temperature": 0,
                 "seed": 42
             }
@@ -44,7 +49,7 @@ def run_test_suite(model_name, scenarios_to_run=None, output_dir=None, reporter:
             payload = {
                 "model": clean_model_name,
                 "messages": [{"role": "user", "content": s['text']}],
-                "stream": True,
+                "stream": stream,
                 "options": {"temperature": 0, "seed": 42}
             }
 
@@ -59,65 +64,86 @@ def run_test_suite(model_name, scenarios_to_run=None, output_dir=None, reporter:
             total_tokens = 0
             is_thinking = False
 
-            with requests.post(url, json=payload, stream=True) as resp:
+            if stream:
+                with requests.post(url, json=payload, stream=True) as resp:
+                    if resp.status_code != 200:
+                        reporter.report({"name": s['name'] + suffix, "status": "FAILED", "text": f"HTTP {resp.status_code}"})
+                        continue
+
+                    for line in resp.iter_lines():
+                        if line:
+                            line_text = line.decode('utf-8').strip()
+                            if is_vllm:
+                                if not line_text.startswith("data: "): continue
+                                data_str = line_text[6:]
+                                if data_str == "[DONE]": break
+                                data = json.loads(data_str)
+                                token = data['choices'][0]['delta'].get('content', '')
+                            else:
+                                data = json.loads(line_text)
+                                token = data.get("message", {}).get("content", "")
+                            
+                            if not token: continue
+
+                            if first_token_time is None:
+                                first_token_time = time.perf_counter()
+
+                            if "<thought>" in token: 
+                                is_thinking = True
+                                continue
+                            if "</thought>" in token: 
+                                is_thinking = False
+                                continue
+                            
+                            if is_thinking:
+                                thought_text += token
+                            else:
+                                full_text += token
+                                sentence_buffer += token
+                                if first_response_time is None and token.strip():
+                                    first_response_time = time.perf_counter()
+
+                                if any(c in token for c in ".!?"):
+                                    chunks.append({
+                                        "text": sentence_buffer.strip(),
+                                        "end": time.perf_counter() - start_time
+                                    })
+                                    sentence_buffer = ""
+
+                            total_tokens += 1
+
+                    if sentence_buffer.strip():
+                        chunks.append({
+                            "text": sentence_buffer.strip(),
+                            "end": time.perf_counter() - start_time
+                        })
+            else:
+                # Non-streaming
+                resp = requests.post(url, json=payload)
                 if resp.status_code != 200:
-                    reporter.report({"name": s['name'], "status": "FAILED", "text": f"HTTP {resp.status_code}"})
+                    reporter.report({"name": s['name'] + suffix, "status": "FAILED", "text": f"HTTP {resp.status_code}"})
                     continue
-
-                for line in resp.iter_lines():
-                    if line:
-                        line_text = line.decode('utf-8').strip()
-                        if is_vllm:
-                            if not line_text.startswith("data: "): continue
-                            data_str = line_text[6:]
-                            if data_str == "[DONE]": break
-                            data = json.loads(data_str)
-                            token = data['choices'][0]['delta'].get('content', '')
-                        else:
-                            data = json.loads(line_text)
-                            token = data.get("message", {}).get("content", "")
-                        
-                        if not token: continue
-
-                        if first_token_time is None:
-                            first_token_time = time.perf_counter()
-
-                        if "<thought>" in token: 
-                            is_thinking = True
-                            continue
-                        if "</thought>" in token: 
-                            is_thinking = False
-                            continue
-                        
-                        if is_thinking:
-                            thought_text += token
-                        else:
-                            full_text += token
-                            sentence_buffer += token
-                            if first_response_time is None and token.strip():
-                                first_response_time = time.perf_counter()
-
-                            if any(c in token for c in ".!?"):
-                                chunks.append({
-                                    "text": sentence_buffer.strip(),
-                                    "end": time.perf_counter() - start_time
-                                })
-                                sentence_buffer = ""
-
-                        total_tokens += 1
-
-                if sentence_buffer.strip():
-                    chunks.append({
-                        "text": sentence_buffer.strip(),
-                        "end": time.perf_counter() - start_time
-                    })
+                
+                data = resp.json()
+                if is_vllm:
+                    full_text = data['choices'][0]['message']['content']
+                    total_tokens = data['usage']['completion_tokens']
+                else:
+                    full_text = data.get("message", {}).get("content", "")
+                    total_tokens = data.get("eval_count", 0)
+                
+                # Simulate "chunks" for non-streaming to match schema
+                chunks.append({
+                    "text": full_text,
+                    "end": time.perf_counter() - start_time
+                })
 
             total_dur = time.perf_counter() - start_time
-            ttft = (first_token_time - start_time) if first_token_time else 0
+            ttft = (first_token_time - start_time) if first_token_time else total_dur # Fallback for non-stream
             tps = total_tokens / total_dur if total_dur > 0 else 0
 
             res_obj = {
-                "name": s['name'],
+                "name": s['name'] + suffix,
                 "status": "PASSED",
                 "ttft": ttft,
                 "tps": tps,
@@ -127,11 +153,14 @@ def run_test_suite(model_name, scenarios_to_run=None, output_dir=None, reporter:
                 "duration": total_dur,
                 "llm_model": model_name,
                 "input_text": s['text'],
-                "streaming": True,
+                "streaming": stream,
                 "vram_peak": utils.get_gpu_vram_usage(),
                 "vram_prior": 0.0 # Will be injected by runner
             }
             reporter.report(res_obj)
+
+        except Exception as e:
+            reporter.report({"name": s['name'] + suffix, "status": "FAILED", "text": str(e)})
 
         except Exception as e:
             reporter.report({"name": s['name'], "status": "FAILED", "text": str(e)})
@@ -178,5 +207,8 @@ if __name__ == "__main__":
     test_utils.run_test_lifecycle(
         domain="llm", setup_name=args.loadout, models=[target_model],
         purge_on_entry=True, purge_on_exit=True, full=False,
-        test_func=lambda: run_test_suite(target_model, scenarios_to_run=scenarios)
+        test_func=lambda reporter=None: (
+            run_test_suite(target_model, scenarios_to_run=scenarios, stream=False, reporter=reporter),
+            run_test_suite(target_model, scenarios_to_run=scenarios, stream=True, reporter=reporter)
+        )
     )

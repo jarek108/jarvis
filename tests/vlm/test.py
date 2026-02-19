@@ -42,11 +42,14 @@ def extract_frames(video_path, max_frames=8):
     except: pass
     return frames
 
-def run_test_suite(model_name, scenarios_to_run=None, output_dir=None, reporter=None):
+def run_test_suite(model_name, scenarios_to_run=None, output_dir=None, reporter=None, **kwargs):
     cfg = utils.load_config()
     if not reporter:
         from test_utils.collectors import StdoutReporter
         reporter = StdoutReporter()
+
+    # Streaming defaults to False unless #stream flag is present
+    stream = kwargs.get('stream', False)
 
     is_vllm = model_name.startswith("VL_") or model_name.startswith("vllm:")
     if model_name.startswith("VL_"): clean_model_name = model_name[3:]
@@ -61,14 +64,15 @@ def run_test_suite(model_name, scenarios_to_run=None, output_dir=None, reporter=
 
     for s in scenarios_to_run:
         file_path = os.path.join(input_base, s['media'])
-        
+        suffix = " [Stream]" if stream else " [Batch]"
+
         # Initialize result object with metadata immediately
         res_obj = {
-            "name": s['name'],
+            "name": s['name'] + suffix,
             "llm_model": model_name,
             "input_file": file_path,
             "input_text": s['text'],
-            "streaming": True,
+            "streaming": stream,
             "mode": "VLM"
         }
 
@@ -80,47 +84,70 @@ def run_test_suite(model_name, scenarios_to_run=None, output_dir=None, reporter=
                 b64_frames = extract_frames(file_path, max_frames=8)
 
             if is_vllm:
-                payload = {"model": clean_model_name, "messages": [{"role": "user", "content": [{"type": "text", "text": s['text']}, *[{"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{img}"}} for img in b64_frames]]}], "stream": True, "temperature": 0}
+                payload = {"model": clean_model_name, "messages": [{"role": "user", "content": [{"type": "text", "text": s['text']}, *[{"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{img}"}} for img in b64_frames]]}], "stream": stream, "temperature": 0}
             else:
-                payload = {"model": clean_model_name, "messages": [{"role": "user", "content": s['text'], "images": b64_frames}], "stream": True, "options": {"temperature": 0}}
+                payload = {"model": clean_model_name, "messages": [{"role": "user", "content": s['text'], "images": b64_frames}], "stream": stream, "options": {"temperature": 0}}
 
             start_time = time.perf_counter(); first_token_time = None; full_text = ""; total_tokens = 0
             chunks = []; sentence_buffer = ""
-            with requests.post(url, json=payload, stream=True) as resp:
+            
+            if stream:
+                with requests.post(url, json=payload, stream=True) as resp:
+                    if resp.status_code != 200:
+                        res_obj.update({"status": "FAILED", "result": f"HTTP {resp.status_code}"})
+                        reporter.report(res_obj)
+                        continue
+                    
+                    for line in resp.iter_lines():
+                        if line:
+                            line_text = line.decode('utf-8').strip()
+                            if is_vllm:
+                                if not line_text.startswith("data: "): continue
+                                data_str = line_text[6:]; 
+                                if data_str == "[DONE]": break
+                                token = json.loads(data_str)['choices'][0]['delta'].get('content', '')
+                            else:
+                                token = json.loads(line_text).get("message", {}).get("content", "")
+                            if not token: continue
+                            if first_token_time is None: first_token_time = time.perf_counter()
+                            full_text += token; total_tokens += 1
+                            sentence_buffer += token
+                            if any(c in token for c in ".!?"):
+                                chunks.append({"text": sentence_buffer.strip(), "end": time.perf_counter() - start_time})
+                                sentence_buffer = ""
+
+                if sentence_buffer.strip():
+                    chunks.append({"text": sentence_buffer.strip(), "end": time.perf_counter() - start_time})
+            else:
+                # Non-streaming
+                resp = requests.post(url, json=payload)
                 if resp.status_code != 200:
                     res_obj.update({"status": "FAILED", "result": f"HTTP {resp.status_code}"})
                     reporter.report(res_obj)
                     continue
                 
-                for line in resp.iter_lines():
-                    if line:
-                        line_text = line.decode('utf-8').strip()
-                        if is_vllm:
-                            if not line_text.startswith("data: "): continue
-                            data_str = line_text[6:]; 
-                            if data_str == "[DONE]": break
-                            token = json.loads(data_str)['choices'][0]['delta'].get('content', '')
-                        else:
-                            token = json.loads(line_text).get("message", {}).get("content", "")
-                        if not token: continue
-                        if first_token_time is None: first_token_time = time.perf_counter()
-                        full_text += token; total_tokens += 1
-                        sentence_buffer += token
-                        if any(c in token for c in ".!?"):
-                            chunks.append({"text": sentence_buffer.strip(), "end": time.perf_counter() - start_time})
-                            sentence_buffer = ""
-
-            if sentence_buffer.strip():
-                chunks.append({"text": sentence_buffer.strip(), "end": time.perf_counter() - start_time})
+                data = resp.json()
+                if is_vllm:
+                    full_text = data['choices'][0]['message']['content']
+                    total_tokens = data['usage']['completion_tokens']
+                else:
+                    full_text = data.get("message", {}).get("content", "")
+                    total_tokens = data.get("eval_count", 0)
+                
+                # Simulate chunks for reporting
+                chunks.append({"text": full_text, "end": time.perf_counter() - start_time})
 
             total_dur = time.perf_counter() - start_time
-            ttft = (first_token_time - start_time) if first_token_time else 0
+            ttft = (first_token_time - start_time) if first_token_time else total_dur
             res_obj.update({
-                "status": "PASSED", "ttft": ttft, "tps": total_tokens / total_dur, 
+                "status": "PASSED", "ttft": ttft, "tps": total_tokens / total_dur if total_dur > 0 else 0, 
                 "text": full_text, "chunks": chunks, "duration": total_dur, 
                 "vram_peak": utils.get_gpu_vram_usage(),
                 "vram_prior": 0.0 # Will be injected by runner
             })
+            reporter.report(res_obj)
+        except Exception as e:
+            res_obj.update({"status": "FAILED", "result": str(e)})
             reporter.report(res_obj)
         except Exception as e:
             res_obj.update({"status": "FAILED", "result": str(e)})
@@ -136,11 +163,14 @@ if __name__ == "__main__":
     parser.add_argument("--loadout", type=str, required=True)
     args = parser.parse_args()
     
-    # Simple standalone support
-    target_model = args.loadout # Assume direct model ID for standalone
+    # Standalone support
+    target_model = args.loadout 
     
     test_utils.run_test_lifecycle(
         domain="vlm", setup_name="manual", models=[target_model], 
         purge_on_entry=True, purge_on_exit=True, full=False, 
-        test_func=lambda: run_test_suite(target_model, scenarios_to_run=scenarios)
+        test_func=lambda reporter=None: (
+            run_test_suite(target_model, scenarios_to_run=scenarios, stream=False, reporter=reporter),
+            run_test_suite(target_model, scenarios_to_run=scenarios, stream=True, reporter=reporter)
+        )
     )

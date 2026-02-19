@@ -1,5 +1,5 @@
 name: "STS Fast Check"
-description: "Quick verification of the full pipeline."
+description: "Quick verification of the full pipeline (Ollama + vLLM)."
 settings:
   purge_on_entry: true
   purge_on_exit: true
@@ -8,4 +8,7 @@ execution:
   - domain: sts
     loadouts:
       - ["faster-whisper-base", "OL_qwen2.5:0.5b", "chatterbox-turbo"]
+      - ["faster-whisper-base", "OL_qwen2.5:0.5b#stream", "chatterbox-turbo"]
+      - ["faster-whisper-base", "VL_Qwen/Qwen2.5-0.5B-Instruct", "chatterbox-turbo"]
+      - ["faster-whisper-base", "VL_Qwen/Qwen2.5-0.5B-Instruct#stream", "chatterbox-turbo"]
     scenarios: [english_std]

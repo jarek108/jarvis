@@ -35,12 +35,38 @@ def load_scenarios(domain, filter_list=None):
         data = yaml.safe_load(f)
     
     # Convert dict to list of named objects
-    all_scenarios = [{"name": k, **v} for k, v in data.items()]
+    all_scenarios_map = {k: {"name": k, **v} for k, v in data.items()}
     
     if not filter_list or "all" in filter_list:
-        return all_scenarios
+        return list(all_scenarios_map.values())
     
-    return [s for s in all_scenarios if s['name'] in filter_list]
+    results = []
+    for item in filter_list:
+        if isinstance(item, str):
+            if item in all_scenarios_map:
+                results.append(all_scenarios_map[item].copy())
+        elif isinstance(item, dict) and "name" in item:
+            base_name = item["name"]
+            if base_name in all_scenarios_map:
+                merged = all_scenarios_map[base_name].copy()
+                merged.update(item)
+                results.append(merged)
+    
+    return results
+
+def parse_loadout_entry(entry):
+    """Parses a model string like 'model_id#flag1#flag2' into (model_id, flags_dict)."""
+    if not isinstance(entry, str): return entry, {}
+    parts = entry.split('#')
+    model_id = parts[0]
+    flags = {}
+    for f in parts[1:]:
+        if '=' in f:
+            k, v = f.split('=', 1)
+            flags[k.lower()] = v
+        else:
+            flags[f.lower()] = True
+    return model_id, flags
 
 def run_domain_tests(domain, setup_name, models, scenarios, settings, session_dir, dashboard, plumbing=False, on_scenario=None, on_phase=None):
     """Orchestrates the lifecycle and suite execution for a single domain/setup."""
@@ -50,6 +76,14 @@ def run_domain_tests(domain, setup_name, models, scenarios, settings, session_di
     
     reporter = AccumulatingReporter(callback=dashboard_capture)
     
+    # Parse Flags from Models
+    clean_models = []
+    global_flags = {}
+    for m in models:
+        c_model, flags = parse_loadout_entry(m)
+        clean_models.append(c_model)
+        global_flags.update(flags)
+
     # Legacy monkey-patching for non-refactored domains
     import test_utils.reporting
     orig_rep_scen = test_utils.reporting.report_scenario_result
@@ -76,7 +110,7 @@ def run_domain_tests(domain, setup_name, models, scenarios, settings, session_di
 
         target_id = setup_name
         cfg = utils.load_config()
-        for m in models:
+        for m in clean_models:
             if m.startswith("OL_") or m.startswith("VL_") or m.startswith("vllm:"):
                 target_id = m; break
             if domain == "stt" and m in cfg['stt_loadout']: target_id = m; break
@@ -84,12 +118,13 @@ def run_domain_tests(domain, setup_name, models, scenarios, settings, session_di
 
         def execution_wrapper():
             if domain in ["stt", "llm", "vlm", "sts", "tts"]:
-                test_func_to_run(target_id, scenarios_to_run=scenarios, output_dir=session_dir, reporter=reporter)
+                # Pass flags as kwargs to the test suite
+                test_func_to_run(target_id, scenarios_to_run=scenarios, output_dir=session_dir, reporter=reporter, **global_flags)
             else:
                 test_func_to_run(target_id, scenarios_to_run=scenarios, output_dir=session_dir)
 
         setup_time, cleanup_time, prior_vram, model_display = run_test_lifecycle(
-            domain=domain, setup_name=setup_name, models=models,
+            domain=domain, setup_name=setup_name, models=clean_models,
             purge_on_entry=settings.get('purge_on_entry', True),
             purge_on_exit=settings.get('purge_on_exit', True),
             full=settings.get('full', False),

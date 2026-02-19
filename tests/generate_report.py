@@ -40,7 +40,16 @@ def get_gdrive_service():
         
         if not creds or not creds.valid:
             if creds and creds.expired and creds.refresh_token:
-                creds.refresh(Request())
+                from google.auth.exceptions import RefreshError
+                try:
+                    creds.refresh(Request())
+                except RefreshError:
+                    print("⚠️ GDrive Refresh Token expired or revoked. Re-authenticating...")
+                    if not os.path.exists(creds_path):
+                        print(f"❌ ERROR: Google API credentials not found at {creds_path}")
+                        return None
+                    flow = InstalledAppFlow.from_client_secrets_file(creds_path, SCOPES)
+                    creds = flow.run_local_server(port=0)
             else:
                 if not os.path.exists(creds_path):
                     print(f"❌ ERROR: Google API credentials not found at {creds_path}")

@@ -1,5 +1,5 @@
 name: "LLM Fast Check"
-description: "Quick verification of the lightweight LLM."
+description: "Quick verification of lightweight LLMs (Ollama + vLLM)."
 settings:
   purge_on_entry: true
   purge_on_exit: true
@@ -8,4 +8,7 @@ execution:
   - domain: llm
     loadouts:
       - ["OL_qwen2.5:0.5b"]
-    scenarios: [english_std, polish_explicit]
+      - ["OL_qwen2.5:0.5b#stream"]
+      - ["VL_Qwen/Qwen2.5-0.5B-Instruct"]
+      - ["VL_Qwen/Qwen2.5-0.5B-Instruct#stream"]
+    scenarios: [english_std, polish_explicit, long_story]

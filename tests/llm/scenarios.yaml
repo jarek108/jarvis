@@ -1,9 +1,19 @@
 # LLM Test Scenarios
 english_std:
   text: "Hello, this is a test of Jarvis Assistant."
+
 polish_explicit:
   text: "Cześć, nazywam się Jarvis, jak mogę ci dzisiaj pomóc?"
+
 short2long:
   text: "Tell me a four to five sentences story about a dog."
+
 long2short:
   text: "It is a truth universally acknowledged, that a single man in possession of a good fortune, must be in want of a wife. However little known the feelings or views of such a man may be on his first entering a neighbourhood, this truth is so well fixed in the minds of the surrounding families, that he is considered the rightful property of some one or other of their daughters. What is the title of this book? Respond with title only."
+
+# LONG FORM TESTS (Verification of Streaming Gains)
+long_story:
+  text: "Write a detailed, creative, and engaging 800-word story about a colony of robotic bees on Mars discovering a lost human artifact. Focus on descriptive language and complex character motivations."
+
+code_generation:
+  text: "Write a complete, well-documented, and production-ready Python web application using FastAPI that includes user authentication (JWT), a PostgreSQL database integration with SQLAlchemy, and a set of RESTful endpoints for managing a library of books. Include complex validation logic and unit tests."

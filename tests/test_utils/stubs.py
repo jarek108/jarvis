@@ -10,12 +10,12 @@ app = FastAPI()
 @app.get("/api/tags")
 async def tags():
     """Mimics Ollama model listing."""
-    return {"models": [{"name": "stub-model:latest"}]}
+    return {"models": [{"name": "stub-model:latest"}], "service": "llm_stub"}
 
 @app.get("/v1/models")
 async def models():
     """Mimics vLLM model listing."""
-    return {"data": [{"id": "stub-model:latest"}]}
+    return {"data": [{"id": "stub-model:latest"}], "service": "llm_stub"}
 
 @app.post("/api/chat")
 @app.post("/v1/chat/completions")
