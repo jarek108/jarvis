@@ -7,10 +7,12 @@ settings:
 execution:
   - domain: llm
     loadouts:
-      - ["VL_Qwen/Qwen2.5-0.5B-Instruct#stream"]
+      # Testing context and util overrides
+      - ["VL_Qwen/Qwen2.5-0.5B-Instruct#stream#ctx=4096#gpu_util=0.4"]
     scenarios: [english_std]
   - domain: vlm
     loadouts:
       - ["VL_Qwen/Qwen2-VL-2B-Instruct#stream"]
-      - ["VL_QuantTrio/Qwen3-VL-30B-A3B-Instruct-AWQ#nativevideo#stream"]
+      # Testing native video with high frame/modal limit
+      - ["VL_QuantTrio/Qwen3-VL-30B-A3B-Instruct-AWQ#nativevideo#stream#vid_lim=2#ctx=8192"]
     scenarios: [jarvis_logo, bunny]

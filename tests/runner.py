@@ -124,7 +124,7 @@ def run_domain_tests(domain, setup_name, models, scenarios, settings, session_di
                 test_func_to_run(target_id, scenarios_to_run=scenarios, output_dir=session_dir)
 
         setup_time, cleanup_time, prior_vram, model_display = run_test_lifecycle(
-            domain=domain, setup_name=setup_name, models=clean_models,
+            domain=domain, setup_name=setup_name, models=models,
             purge_on_entry=settings.get('purge_on_entry', True),
             purge_on_exit=settings.get('purge_on_exit', True),
             full=settings.get('full', False),

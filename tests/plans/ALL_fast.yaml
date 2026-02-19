@@ -10,13 +10,13 @@ execution:
   - domain: llm
     loadouts:
       - ["OL_qwen2.5:0.5b"]
-      - ["VL_Qwen/Qwen2.5-0.5B-Instruct#stream"]
+      - ["VL_Qwen/Qwen2.5-0.5B-Instruct#stream#ctx=4096"]
     scenarios: [english_std]
 
   - domain: vlm
     loadouts:
       - ["OL_moondream#stream"]
-      - ["VL_QuantTrio/Qwen3-VL-30B-A3B-Instruct-AWQ#nativevideo#stream"]
+      - ["VL_QuantTrio/Qwen3-VL-30B-A3B-Instruct-AWQ#nativevideo#stream#ctx=8192"]
     scenarios: [jarvis_logo]
 
   - domain: stt

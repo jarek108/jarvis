@@ -37,29 +37,45 @@ class LifecycleManager:
         self.owned_processes = []
         self.missing_models = []
 
+    def _parse_flags(self, entry):
+        """Parses a model string like 'model_id#flag1#flag2' into a flags_dict."""
+        if not isinstance(entry, str): return {}
+        parts = entry.split('#')
+        flags = {}
+        for f in parts[1:]:
+            if '=' in f:
+                k, v = f.split('=', 1)
+                flags[k.lower()] = v
+            else:
+                flags[f.lower()] = True
+        return flags
+
     def identify_models(self):
-        """Categorizes list of strings into STT, TTS, and LLM components."""
+        """Categorizes list of strings into STT, TTS, and LLM components, preserving flags."""
         categorized = {"stt": None, "tts": None, "llm": None}
         for m in self.models:
-            if m in self.cfg['stt_loadout']:
-                categorized['stt'] = m
-            elif m in self.cfg['tts_loadout']:
-                categorized['tts'] = m
+            clean_id = m.split('#')[0]
+            flags = self._parse_flags(m)
+            
+            if clean_id in self.cfg['stt_loadout']:
+                categorized['stt'] = {"id": clean_id, "flags": flags}
+            elif clean_id in self.cfg['tts_loadout']:
+                categorized['tts'] = {"id": clean_id, "flags": flags}
             elif m.startswith("OL_") or m.startswith("VL_") or m.startswith("vllm:"):
                 # Explicit LLM Prefixes
                 engine = "ollama"
-                model_id = m
-                if m.startswith("VL_"):
+                model_id = clean_id
+                if clean_id.startswith("VL_"):
                     engine = "vllm"
-                    model_id = m[3:]
-                elif m.startswith("vllm:"):
+                    model_id = clean_id[3:]
+                elif clean_id.startswith("vllm:"):
                     engine = "vllm"
-                    model_id = m[5:]
-                elif m.startswith("OL_"):
+                    model_id = clean_id[5:]
+                elif clean_id.startswith("OL_"):
                     engine = "ollama"
-                    model_id = m[3:]
+                    model_id = clean_id[3:]
                 
-                categorized['llm'] = {"engine": engine, "model": model_id, "original": m}
+                categorized['llm'] = {"engine": engine, "model": model_id, "original": clean_id, "flags": flags}
         return categorized
 
     def check_availability(self):
@@ -85,6 +101,7 @@ class LifecycleManager:
             engine = self.cat['llm']['engine']
             model = self.cat['llm']['model']
             original_id = self.cat['llm']['original']
+            llm_flags = self.cat['llm'].get('flags', {})
             
             if self.stub_mode:
                 llm_port = self.cfg['ports']['ollama'] if engine == "ollama" else self.cfg['ports'].get('vllm', 8300)
@@ -104,30 +121,44 @@ class LifecycleManager:
                 vllm_port = self.cfg['ports'].get('vllm', 8300)
                 total_vram = utils.get_gpu_total_vram()
                 
-                vram_gb = self.cfg.get('vllm', {}).get('gpu_memory_utilization', 0.5) 
-                vram_map = self.cfg.get('vllm', {}).get('model_vram_map', {})
-                match_gb = None
-                sorted_keys = sorted(vram_map.keys(), key=len, reverse=True)
-                for key in sorted_keys:
-                    if key.lower() in model.lower():
-                        match_gb = vram_map[key]; break
-                
-                if match_gb:
-                    vllm_util = min(0.95, max(0.1, match_gb / total_vram))
+                # GPU Utilization (Flag #gpu_util overrides config)
+                vram_util_default = self.cfg.get('vllm', {}).get('gpu_memory_utilization', 0.5)
+                if 'gpu_util' in llm_flags:
+                    vllm_util = float(llm_flags['gpu_util'])
                 else:
-                    vllm_util = self.cfg.get('vllm', {}).get('gpu_memory_utilization', 0.5)
+                    vram_map = self.cfg.get('vllm', {}).get('model_vram_map', {})
+                    match_gb = None
+                    sorted_keys = sorted(vram_map.keys(), key=len, reverse=True)
+                    for key in sorted_keys:
+                        if key.lower() in model.lower():
+                            match_gb = vram_map[key]; break
+                    
+                    if match_gb:
+                        vllm_util = min(0.95, max(0.1, match_gb / total_vram))
+                    else:
+                        vllm_util = vram_util_default
                 
-                max_len_map = self.cfg.get('vllm', {}).get('model_max_len_map', {})
-                max_len = max_len_map.get('default', 32768)
-                for key, val in max_len_map.items():
-                    if key.lower() in model.lower():
-                        max_len = val; break
+                # Context Length (Flag #ctx overrides map/config)
+                if 'ctx' in llm_flags:
+                    max_len = int(llm_flags['ctx'])
+                else:
+                    max_len_map = self.cfg.get('vllm', {}).get('model_max_len_map', {})
+                    max_len = max_len_map.get('default', 32768)
+                    for key, val in max_len_map.items():
+                        if key.lower() in model.lower():
+                            max_len = val; break
                 
+                # Multi-modal limits (Flags #img_lim, #vid_lim override config)
                 mm_limit_map = self.cfg.get('vllm', {}).get('model_mm_limit_map', {})
-                mm_limit = mm_limit_map.get('default', '{"image": 1, "video": 1}')
-                for key, val in mm_limit_map.items():
-                    if key.lower() in model.lower():
-                        mm_limit = val; break
+                default_limits_str = mm_limit_map.get('default', '{"image": 1, "video": 1}')
+                try:
+                    limits = json.loads(default_limits_str)
+                except:
+                    limits = {"image": 1, "video": 1}
+                
+                if 'img_lim' in llm_flags: limits['image'] = int(llm_flags['img_lim'])
+                if 'vid_lim' in llm_flags: limits['video'] = int(llm_flags['vid_lim'])
+                mm_limit_json = json.dumps(limits)
 
                 hf_cache = utils.get_hf_home(silent=True)
                 vlm_input_dir = os.path.join(self.project_root, "tests", "vlm", "input_data")
@@ -142,7 +173,7 @@ class LifecycleManager:
                     model,
                     "--gpu-memory-utilization", str(vllm_util),
                     "--max-model-len", str(max_len),
-                    "--limit-mm-per-prompt", mm_limit,
+                    "--limit-mm-per-prompt", mm_limit_json,
                     "--allowed-local-media-path", "/data"
                 ]
                 required.append({
@@ -152,7 +183,7 @@ class LifecycleManager:
 
         # 2. STT
         if self.cat['stt'] and (domain in ["stt", "sts"] or self.full):
-            stt_id = self.cat['stt']
+            stt_id = self.cat['stt']['id']
             stt_port = self.cfg['stt_loadout'][stt_id]
             stt_script = os.path.join(self.project_root, "servers", "stt_server.py")
             cmd = [self.python_exe, stt_script, "--port", str(stt_port), "--model", stt_id]
@@ -162,7 +193,7 @@ class LifecycleManager:
 
         # 3. TTS
         if self.cat['tts'] and (domain in ["tts", "sts"] or self.full):
-            tts_id = self.cat['tts']
+            tts_id = self.cat['tts']['id']
             tts_port = self.cfg['tts_loadout'][tts_id]
             tts_script = os.path.join(self.project_root, "servers", "tts_server.py")
             cmd = [self.python_exe, tts_script, "--port", str(tts_port), "--variant", tts_id]
@@ -175,8 +206,8 @@ class LifecycleManager:
             sts_port = self.cfg['ports']['sts']
             sts_script = os.path.join(self.project_root, "servers", "sts_server.py")
             cmd = [self.python_exe, sts_script, "--port", str(sts_port), "--trust-deps"]
-            if self.cat['stt']: cmd.extend(["--stt", self.cat['stt']])
-            if self.cat['tts']: cmd.extend(["--tts", self.cat['tts']])
+            if self.cat['stt']: cmd.extend(["--stt", self.cat['stt']['id']])
+            if self.cat['tts']: cmd.extend(["--tts", self.cat['tts']['id']])
             if self.cat['llm']: 
                 llm_val = self.cat['llm']['original']
                 cmd.extend(["--llm", llm_val])
@@ -191,11 +222,11 @@ class LifecycleManager:
 
     def format_models_for_display(self):
         display_parts = []
-        if self.cat['stt']: display_parts.append(self.cat['stt'].upper())
+        if self.cat['stt']: display_parts.append(self.cat['stt']['id'].upper())
         if self.cat['llm']:
             prefix = "VL_" if self.cat['llm']['engine'] == "vllm" else "OL_"
             display_parts.append(f"{prefix}{self.cat['llm']['model'].upper()}")
-        if self.cat['tts']: display_parts.append(self.cat['tts'].upper())
+        if self.cat['tts']: display_parts.append(self.cat['tts']['id'].upper())
         return " + ".join(display_parts) or self.setup_name.upper()
 
     def reconcile(self, domain):
