@@ -1,0 +1,9 @@
+id: VL_Qwen/Qwen2.5-0.5B-Instruct
+constants:
+  base_vram_gb: 0.93
+  kv_cache_gb_per_10k: 0.114031
+metadata:
+  calibrated_at: '2026-02-20 09:59:17'
+  gpu_vram_total_gb: 31.8427734375
+  source_tokens: 73664
+  source_cache_gb: 0.84

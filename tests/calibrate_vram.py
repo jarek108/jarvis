@@ -1,142 +1,165 @@
 import os
 import sys
-import json
 import time
-import subprocess
-import requests
+import re
+import json
 import argparse
-from datetime import datetime
+import yaml
+import threading
 
-# Add project root to path for imports
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from tests.utils.config import load_config, resolve_path, get_hf_home
-from tests.utils.infra import is_port_in_use, kill_process_on_port, start_server, wait_for_port, is_docker_daemon_running
-from tests.utils.vram import get_gpu_total_vram, get_gpu_vram_usage
+# Add project root to sys.path
+script_dir = os.path.dirname(os.path.abspath(__file__))
+project_root = os.path.dirname(script_dir)
+sys.path.append(project_root)
 
-def run_calibration_step(model_name, util, max_len=32768):
-    """Attempts to start vLLM with specific settings and returns success/failure."""
-    port = 8300
-    kill_process_on_port(port)
+import utils
+from tests.test_utils.lifecycle import LifecycleManager
+
+def calibrate_model(model_id):
+    """
+    Spawns vLLM for the given model, parses logs for VRAM metrics, and returns specs.
+    """
+    print(f"\n🚀 CALIBRATION START: {model_id}")
+    print("-" * 50)
+
+    # 1. Setup Manager (Force real mode, high util to ensure measurable surplus)
+    # We use a safe high util (0.9) to get a clear reading of available surplus
+    manager = LifecycleManager(
+        setup_name="calibration", 
+        models=[model_id], 
+        purge_on_entry=True, 
+        stub_mode=False,
+        track_prior_vram=False
+    )
     
-    hf_cache = get_hf_home()
-    docker_name = "vllm-calibration"
+    # Force override config for calibration accuracy
+    manager.cfg['vllm']['gpu_memory_utilization'] = 0.90
     
-    # Clean up previous calibration container
-    subprocess.run(["docker", "rm", "-f", docker_name], capture_output=True)
+    # 2. Reconcile (Start the container)
+    try:
+        # We don't want to wait for the full 'ready' health check if we can get logs earlier,
+        # but reconcile handles the parallel wait.
+        setup_time, _ = manager.reconcile(domain="llm")
+        if setup_time == -1:
+            print("❌ Model not found locally.")
+            return
+    except Exception as e:
+        print(f"💥 Startup Error: {e}")
+        manager.cleanup()
+        return
+
+    # 3. Monitor Logs
+    # Find the log file created by LifecycleManager
+    log_dir = manager.session_dir if manager.session_dir else os.path.join(project_root, "tests", "artifacts", "logs")
+    # Get the latest svc_llm log
+    log_files = [f for f in os.listdir(log_dir) if f.startswith("svc_llm") and f.endswith(".log")]
+    if not log_files:
+        print("❌ Could not find log file.")
+        manager.cleanup()
+        return
     
-    cmd = [
-        "docker", "run", "--gpus", "all", "-d", 
-        "--name", docker_name, 
-        "-p", f"{port}:8000", 
-        "-v", f"{hf_cache}:/root/.cache/huggingface", 
-        "vllm/vllm-openai", 
-        "--model", model_name,
-        "--gpu-memory-utilization", f"{util:.3f}",
-        "--max-model-len", str(max_len)
-    ]
+    log_path = os.path.join(log_dir, sorted(log_files)[-1])
+    print(f"📝 Monitoring: {os.path.basename(log_path)}")
+
+    # Regex Patterns
+    re_base = re.compile(r"Model loading took ([\d\.]+) GiB memory")
+    re_cache_gb = re.compile(r"Available KV cache memory: ([\d\.]+) GiB")
+    re_tokens = re.compile(r"GPU KV cache size: ([\d,]+) tokens")
+
+    base_vram = None
+    cache_gb = None
+    tokens = None
+
+    start_wait = time.time()
+    timeout = 600 # 10 mins for heavy models
     
-    start_time = time.time()
-    print(f"  ↳ Testing Util: {util:.3f}, MaxLen: {max_len}... ", end="", flush=True)
-    
-    subprocess.run(cmd, capture_output=True)
-    
-    # Wait for port or failure
-    success = False
-    error_msg = ""
-    timeout = 300
-    
-    while time.time() - start_time < timeout:
-        # Check if container is still running
-        res = subprocess.run(["docker", "inspect", "-f", "{{.State.Running}}", docker_name], capture_output=True, text=True)
-        if "false" in res.stdout:
-            logs = subprocess.run(["docker", "logs", docker_name], capture_output=True, text=True)
-            error_msg = "Engine failed to start. Check logs."
-            if "ValueError" in logs.stdout:
-                # Extract the specific ValueError message
-                for line in logs.stdout.split('\n'):
-                    if "ValueError:" in line:
-                        error_msg = line.strip()
-            break
+    try:
+        while time.time() - start_wait < timeout:
+            if not os.path.exists(log_path):
+                time.sleep(1); continue
+                
+            with open(log_path, "r", encoding="utf-8", errors="ignore") as f:
+                content = f.read()
+                
+                if not base_vram:
+                    m = re_base.search(content)
+                    if m: base_vram = float(m.group(1)); print(f"  √ Base VRAM: {base_vram} GiB")
+                
+                if not cache_gb:
+                    m = re_cache_gb.search(content)
+                    if m: cache_gb = float(m.group(1)); print(f"  √ Cache Mem: {cache_gb} GiB")
+                
+                if not tokens:
+                    m = re_tokens.search(content)
+                    if m: 
+                        tokens = int(m.group(1).replace(",", ""))
+                        print(f"  √ KV Tokens: {tokens}")
+
+            if base_vram and cache_gb and tokens:
+                print("✅ All metrics captured.")
+                break
             
-        if is_port_in_use(port):
-            try:
-                resp = requests.get(f"http://127.0.0.1:{port}/v1/models", timeout=5)
-                if resp.status_code == 200:
-                    success = True
-                    break
-            except: pass
-        time.sleep(5)
-    
-    # Cleanup
-    subprocess.run(["docker", "rm", "-f", docker_name], capture_output=True)
-    
-    if success:
-        print("✅ SUCCESS")
-    else:
-        print(f"❌ FAILED ({error_msg})")
-        
-    return success, error_msg, round(time.time() - start_time, 2)
+            time.sleep(2)
+    finally:
+        manager.cleanup()
 
-def main():
-    parser = argparse.ArgumentParser(description="Jarvis VRAM Calibration Tool")
-    parser.add_argument("model", type=str, help="HuggingFace model ID")
-    parser.add_argument("--max-len", type=int, default=32768)
-    parser.add_argument("--step", type=float, default=0.05)
-    args = parser.parse_args()
+    if not (base_vram and cache_gb and tokens):
+        print("❌ Calibration failed: Timeout or missing log entries.")
+        return
 
-    if not is_docker_daemon_running():
-        print("❌ Docker daemon is not running. Calibration aborted."); return
-
-    total_vram = get_gpu_total_vram()
-    model_safe_name = args.model.replace("/", "--").replace(":", "-")
-    artifact_path = os.path.join("tests", "artifacts", "calibration", f"{model_safe_name}_trajectory.json")
+    # 4. Calculate
+    # We want gb_per_10k tokens with 4+ decimal places
+    gb_per_10k = (cache_gb / tokens) * 10000
     
-    trajectory = {
-        "model": args.model,
-        "date": datetime.now().isoformat(),
-        "gpu_total_vram_gb": total_vram,
-        "max_model_len": args.max_len,
-        "steps": []
+    result = {
+        "base_vram_gb": round(base_vram, 4),
+        "kv_cache_gb_per_10k": round(gb_per_10k, 6),
+        "calibrated_at": time.strftime("%Y-%m-%d %H:%M:%S"),
+        "source_tokens": tokens,
+        "source_cache_gb": cache_gb
     }
 
-    print(f"🚀 Starting Calibration for {args.model}")
-    print(f"📊 Total VRAM: {total_vram:.1f} GB")
-
-    # Start at 0.1 and go up to 0.95
-    current_util = 0.1
-    best_util = None
+    # 5. Save to individual YAML
+    specs_dir = os.path.join(project_root, "models", "specs")
+    os.makedirs(specs_dir, exist_ok=True)
     
-    while current_util <= 0.95:
-        success, error, duration = run_calibration_step(args.model, current_util, args.max_len)
-        
-        step_entry = {
-            "utilization": round(current_util, 3),
-            "vram_gb": round(current_util * total_vram, 2),
-            "success": success,
-            "error": error,
-            "duration_s": duration
+    # Sanitize filename
+    safe_name = model_id.replace("/", "--").replace(":", "-").lower()
+    file_path = os.path.join(specs_dir, f"{safe_name}.yaml")
+    
+    # Get GPU info for metadata
+    gpu_info = utils.get_gpu_total_vram() # Or a more descriptive string if available
+    
+    output_data = {
+        "id": model_id,
+        "constants": {
+            "base_vram_gb": round(base_vram, 4),
+            "kv_cache_gb_per_10k": round(gb_per_10k, 6),
+        },
+        "metadata": {
+            "calibrated_at": time.strftime("%Y-%m-%d %H:%M:%S"),
+            "gpu_vram_total_gb": gpu_info,
+            "source_tokens": tokens,
+            "source_cache_gb": cache_gb
         }
-        trajectory["steps"].append(step_entry)
-        
-        if success:
-            best_util = current_util
-            # If we found a success, we can stop or keep going to find the "ceiling"
-            # For now, let's keep going to map the whole trajectory
-        
-        current_util += args.step
+    }
+    
+    with open(file_path, "w", encoding="utf-8") as f:
+        yaml.dump(output_data, f, default_flow_style=False, sort_keys=False)
+    
+    print(f"💾 Specification saved to: {os.path.relpath(file_path, project_root)}")
 
-    # Final summary
-    trajectory["best_utilization"] = best_util
-    if best_util:
-        trajectory["recommended_vram_gb"] = round(best_util * total_vram, 2)
-        print(f"\n✅ CALIBRATION COMPLETE: Best utilization for {args.model} is {best_util:.3f} ({trajectory['recommended_vram_gb']} GB)")
-    else:
-        print(f"\n❌ CALIBRATION FAILED: No successful utilization found up to 0.95.")
-
-    # Save artifact
-    with open(artifact_path, "w") as f:
-        json.dump(trajectory, f, indent=2)
-    print(f"📁 Trajectory saved to {artifact_path}")
+    print("\n" + "="*50)
+    print(f"CALIBRATION RESULT: {model_id}")
+    print("-" * 50)
+    print(yaml.dump(output_data))
+    print("="*50)
+    
+    return output_data
 
 if __name__ == "__main__":
-    main()
+    parser = argparse.ArgumentParser(description="vLLM VRAM & KV-Cache Calibrator")
+    parser.add_argument("model", type=str, help="Model ID to calibrate")
+    args = parser.parse_args()
+    
+    calibrate_model(args.model)

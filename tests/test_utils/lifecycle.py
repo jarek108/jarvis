@@ -121,24 +121,11 @@ class LifecycleManager:
                 vllm_port = self.cfg['ports'].get('vllm', 8300)
                 total_vram = utils.get_gpu_total_vram()
                 
-                # GPU Utilization (Flag #gpu_util overrides config)
-                vram_util_default = self.cfg.get('vllm', {}).get('gpu_memory_utilization', 0.5)
-                if 'gpu_util' in llm_flags:
-                    vllm_util = float(llm_flags['gpu_util'])
-                else:
-                    vram_map = self.cfg.get('vllm', {}).get('model_vram_map', {})
-                    match_gb = None
-                    sorted_keys = sorted(vram_map.keys(), key=len, reverse=True)
-                    for key in sorted_keys:
-                        if key.lower() in model.lower():
-                            match_gb = vram_map[key]; break
-                    
-                    if match_gb:
-                        vllm_util = min(0.95, max(0.1, match_gb / total_vram))
-                    else:
-                        vllm_util = vram_util_default
+                # --- START SMART ALLOCATOR ---
+                vllm_util = None
+                max_len = None
                 
-                # Context Length (Flag #ctx overrides map/config)
+                # 1. Resolve Context Length first (needed for utility calculation)
                 if 'ctx' in llm_flags:
                     max_len = int(llm_flags['ctx'])
                 else:
@@ -147,6 +134,49 @@ class LifecycleManager:
                     for key, val in max_len_map.items():
                         if key.lower() in model.lower():
                             max_len = val; break
+
+                # 2. Try to load physical specs for utility calculation
+                safe_model_id = original_id.replace("/", "--").replace(":", "-").lower()
+                spec_path = os.path.join(self.project_root, "models", "specs", f"{safe_model_id}.yaml")
+                
+                if os.path.exists(spec_path):
+                    try:
+                        with open(spec_path, "r", encoding="utf-8") as f:
+                            spec = yaml.safe_load(f)
+                        
+                        base_gb = spec['constants']['base_vram_gb']
+                        cost_10k = spec['constants']['kv_cache_gb_per_10k']
+                        
+                        # Calculation: Required = Base + (Ctx / 10000 * Cost)
+                        required_gb = base_gb + ((max_len / 10000.0) * cost_10k)
+                        
+                        # Add a 5% safety buffer to the percentage
+                        vllm_util = (required_gb / total_vram) + 0.05
+                        vllm_util = round(vllm_util, 3)
+                        # print(f"  [SmartAllocator] Model specs found. Calculated Utility: {vllm_util} for {max_len} ctx.")
+                    except Exception as e:
+                        print(f"  [SmartAllocator] Warning: Failed to parse spec at {spec_path}: {e}")
+
+                # 3. Fallback to manual heuristics if no spec or calculation failed
+                if vllm_util is None:
+                    if 'gpu_util' in llm_flags:
+                        vllm_util = float(llm_flags['gpu_util'])
+                    else:
+                        vram_map = self.cfg.get('vllm', {}).get('model_vram_map', {})
+                        match_gb = None
+                        sorted_keys = sorted(vram_map.keys(), key=len, reverse=True)
+                        for key in sorted_keys:
+                            if key.lower() in model.lower():
+                                match_gb = vram_map[key]; break
+                        
+                        if match_gb:
+                            vllm_util = min(0.95, max(0.1, match_gb / total_vram))
+                        else:
+                            vllm_util = self.cfg.get('vllm', {}).get('gpu_memory_utilization', 0.5)
+
+                # Clamp final value
+                vllm_util = min(0.95, max(0.1, vllm_util))
+                # --- END SMART ALLOCATOR ---
                 
                 # Multi-modal limits (Flags #img_lim, #vid_lim override config)
                 mm_limit_map = self.cfg.get('vllm', {}).get('model_mm_limit_map', {})
