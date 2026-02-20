@@ -1,53 +1,56 @@
 # VLM Parameter Tuning: Context, Limits & VRAM
 
-This document analyzes the relationship between context window size (`#ctx`), multimodal limits (`#img_lim`, `#vid_lim`), and actual VRAM usage in vLLM. It is based on empirical data from benchmarking the `QuantTrio/Qwen3-VL-30B-A3B-Instruct-AWQ` model.
+This document analyzes the relationship between context window size (`#ctx`), multimodal limits (`#img_lim`, `#vid_lim`), and actual VRAM usage in vLLM. It provides a strategic guide for tuning performance on restricted hardware (e.g., single GPU).
 
-## 1. The Core Findings
+## 1. The Core Findings: KV Cache Dynamics
 
-### A. VRAM Allocation is Deterministic (at Startup)
-Contrary to intuition, changing the number of allowed images/videos (`limit_mm_per_prompt`) or increasing the context window (`max_model_len`) often results in **identical peak VRAM usage** during the "Setup" phase.
+### A. The "Container vs. Cup" Analogy
+To understand VRAM usage, distinguishing between the **Physical Capacity** and the **Declared Limit** is crucial.
 
-**Evidence (Run 20260220_031231):**
-| Context | Vid Limit | Status | Peak VRAM |
-| :--- | :--- | :--- | :--- |
-| `8192` | `1` | PASSED | **16.96 GB** |
-| `16384` | `1` | PASSED | **16.96 GB** |
-| `32768` | `1` | PASSED | **16.96 GB** |
-| `8192` | `2` | PASSED | **16.96 GB** |
-| `8192` | `4` | PASSED | **16.96 GB** |
+1.  **The Container (Physical Capacity):**
+    *   Determined by: `gpu_memory_utilization` (e.g., 26GB on an RTX 5090).
+    *   **Calculation:** `(Total VRAM - Model Weights) = Surplus for KV Cache`.
+    *   **Example:** A 30B model takes ~17GB. With 26GB allocated, you have **~9GB Surplus**.
+    *   **Capacity:** 9GB fits roughly **45,000 tokens** (the "Physical Limit").
 
-*Note: The 16.96 GB figure represents the Model Weights + Static Overhead. The KV Cache is allocated dynamically into the *remaining* space based on `gpu_memory_utilization`.*
+2.  **The Cup (Declared Limit):**
+    *   Determined by: `#ctx` (`--max-model-len`).
+    *   **Function:** The maximum context size reserved for a *single request*.
+    *   **Example:** `#ctx=32768`.
 
-### B. The Trade-off: Concurrency vs. Context
-Since the VRAM pie is fixed (by `gpu_memory_utilization`), increasing the Context Window size (`#ctx`) directly reduces the number of concurrent requests the engine can handle.
+### B. Startup Logic ("Will it Blend?")
+At startup, vLLM performs a simple check:
+> **Is Container Size >= Cup Size?**
 
-| Context (`#ctx`) | Max Concurrency |
-| :--- | :--- |
-| `8192` | **6.58x** |
-| `16384` | **3.29x** |
+*   **Scenario 1 (Safe):** Container (45k) > Cup (32k). vLLM starts. The extra 13k tokens sit idle (waiting for a second parallel request).
+*   **Scenario 2 (Oversized):** Container (45k) < Cup (64k). vLLM fails or warns ("I cannot guarantee 64k context").
 
-**Implication:** Doubling the context window halves the concurrency. For single-user assistants (Jarvis), this is a perfectly acceptable trade-off to gain the ability to process long videos.
+### C. Runtime VRAM Behavior
+Contrary to intuition, changing parameters often shows **identical peak VRAM usage**.
+*   **Why:** vLLM pre-allocates the *entire* `gpu_memory_utilization` block at startup.
+*   **Result:** Whether you run 1 video or 4, the VRAM usage reported by `nvidia-smi` will stay flat at your defined limit (e.g., 26GB). The *internal* utilization of that block changes, but the allocation does not.
 
 ## 2. Parameter Tuning Guide
 
 ### `#ctx` (Context Window)
 *   **Role:** Defines the maximum total tokens (Text + Images + Video) for a single request.
 *   **Recommendation:**
-    *   **Images:** `4096` or `8192` is usually sufficient.
-    *   **Video:** `16384` or `32768` is required for long clips (>30s), as native video encoding consumes ~256 tokens/sec depending on resolution.
-*   **Risk:** Setting this too high (e.g., `65536` on a 24GB card) might leave 0 room for KV cache blocks, preventing startup.
+    *   **Images:** `8192` is usually sufficient.
+    *   **Video:** `16384` or `32768` is required for native video encoding (~256 tokens/sec).
+*   **Risk:** Setting this higher than your Physical Capacity prevents startup.
 
 ### `#vid_lim` / `#img_lim`
-*   **Role:** A "Guardrail" for the scheduler. It rejects requests containing more items than this limit.
-*   **VRAM Impact:** Negligible. Setting `#vid_lim=4` does not reserve 4x the VRAM at startup. It simply allows a request with 4 videos to attempt to be scheduled.
-*   **Recommendation:** Set high (e.g., `4` or `8`) to avoid artificial errors. The real limit is the Context Window (`#ctx`).
+*   **Role:** A "Guardrail" for the scheduler.
+*   **Myth:** "Setting `#vid_lim=4` reserves 4x memory." -> **FALSE**.
+*   **Reality:** It simply allows the scheduler to accept a request with 4 videos. If those 4 videos combined exceed `#ctx`, the request fails.
+*   **Strategy:** Set these high (e.g., `4` or `8`) to avoid artificial errors. Use `#ctx` as your real safety limit.
 
 ## 3. "Logical" OOM vs. "Physical" OOM
 
-*   **Physical OOM (CUDA Error):** Happens at startup if model weights > GPU VRAM * `gpu_util`.
-*   **Logical OOM (Context Error):** Happens at runtime if `(Tokens in Video) + (Tokens in Text) > #ctx`.
+*   **Physical OOM (CUDA Error):** Happens at **Startup** if `Model Weights > GPU VRAM * gpu_util`.
+*   **Logical OOM (Context Error):** Happens at **Runtime** if `(Tokens in Video) + (Tokens in Text) > #ctx`.
 
-**Strategy:**
-1.  Set `gpu_memory_utilization` to fit the weights (e.g., `0.5` for 30B AWQ on 5090).
-2.  Set `#ctx` as high as possible (`32768`) to accommodate long videos.
-3.  Let concurrency drop. (Who cares if you can only run 1 request at a time? You are one user).
+**Optimization Strategy for Single-User (Jarvis):**
+1.  **Tune Down `gpu_util`:** Set it just high enough to fit the weights + your desired context (e.g., `0.7`). This leaves VRAM free for the OS/Desktop.
+2.  **Tune Up `#ctx`:** Maximize this to fill the container. (e.g., if you have space for 45k tokens, set `#ctx=32768`).
+3.  **Ignore Concurrency:** As a single user, you don't need the surplus "idle" tokens meant for parallel requests.
