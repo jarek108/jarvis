@@ -11,6 +11,7 @@ This document serves as a scratchpad for future architectural improvements, know
 - [ ] **Mock Mode V2**: Decouple logic simulation from the `runner.py` to allow testing the dashboard UI without spawning processes.
 
 ### Infrastructure
+- [ ] **Ollama Unified Calibration**: Implement calibration logic for Ollama models to enable hardware guardrails. Plan: `docs/analysis/OLLAMA_CALIBRATION_PLAN.md`.
 - [ ] **Dynamic Port Allocation**: Currently ports are hardcoded in `config.yaml`. Moving to dynamic allocation would allow parallel test runs.
 
 ## 2. Active Analysis
