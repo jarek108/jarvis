@@ -105,3 +105,26 @@ execution:
 *   **Separation:** The test runner treats these as distinct loadouts.
 *   **Labeling:** In the Excel report and Dashboard, scenarios are automatically suffixed with `[Stream]` or `[Batch]` (e.g., `Story Gen [Stream]`).
 *   **Metrics:** Streaming runs will show a significantly lower **TTFT (Time To First Token)**, while Batch runs provide a baseline for total throughput (TPS).
+
+---
+
+## 6. VLM Parameter Tuning
+
+For Vision-Language Models (especially `Qwen3-VL`), you can tune memory and context behavior directly in the loadout string.
+
+| Flag | Description | Example |
+| :--- | :--- | :--- |
+| `#ctx=N` | Sets `--max-model-len`. Crucial for long videos. | `#ctx=16384` |
+| `#vid_lim=N` | Sets `--limit-mm-per-prompt video=N`. | `#vid_lim=2` |
+| `#img_lim=N` | Sets `--limit-mm-per-prompt image=N`. | `#img_lim=4` |
+| `#gpu_util=X` | Overrides config `gpu_memory_utilization`. | `#gpu_util=0.9` |
+
+**Example (`tests/plans/vLLM_fast.yaml`):**
+```yaml
+execution:
+  - domain: vlm
+    loadouts:
+      - ["VL_QuantTrio/Qwen3-VL-30B-A3B-Instruct-AWQ#nativevideo#stream#ctx=16384"]
+```
+
+For a deep dive on why these parameters matter (and why VRAM usage looks static), see **[VRAM Tuning](analysis/VRAM_TUNING.md)**.
