@@ -1,0 +1,10 @@
+id: qwen2.5:0.5b
+engine: ollama
+constants:
+  base_vram_gb: 3.1074
+  kv_cache_gb_per_10k: 0.114441
+metadata:
+  calibrated_at: '2026-02-20 11:11:17'
+  gpu_vram_total_gb: 31.8427734375
+  source_tokens: 32768
+  source_cache_gb: 0.375

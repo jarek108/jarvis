@@ -109,6 +109,36 @@ class LifecycleManager:
                 health = f"http://127.0.0.1:{llm_port}/health"
                 required.append({"type": "llm", "id": f"STUB-{original_id}", "port": llm_port, "cmd": cmd, "health": health})
             elif engine == "ollama":
+                # --- START OLLAMA GUARDRAIL ---
+                try:
+                    # 1. Resolve context length
+                    num_ctx = 4096 # Ollama default
+                    if 'ctx' in llm_flags:
+                        num_ctx = int(llm_flags['ctx'])
+                    
+                    # 2. Try to load calibration
+                    safe_model_id = original_id.replace("/", "--").replace(":", "-").lower()
+                    cal_path = os.path.join(self.project_root, "models", "calibrations", f"ol_{safe_model_id}.yaml")
+                    
+                    if os.path.exists(cal_path):
+                        with open(cal_path, "r", encoding="utf-8") as f:
+                            cal = yaml.safe_load(f)
+                        
+                        base_gb = cal['constants']['base_vram_gb']
+                        cost_10k = cal['constants']['kv_cache_gb_per_10k']
+                        predicted_gb = base_gb + ((num_ctx / 10000.0) * cost_10k)
+                        
+                        current_free_gb = utils.get_gpu_vram_usage() # This returns usage, need free
+                        total_gpu_gb = utils.get_gpu_total_vram()
+                        free_gb = total_gpu_gb - current_free_gb
+                        
+                        if predicted_gb > (free_gb * 0.95): # 5% buffer
+                            print(f"\n⚠️  [OllamaGuard] WARNING: Model {original_id} requires ~{predicted_gb:.2f}GB VRAM for {num_ctx} ctx.")
+                            print(f"⚠️  [OllamaGuard] Only {free_gb:.2f}GB is available. CPU OFFLOAD / SLOW PERFORMANCE LIKELY.\n")
+                except Exception as e:
+                    pass # Guardrail failure shouldn't block the run
+                # --- END OLLAMA GUARDRAIL ---
+
                 required.append({
                     "type": "llm", "id": original_id, "port": self.cfg['ports']['ollama'],
                     "cmd": ["ollama", "serve"], "health": f"http://127.0.0.1:{self.cfg['ports']['ollama']}/api/tags"

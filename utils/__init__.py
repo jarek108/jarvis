@@ -4,7 +4,7 @@ from .infra import (
     kill_process_on_port, get_jarvis_ports, kill_all_jarvis_services,
     is_vllm_docker_running, stop_vllm_docker, get_vllm_logs, is_vllm_model_local,
     get_system_health_async, kill_jarvis_ports, wait_for_ports_parallel,
-    is_docker_daemon_running
+    is_docker_daemon_running, get_ollama_log_path
 )
 from .vram import (
     get_vram_estimation, get_ollama_vram, get_loaded_ollama_models,

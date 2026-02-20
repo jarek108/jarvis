@@ -1,0 +1,9 @@
+id: VL_Qwen/Qwen2-VL-2B-Instruct
+constants:
+  base_vram_gb: 4.15
+  kv_cache_gb_per_10k: 0.267154
+metadata:
+  calibrated_at: '2026-02-20 10:32:55'
+  gpu_vram_total_gb: 31.8427734375
+  source_tokens: 199136
+  source_cache_gb: 5.32

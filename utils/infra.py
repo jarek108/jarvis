@@ -230,6 +230,14 @@ def kill_process_on_port(port: int):
         return not is_port_in_use(port)
     except: return not is_port_in_use(port)
 
+def get_ollama_log_path():
+    """Returns the platform-specific path to the Ollama server log."""
+    if os.name == 'nt':
+        return os.path.join(os.environ.get('LOCALAPPDATA', ''), 'Ollama', 'server.log')
+    else:
+        # Linux standard
+        return os.path.expanduser('~/.ollama/logs/server.log')
+
 def get_jarvis_ports():
     """Returns a set of all ports defined in config.yaml for Jarvis services."""
     cfg = load_config()

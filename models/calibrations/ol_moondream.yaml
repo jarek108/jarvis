@@ -1,0 +1,10 @@
+id: moondream
+engine: ollama
+constants:
+  base_vram_gb: 4.1582
+  kv_cache_gb_per_10k: 0.114441
+metadata:
+  calibrated_at: '2026-02-20 11:11:30'
+  gpu_vram_total_gb: 31.8427734375
+  source_tokens: 32768
+  source_cache_gb: 0.375

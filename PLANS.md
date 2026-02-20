@@ -22,8 +22,7 @@ This document serves as a scratchpad for future architectural improvements, know
 
 ### vLLM Multi-Tenant VRAM
 *   **Issue**: vLLM grabs 90% VRAM by default.
-*   **Current Fix**: Manual tuning via `config.yaml` > `model_vram_map`.
-*   **Goal**: Automated discovery of optimal `gpu_memory_utilization` based on available free VRAM at startup.
+*   **Status**: IMPLEMENTED. The "Smart Allocator" logic in `lifecycle.py` uses high-precision physical constants from `models/calibrations/` to calculate the exact `gpu_memory_utilization` needed for the requested `#ctx`.
 
 ### Native Video (vLLM)
 *   **Goal**: Unlock Temporal Positional Embeddings in Qwen3-VL.
