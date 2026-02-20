@@ -137,7 +137,7 @@ class LifecycleManager:
 
                 # 2. Try to load physical specs for utility calculation
                 safe_model_id = original_id.replace("/", "--").replace(":", "-").lower()
-                spec_path = os.path.join(self.project_root, "models", "specs", f"{safe_model_id}.yaml")
+                spec_path = os.path.join(self.project_root, "models", "calibrations", f"{safe_model_id}.yaml")
                 
                 if os.path.exists(spec_path):
                     try:
