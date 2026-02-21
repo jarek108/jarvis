@@ -31,6 +31,10 @@ vllm:
   # Default context window for all models (if not specified in setup)
   default_context_size: 16384
   
+  # VRAM Tuning
+  vram_safety_buffer: 0.05  # Extra % of total VRAM to reserve (0.15 = 15%)
+  vram_static_floor: 0.0    # Flat GB added to base weight cost
+
   # Safety net for uncalibrated models
   uncalibrated_safe_ctx: 8192
   uncalibrated_safe_vram_gb: 4.0

@@ -7,9 +7,10 @@ settings:
 execution:
   - domain: sts
     loadouts:
-      - ["faster-whisper-tiny", "OL_qwen2.5:0.5b#stream", "chatterbox-turbo"]
-      - ["faster-whisper-base", "VL_Qwen/Qwen2.5-0.5B-Instruct#stream", "chatterbox-turbo"]
-      - ["faster-whisper-large", "OL_qwen2.5:0.5b#stream", "chatterbox-turbo"]
-      - ["faster-whisper-base", "OL_gpt-oss:20b#stream", "chatterbox-multilingual"]
-      - ["faster-whisper-base", "VL_QuantTrio/Qwen3-VL-30B-A3B-Instruct-AWQ#stream#ctx=4096", "chatterbox-multilingual"]
-      - ["faster-whisper-base", "VL_QuantTrio/Qwen3-VL-30B-A3B-Instruct-AWQ#stream", "chatterbox-multilingual"]
+      # - ["faster-whisper-tiny", "OL_qwen2.5:0.5b#stream", "chatterbox-turbo"]
+      - ["faster-whisper-base", "VL_Qwen/Qwen2.5-0.5B-Instruct#stream#ctx=4096", "chatterbox-turbo"]
+      - ["faster-whisper-base", "VL_Qwen/Qwen2.5-0.5B-Instruct#stream#ctx=32768", "chatterbox-turbo"]
+      # - ["faster-whisper-large", "OL_qwen2.5:0.5b#stream", "chatterbox-turbo"]
+      # - ["faster-whisper-base", "OL_gpt-oss:20b#stream", "chatterbox-multilingual"]
+      # - ["faster-whisper-base", "VL_QuantTrio/Qwen3-VL-30B-A3B-Instruct-AWQ#stream#ctx=4096", "chatterbox-multilingual"]
+      # - ["faster-whisper-base", "VL_QuantTrio/Qwen3-VL-30B-A3B-Instruct-AWQ#stream", "chatterbox-multilingual"]

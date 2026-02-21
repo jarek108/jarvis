@@ -167,10 +167,13 @@ class LifecycleManager:
                 base_gb, cost_10k = utils.get_model_calibration(model, engine="vllm")
                 
                 if base_gb:
-                    # Formula: Required = Base + (Ctx / 10000 * Cost)
-                    required_gb = base_gb + ((max_len / 10000.0) * cost_10k) + 1.0
-                    vllm_util = (required_gb / total_vram) + 0.15
-                    print(f"  [SmartAllocator] Physics discovered: {base_gb}GB base + {max_len} ctx. Calculated Util: {round(vllm_util, 3)}")
+                    # Formula: Required = Base + (Ctx / 10000 * Cost) + Floor
+                    floor_gb = self.cfg.get('vllm', {}).get('vram_static_floor', 1.0)
+                    buffer_pct = self.cfg.get('vllm', {}).get('vram_safety_buffer', 0.15)
+                    
+                    required_gb = base_gb + ((max_len / 10000.0) * cost_10k) + floor_gb
+                    vllm_util = (required_gb / total_vram) + buffer_pct
+                    print(f"  [SmartAllocator] Physics: {base_gb}GB base + {max_len} ctx + {floor_gb}GB floor. Buffer: {buffer_pct*100}%. Util: {round(vllm_util, 3)}")
                 else:
                     # SAFETY NET for uncalibrated models
                     max_len = self.cfg.get('vllm', {}).get('uncalibrated_safe_ctx', 8192)
@@ -385,10 +388,13 @@ class LifecycleManager:
         return time.perf_counter() - setup_start, prior_vram
 
     def cleanup(self):
-        if self.purge_on_exit:
-            utils.kill_all_jarvis_services(); return 0
-        if not self.owned_processes: return 0
         start_c = time.perf_counter()
+        if self.purge_on_exit:
+            utils.kill_all_jarvis_services()
+            return time.perf_counter() - start_c
+            
+        if not self.owned_processes: return 0
+        
         for port, proc in self.owned_processes:
             if port:
                 utils.kill_process_on_port(port)
