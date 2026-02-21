@@ -70,7 +70,8 @@ def generate_excel(upload=True, upload_outputs=False, session_dir=None):
         service = get_gdrive_service() if upload else None
         asset_mgr = GDriveAssetManager(service) if service else None
         
-        input_paths = set(); output_paths = set(); domains = ["stt", "tts", "llm", "vlm", "sts"]
+        # --- TURBO SYNC: DISCOVERY PHASE ---
+        input_paths = set(); output_paths = set(); log_paths = set(); domains = ["stt", "tts", "llm", "vlm", "sts"]
         for d in domains:
             fname = f"{d}.json" if session_dir else f"latest_{d}.json"
             data = load_json(os.path.join(artifacts_dir, fname))
@@ -78,16 +79,19 @@ def generate_excel(upload=True, upload_outputs=False, session_dir=None):
                 for s in entry.get('scenarios', []):
                     if s.get('input_file'): input_paths.add(s['input_file'])
                     if s.get('output_file'): output_paths.add(s['output_file'])
+                    if s.get('log_path'): log_paths.add(s['log_path'])
 
         input_paths = [os.path.abspath(os.path.join(project_root, p)) for p in input_paths if p]
         output_paths = [os.path.abspath(os.path.join(project_root, p)) for p in output_paths if p]
+        log_paths = [os.path.abspath(os.path.join(project_root, p)) for p in log_paths if p]
 
         if asset_mgr:
             fid_in = asset_mgr.get_folder_id("Jarvis_Artifacts_Inputs")
             asset_mgr.batch_upload(input_paths, fid_in, label="input artifacts")
             if upload_outputs:
                 fid_out = asset_mgr.get_folder_id("Jarvis_Artifacts_Outputs")
-                asset_mgr.batch_upload(output_paths, fid_out, label="output artifacts")
+                # Combine outputs and logs for bulk upload
+                asset_mgr.batch_upload(output_paths + log_paths, fid_out, label="output artifacts and logs")
 
         sheets = {}; has_any_data = False
         sys_info_path = os.path.join(artifacts_dir, "system_info.yaml")
@@ -136,7 +140,17 @@ def generate_excel(upload=True, upload_outputs=False, session_dir=None):
                     response = str(s.get('text') or s.get('raw_text') or s.get('llm_text') or "N/A").replace('\n', ' ').replace('\r', ' ')
 
                     model_key = "Setup" if domain == "STS" else "Model"
-                    row = {model_key: model_col, "Scenario": s.get('name'), "Status": s.get('status')}
+                    log_link = get_link(s.get('log_path'), "Jarvis_Artifacts_Outputs")
+                    
+                    # Wrap the model name in a hyperlink to its log if possible
+                    if log_link and log_link.startswith("="):
+                        # Extract URL from =HYPERLINK("url", "label")
+                        url_only = log_link.split('"')[1]
+                        model_val = f'=HYPERLINK("{url_only}", "{model_col}")'
+                    else:
+                        model_val = model_col
+
+                    row = {model_key: model_val, "Scenario": s.get('name'), "Status": s.get('status')}
                     if domain == "STT": row.update({"Audio": get_link(s.get('input_file')), "Result": response, "Match %": s.get('match_pct', 0)})
                     elif domain == "TTS": row.update({"Audio": get_link(s.get('output_file'), "Jarvis_Artifacts_Outputs"), "Input": prompt})
                     elif domain == "LLM": row.update({"Prompt": prompt, "Response": response, "TTFT": s.get('ttft'), "TPS": s.get('tps')})

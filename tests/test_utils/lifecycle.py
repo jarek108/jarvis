@@ -134,9 +134,11 @@ class LifecycleManager:
                     pass # Guardrail failure shouldn't block the run
                 # --- END OLLAMA GUARDRAIL ---
 
-                res_id = f"OL_{model}"
-                if 'stream' in llm_flags or kwargs.get('stream'): res_id += "#stream"
-                res_id += f"#ctx={num_ctx}"
+                # --- RESOLVED ID for Reporting ---
+                res_id = f"OL_{model.upper()}"
+                if 'stream' in llm_flags or kwargs.get('stream'): res_id += "#STREAM"
+                res_id += f"#CTX={num_ctx}"
+                # ---------------------------------
 
                 required.append({
                     "type": "llm", "id": res_id, "port": self.cfg['ports']['ollama'],
@@ -193,12 +195,11 @@ class LifecycleManager:
                 mm_limit_json = json.dumps(limits)
 
                 # --- RESOLVED ID for Reporting ---
-                # Build a string that shows exactly what parameters were used
-                res_id = f"VL_{model}"
-                if kwargs.get('stream'): res_id += "#stream"
-                res_id += f"#ctx={max_len}"
-                if limits.get('image') > 1: res_id += f"#img_lim={limits['image']}"
-                if limits.get('video') > 1: res_id += f"#vid_lim={limits['video']}"
+                res_id = f"VL_{model.upper()}"
+                if kwargs.get('stream'): res_id += "#STREAM"
+                res_id += f"#CTX={max_len}"
+                if limits.get('image', 1) > 1: res_id += f"#IMG_LIM={limits['image']}"
+                if limits.get('video', 1) > 1: res_id += f"#VID_LIM={limits['video']}"
                 # ---------------------------------
 
                 hf_cache = utils.get_hf_home(silent=True)
@@ -286,6 +287,13 @@ class LifecycleManager:
                 else: ctx = self.cfg.get('vllm', {}).get('default_context_size', 16384)
             name += f"#CTX={ctx}"
             
+            # Add multi-modal defaults for display if relevant
+            if llm['engine'] == "vllm":
+                img_lim = flags.get('img_lim') or 8 # Default from config
+                vid_lim = flags.get('vid_lim')
+                if img_lim and int(img_lim) > 1: name += f"#IMG_LIM={img_lim}"
+                if vid_lim and int(vid_lim) > 1: name += f"#VID_LIM={vid_lim}"
+
             display_parts.append(name)
             
         if self.cat['tts']: display_parts.append(self.cat['tts']['id'].upper())

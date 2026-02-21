@@ -250,9 +250,16 @@ def main():
                                     if domain not in vram_summary: vram_summary[domain] = {}
                                     vram_summary[domain][s_name] = max(peaks)
                                 
-                                # Inject detailed model name for reporting
+                                # Inject detailed model name and log path for reporting
+                                log_paths = dashboard.test_data.get(domain.lower(), {}).get('loadouts', {}).get(s_name, {}).get('log_paths', {})
                                 for r in res:
                                     r['detailed_model'] = model_display
+                                    # Find relevant log path
+                                    m_lower = model_display.lower()
+                                    m_type = "llm" if any(x in m_lower for x in ["ol_", "vl_", "vllm:"]) else \
+                                             ("stt" if "whisper" in m_lower else \
+                                             ("tts" if "chatterbox" in m_lower else "sts"))
+                                    r['log_path'] = log_paths.get(m_type) or log_paths.get("sts")
 
                             status = "failed"; error_message = ""
                             if not res:
