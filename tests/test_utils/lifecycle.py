@@ -134,8 +134,12 @@ class LifecycleManager:
                     pass # Guardrail failure shouldn't block the run
                 # --- END OLLAMA GUARDRAIL ---
 
+                res_id = f"OL_{model}"
+                if 'stream' in llm_flags or kwargs.get('stream'): res_id += "#stream"
+                res_id += f"#ctx={num_ctx}"
+
                 required.append({
-                    "type": "llm", "id": original_id, "port": self.cfg['ports']['ollama'],
+                    "type": "llm", "id": res_id, "port": self.cfg['ports']['ollama'],
                     "cmd": ["ollama", "serve"], "health": f"http://127.0.0.1:{self.cfg['ports']['ollama']}/api/tags"
                 })
             elif engine == "vllm":
@@ -188,6 +192,15 @@ class LifecycleManager:
                 if 'vid_lim' in llm_flags: limits['video'] = int(llm_flags['vid_lim'])
                 mm_limit_json = json.dumps(limits)
 
+                # --- RESOLVED ID for Reporting ---
+                # Build a string that shows exactly what parameters were used
+                res_id = f"VL_{model}"
+                if kwargs.get('stream'): res_id += "#stream"
+                res_id += f"#ctx={max_len}"
+                if limits.get('image') > 1: res_id += f"#img_lim={limits['image']}"
+                if limits.get('video') > 1: res_id += f"#vid_lim={limits['video']}"
+                # ---------------------------------
+
                 hf_cache = utils.get_hf_home(silent=True)
                 vlm_input_dir = os.path.join(self.project_root, "tests", "vlm", "input_data")
                 
@@ -205,7 +218,7 @@ class LifecycleManager:
                     "--allowed-local-media-path", "/data"
                 ]
                 required.append({
-                    "type": "llm", "id": original_id, "port": vllm_port,
+                    "type": "llm", "id": res_id, "port": vllm_port,
                     "cmd": cmd, "health": f"http://127.0.0.1:{vllm_port}/v1/models"
                 })
 
@@ -251,9 +264,30 @@ class LifecycleManager:
     def format_models_for_display(self):
         display_parts = []
         if self.cat['stt']: display_parts.append(self.cat['stt']['id'].upper())
+        
         if self.cat['llm']:
-            prefix = "VL_" if self.cat['llm']['engine'] == "vllm" else "OL_"
-            display_parts.append(f"{prefix}{self.cat['llm']['model'].upper()}")
+            llm = self.cat['llm']
+            prefix = "VL_" if llm['engine'] == "vllm" else "OL_"
+            
+            # Use the most detailed ID available from the services list if already calculated
+            # Otherwise, build a basic detailed name
+            flags = llm.get('flags', {})
+            model_id = llm['model'].upper()
+            name = f"{prefix}{model_id}"
+            
+            if flags.get('stream') or self.full: # Heuristic for display
+                name += "#STREAM"
+            
+            # We don't have the resolved max_len yet during init, 
+            # so we'll just use the engine-appropriate default/flag
+            ctx = flags.get('ctx')
+            if not ctx:
+                if llm['engine'] == "ollama": ctx = 4096
+                else: ctx = self.cfg.get('vllm', {}).get('default_context_size', 16384)
+            name += f"#CTX={ctx}"
+            
+            display_parts.append(name)
+            
         if self.cat['tts']: display_parts.append(self.cat['tts']['id'].upper())
         return " + ".join(display_parts) or self.setup_name.upper()
 

@@ -140,18 +140,27 @@ def generate_excel(upload=True, upload_outputs=False, session_dir=None):
             print(f"📊 Processing {domain} sheet...")
             rows = []
             for entry in data:
+                loadout_name = entry.get('loadout', 'N/A')
                 for s in entry.get('scenarios', []):
+                    # Priority: 
+                    # 1. detailed_model (New runs, contains resolved defaults)
+                    # 2. loadout_name (Parent entry name, usually has flags)
+                    # 3. scenario-level model ID
+                    model_col = s.get('detailed_model') or loadout_name
+                    if model_col == 'N/A':
+                        model_col = s.get('llm_model') or s.get('stt_model') or s.get('tts_model') or "N/A"
+                    
                     row = {"Scenario": s.get('name'), "Status": s.get('status'), "Execution (s)": s.get('duration'), "Setup (s)": s.get('setup_time', 0), "Cleanup (s)": s.get('cleanup_time', 0), "VRAM Peak": s.get('vram_peak', 0)}
                     if domain == "STT":
-                        row.update({"Model": s.get("stt_model"), "Audio": get_link(s.get('input_file')), "Result": s.get('output_text'), "Match %": s.get('match_pct', 0)})
+                        row.update({"Model": model_col, "Audio": get_link(s.get('input_file')), "Result": s.get('output_text'), "Match %": s.get('match_pct', 0)})
                     elif domain == "TTS":
-                        row.update({"Model": s.get("tts_model"), "Audio": get_link(s.get('output_file'), "Jarvis_Artifacts_Outputs"), "Input": s.get('input_text')})
+                        row.update({"Model": model_col, "Audio": get_link(s.get('output_file'), "Jarvis_Artifacts_Outputs"), "Input": s.get('input_text')})
                     elif domain == "LLM":
-                        row.update({"Model": s.get("llm_model"), "Prompt": s.get('input_text'), "Response": s.get('text') or s.get('raw_text'), "TTFT": s.get('ttft'), "TPS": s.get('tps')})
+                        row.update({"Model": model_col, "Prompt": s.get('input_text'), "Response": s.get('text') or s.get('raw_text'), "TTFT": s.get('ttft'), "TPS": s.get('tps')})
                     elif domain == "VLM":
-                        row.update({"Model": s.get("llm_model"), "Media": get_link(s.get('input_file')), "Prompt": s.get('input_text'), "Response": s.get('text') or s.get('raw_text')})
+                        row.update({"Model": model_col, "Media": get_link(s.get('input_file')), "Prompt": s.get('input_text'), "Response": s.get('text') or s.get('raw_text')})
                     elif domain == "STS":
-                        row.update({"Setup": entry.get('loadout'), "Input": get_link(s.get('input_file')), "Output": get_link(s.get('output_file'), "Jarvis_Artifacts_Outputs"), "Text": s.get('llm_text')})
+                        row.update({"Setup": model_col, "Input": get_link(s.get('input_file')), "Output": get_link(s.get('output_file'), "Jarvis_Artifacts_Outputs"), "Text": s.get('llm_text')})
                     rows.append(row)
             if rows:
                 sheets[domain] = pd.DataFrame(rows)

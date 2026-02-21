@@ -249,6 +249,10 @@ def main():
                                 if peaks:
                                     if domain not in vram_summary: vram_summary[domain] = {}
                                     vram_summary[domain][s_name] = max(peaks)
+                                
+                                # Inject detailed model name for reporting
+                                for r in res:
+                                    r['detailed_model'] = model_display
 
                             status = "failed"; error_message = ""
                             if not res:
