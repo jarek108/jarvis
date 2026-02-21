@@ -162,9 +162,6 @@ def run_test_suite(model_name, scenarios_to_run=None, output_dir=None, reporter:
         except Exception as e:
             reporter.report({"name": s['name'] + suffix, "status": "FAILED", "text": str(e)})
 
-        except Exception as e:
-            reporter.report({"name": s['name'], "status": "FAILED", "text": str(e)})
-
     # Audit End
     vram_peak = utils.get_gpu_vram_usage()
     is_ok, vram_used, total_size = utils.check_ollama_offload(model_name)

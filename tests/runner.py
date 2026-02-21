@@ -126,7 +126,7 @@ def run_domain_tests(domain, setup_name, models, scenarios, settings, session_di
         setup_time, cleanup_time, prior_vram, model_display = run_test_lifecycle(
             domain=domain, setup_name=setup_name, models=models,
             purge_on_entry=settings.get('purge_on_entry', True),
-            purge_on_exit=settings.get('purge_on_exit', True),
+            purge_on_exit=True, # Force True to ensure isolation between multiple models in one domain
             full=settings.get('full', False),
             test_func=execution_wrapper, 
             benchmark_mode=True,
@@ -274,6 +274,8 @@ def main():
                     report_path = trigger_report_generation(upload=True, session_dir=session_dir)
                     dashboard.report_url = report_path
                     dashboard.current_status = "Finished"
+                    # Small sleep to ensure the Dashboard UI has time to render the final URL
+                    time.sleep(1.0)
                 except Exception as e:
                     import traceback
                     dashboard.log(f"CRITICAL WORKER ERROR: {str(e)}")

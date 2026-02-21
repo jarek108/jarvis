@@ -9,3 +9,4 @@ execution:
     loadouts:
       - ["faster-whisper-base", "OL_qwen2.5:0.5b#stream", "chatterbox-turbo"]
       - ["faster-whisper-base", "VL_Qwen/Qwen2.5-0.5B-Instruct#stream", "chatterbox-turbo"]
+      - ["faster-whisper-base", "VL_QuantTrio/Qwen3-VL-30B-A3B-Instruct-AWQ#stream", "chatterbox-turbo"]

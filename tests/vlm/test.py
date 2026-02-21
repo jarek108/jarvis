@@ -168,9 +168,6 @@ def run_test_suite(model_name, scenarios_to_run=None, output_dir=None, reporter=
         except Exception as e:
             res_obj.update({"status": "FAILED", "result": str(e)})
             reporter.report(res_obj)
-        except Exception as e:
-            res_obj.update({"status": "FAILED", "result": str(e)})
-            reporter.report(res_obj)
 
 if __name__ == "__main__":
     script_dir = os.path.dirname(os.path.abspath(__file__))
