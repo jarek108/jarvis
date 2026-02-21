@@ -45,13 +45,15 @@ def get_gdrive_service():
     except Exception as e:
         print(f"❌ GDrive Auth Error: {e}"); return None
 
-def infer_detailed_name(model_id):
-    if not model_id or model_id == "N/A": return model_id
-    name = model_id.upper()
-    if "#CTX=" not in name:
-        ctx = "4096" if "OL_" in name else "16384"
-        name += f"#CTX={ctx}"
-    return name
+def upload_to_gdrive(file_path):
+    service = get_gdrive_service()
+    if not service: return
+    manager = GDriveAssetManager(service)
+    reports_folder = manager.get_folder_id("Jarvis_Reports")
+    print(f"📤 Uploading report to GDrive: {os.path.basename(file_path)}...")
+    link = manager.sync_file(file_path, reports_folder, overwrite=False)
+    if link: print(f"✅ GDrive Upload Successful: {link}")
+    return link
 
 def find_log_fallback(artifacts_dir, model_id, domain_type):
     safe_id = model_id.replace("/", "--").replace(":", "-")
@@ -60,6 +62,16 @@ def find_log_fallback(artifacts_dir, model_id, domain_type):
         if f.startswith(pattern) and f.endswith(".log"):
             return os.path.join(artifacts_dir, f)
     return None
+
+def infer_detailed_name(model_id):
+    if not model_id or model_id == "N/A": return model_id
+    name = model_id.upper()
+    if "NATIVEVIDEO" in name and "#NATIVE" not in name:
+        name = name.replace("NATIVEVIDEO", "#NATIVE")
+    if "#CTX=" not in name:
+        ctx = "4096" if "OL_" in name else "16384"
+        name += f"#CTX={ctx}"
+    return name
 
 def generate_excel(upload=True, upload_outputs=False, session_dir=None):
     try:
@@ -70,27 +82,22 @@ def generate_excel(upload=True, upload_outputs=False, session_dir=None):
         else:
             artifacts_dir = os.path.join(project_root, "tests", "artifacts")
             session_id = "LATEST"
-        
         ts_part = session_id.replace("RUN_", "") if session_id.startswith("RUN_") else time.strftime("%Y-%m-%d_%H-%M-%S")
         output_path = os.path.join(artifacts_dir, f"Jarvis_Benchmark_Report_{ts_part}.xlsx")
-        
         service = get_gdrive_service() if upload else None
         asset_mgr = GDriveAssetManager(service) if service else None
         
-        # --- HIERARCHY SETUP ---
         master_id = asset_mgr.get_folder_id("Jarvis") if asset_mgr else None
         inputs_id = asset_mgr.get_folder_id("Inputs", master_id) if asset_mgr else None
         outputs_root_id = asset_mgr.get_folder_id("Outputs", master_id) if asset_mgr else None
         session_out_id = asset_mgr.get_folder_id(session_id, outputs_root_id) if asset_mgr else None
         session_out_link = asset_mgr.get_folder_link(session_id, outputs_root_id) if asset_mgr else None
 
-        # --- DISCOVERY PHASE ---
         input_paths = set(); output_paths = set(); log_paths = set(); domains = ["stt", "tts", "llm", "vlm", "sts"]
         all_data = {}
         for d in domains:
             fname = f"{d}.json" if session_dir else f"latest_{d}.json"
             all_data[d] = load_json(os.path.join(artifacts_dir, fname))
-
         for d, data in all_data.items():
             for entry in data:
                 for s in entry.get('scenarios', []):
@@ -120,7 +127,6 @@ def generate_excel(upload=True, upload_outputs=False, session_dir=None):
         if os.path.exists(sys_info_path):
             import yaml
             with open(sys_info_path, "r", encoding="utf-8") as f: sys_info = yaml.safe_load(f)
-            
             run_val = f'=HYPERLINK("{session_out_link}", "{session_id}")' if session_out_link else session_id
             summary_rows = [
                 {"Category": "Session", "Metric": "Run ID", "Value": run_val},
@@ -167,13 +173,15 @@ def generate_excel(upload=True, upload_outputs=False, session_dir=None):
                     if domain == "STT": row.update({"Audio": get_link(s.get('input_file'), inputs_id), "Result": response, "Match %": s.get('match_pct', 0)})
                     elif domain == "TTS": row.update({"Audio": get_link(s.get('output_file'), session_out_id), "Input": prompt})
                     elif domain == "LLM": row.update({"Prompt": prompt, "Response": response, "TTFT": s.get('ttft'), "TPS": s.get('tps')})
-                    elif domain == "VLM": row.update({"Media": get_link(s.get('input_file'), inputs_id), "Prompt": prompt, "Response": response})
-                    elif domain == "STS": row.update({"Input": get_link(s.get('input_file'), inputs_id), "Output": get_link(s.get('output_file'), session_out_id), "Text": response})
+                    elif domain == "VLM": row.update({"Media": get_link(s.get('input_file'), inputs_id), "Prompt": prompt, "Response": response, "TTFT": s.get('ttft'), "TPS": s.get('tps')})
+                    elif domain == "STS":
+                        m = s.get('metrics', {})
+                        row.update({"Input": get_link(s.get('input_file'), inputs_id), "Output": get_link(s.get('output_file'), session_out_id), "Text": response, "TTFT": s.get('ttft'), "STT Inf": s.get('stt_inf') or m.get('stt', [0,0])[1], "LLM Tot": s.get('llm_tot') or (m.get('llm', [0,0])[1] - m.get('llm', [0,0])[0]), "TTS Inf": s.get('tts_inf') or (m.get('tts', [0,0])[1] - m.get('tts', [0,0])[0])})
+                    
                     row.update({"Execution (s)": s.get('duration'), "Setup (s)": s.get('setup_time', 0), "Cleanup (s)": s.get('cleanup_time', 0), "VRAM Peak": s.get('vram_peak', 0)})
                     rows.append(row)
             if rows:
-                sheets[domain] = pd.DataFrame(rows)
-                has_any_data = True
+                sheets[domain] = pd.DataFrame(rows); has_any_data = True
 
         if not has_any_data: return None
         from openpyxl.styles import Font, PatternFill, Alignment
@@ -183,8 +191,7 @@ def generate_excel(upload=True, upload_outputs=False, session_dir=None):
                 df.to_excel(writer, sheet_name=name, index=False)
                 worksheet = writer.sheets[name]
                 last_data_row = len(df) + 1
-                worksheet.auto_filter.ref = f"A1:{chr(64 + len(df.columns))}{last_data_row}"
-                worksheet.freeze_panes = "B2"
+                worksheet.auto_filter.ref = f"A1:{chr(64 + len(df.columns))}{last_data_row}"; worksheet.freeze_panes = "B2"
                 header_font = Font(bold=True, color="FFFFFF"); header_fill = PatternFill(start_color="4F81BD", end_color="4F81BD", fill_type="solid")
                 for cell in worksheet[1]: cell.font = header_font; cell.fill = header_fill
                 for row_idx in range(2, last_data_row + 1): worksheet.row_dimensions[row_idx].height = 15
@@ -214,31 +221,18 @@ def generate_excel(upload=True, upload_outputs=False, session_dir=None):
                     elif "(s)" in col or col in ["TTFT", "TPS"] or "VRAM" in col:
                         rule = ColorScaleRule(start_type='min', start_color='C6EFCE', mid_type='percentile', mid_value=50, mid_color='FFEB9C', end_type='max', end_color='FFC7CE')
                         worksheet.conditional_formatting.add(range_str, rule)
-        print(f"📊 Excel Report Generated: {output_path}")
-        return output_path
+        print(f"📊 Excel Report Generated: {output_path}"); return output_path
     except Exception as e:
         print(f"❌ Excel Error: {e}"); traceback.print_exc(); return None
 
 def generate_and_upload_report(session_dir, upload_report=True, upload_outputs=False, open_browser=True):
-    project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    service = get_gdrive_service() if upload_report else None
-    asset_mgr = GDriveAssetManager(service) if service else None
-    
-    # 1. Excel Generation
     path = generate_excel(upload=upload_report, upload_outputs=upload_outputs, session_dir=session_dir)
-    if not path: return None
-    
-    # 2. Report Upload to Master 'Jarvis' folder
     link = None
-    if upload_report:
-        master_id = asset_mgr.get_folder_id("Jarvis")
-        print(f"📤 Uploading report to GDrive master folder...")
-        link = asset_mgr.sync_file(path, master_id, overwrite=False)
-        if link:
-            print(f"✅ GDrive Link: {link}")
-            if open_browser:
-                print(f"🌐 Opening report in browser...")
-                webbrowser.open(link)
+    if upload_report and path:
+        link = upload_to_gdrive(path)
+        if link and open_browser:
+            print(f"✅ GDrive Link: {link}\n🌐 Opening report in browser...")
+            webbrowser.open(link)
     return link or path
 
 def main():

@@ -196,6 +196,7 @@ class LifecycleManager:
 
                 # --- RESOLVED ID for Reporting ---
                 res_id = f"VL_{model.upper()}"
+                if kwargs.get('nativevideo'): res_id += "#NATIVE"
                 if kwargs.get('stream'): res_id += "#STREAM"
                 res_id += f"#CTX={max_len}"
                 if limits.get('image', 1) > 1: res_id += f"#IMG_LIM={limits['image']}"
@@ -275,6 +276,9 @@ class LifecycleManager:
             flags = llm.get('flags', {})
             model_id = llm['model'].upper()
             name = f"{prefix}{model_id}"
+            
+            if flags.get('nativevideo') or kwargs.get('nativevideo'):
+                name += "#NATIVE"
             
             if flags.get('stream') or self.full: # Heuristic for display
                 name += "#STREAM"
