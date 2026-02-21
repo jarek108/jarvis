@@ -327,9 +327,11 @@ def generate_excel(upload=True, upload_outputs=False, session_dir=None):
                         worksheet.conditional_formatting.add(range_str, FormulaRule(formula=[f'{col_letter}2="PASSED"'], stopIfTrue=True, fill=green_fill))
                         worksheet.conditional_formatting.add(range_str, FormulaRule(formula=[f'{col_letter}2="FAILED"'], stopIfTrue=True, fill=red_fill))
                         worksheet.conditional_formatting.add(range_str, FormulaRule(formula=[f'{col_letter}2="MISSING"'], stopIfTrue=True, fill=yellow_fill))
-                    elif col in ["Exec", "Setup", "Cleanup", "VRAM", "TTFT", "TPS", "RTF", "WPS", "CPS"]:
+                    elif col in ["Exec", "Setup", "Cleanup", "VRAM", "TTFT", "TPS", "RTF", "WPS", "CPS", "Match %", "STT Inf", "LLM Tot", "TTS Inf"]:
                         rule = ColorScaleRule(start_type='min', start_color='C6EFCE', mid_type='percentile', mid_value=50, mid_color='FFEB9C', end_type='max', end_color='FFC7CE')
-                        if col in ["TPS", "WPS", "CPS"]: rule = ColorScaleRule(start_type='min', start_color='FFC7CE', mid_type='percentile', mid_value=50, mid_color='FFEB9C', end_type='max', end_color='C6EFCE')
+                        # "Higher is better" metrics
+                        if col in ["TPS", "WPS", "CPS", "Match %"]: 
+                            rule = ColorScaleRule(start_type='min', start_color='FFC7CE', mid_type='percentile', mid_value=50, mid_color='FFEB9C', end_type='max', end_color='C6EFCE')
                         worksheet.conditional_formatting.add(range_str, rule)
         print(f"📊 Excel Report Generated: {output_path}"); return output_path
     except Exception as e:
