@@ -66,11 +66,8 @@ def find_log_fallback(artifacts_dir, model_id, domain_type):
 def infer_detailed_name(model_id):
     if not model_id or model_id == "N/A": return model_id
     name = model_id.upper()
-    # Support legacy nativevideo flag in loadout name
     if "NATIVEVIDEO" in name and "#NATIVE" not in name:
         name = name.replace("NATIVEVIDEO", "#NATIVE")
-    
-    # Only infer CTX for LLM/VLM engines
     if "#CTX=" not in name and ("OL_" in name or "VL_" in name):
         ctx = "4096" if "OL_" in name else "16384"
         name += f"#CTX={ctx}"
@@ -113,8 +110,7 @@ def generate_excel(upload=True, upload_outputs=False, session_dir=None):
                             m_type = "llm" if any(x in m_id.lower() for x in ["ol_", "vl_", "vllm:"]) else d
                             l_path = find_log_fallback(artifacts_dir, m_id, m_type)
                     if l_path:
-                        s['log_path'] = l_path
-                        log_paths.add(l_path)
+                        s['log_path'] = l_path; log_paths.add(l_path)
 
         input_paths = [os.path.abspath(os.path.join(project_root, p)) for p in input_paths if p]
         output_paths = [os.path.abspath(os.path.join(project_root, p)) for p in output_paths if p]
@@ -141,8 +137,7 @@ def generate_excel(upload=True, upload_outputs=False, session_dir=None):
             plan = sys_info.get("plan", {})
             summary_rows.append({"Category": "Plan", "Metric": "Name", "Value": plan.get("name", "N/A")})
             summary_rows.append({"Category": "Plan", "Metric": "Description", "Value": plan.get("description", "N/A")})
-            sheets["Summary"] = pd.DataFrame(summary_rows)
-            has_any_data = True
+            sheets["Summary"] = pd.DataFrame(summary_rows); has_any_data = True
 
         def get_link(local_path, folder_id=None):
             if not local_path: return "N/A"
@@ -171,30 +166,14 @@ def generate_excel(upload=True, upload_outputs=False, session_dir=None):
                     
                     prompt = str(s.get('input_text', 'N/A')).replace('\n', ' ').replace('\r', ' ')
                     response = str(s.get('text') or s.get('raw_text') or s.get('llm_text') or "N/A").replace('\n', ' ').replace('\r', ' ')
-                    model_key = "Setup" if domain == "STS" else "Model"
-                    row = {model_key: model_val, "Scenario": s.get('name'), "Status": s.get('status')}
-                                        if domain == "STT":
-                                            row.update({
-                                                "Audio": get_link(s.get('input_file'), inputs_id), 
-                                                "Result": response, 
-                                                "Match %": s.get('match_pct', 0),
-                                                "RTF": s.get('rtf'),
-                                                "WPS": s.get('wps')
-                                            })
-                                        elif domain == "TTS":
-                                            row.update({
-                                                "Audio": get_link(s.get('output_file'), session_out_id), 
-                                                "Input": prompt,
-                                                "CPS": s.get('cps'),
-                                                "WPS": s.get('wps')
-                                            })
-                    
+                    row = {"Loadout": model_val, "Scenario": s.get('name'), "Status": s.get('status')}
+                    if domain == "STT": row.update({"Audio": get_link(s.get('input_file'), inputs_id), "Result": response, "Match %": s.get('match_pct', 0), "RTF": s.get('rtf'), "WPS": s.get('wps')})
+                    elif domain == "TTS": row.update({"Audio": get_link(s.get('output_file'), session_out_id), "Input": prompt, "CPS": s.get('cps'), "WPS": s.get('wps')})
                     elif domain == "LLM": row.update({"Prompt": prompt, "Response": response, "TTFT": s.get('ttft'), "TPS": s.get('tps')})
                     elif domain == "VLM": row.update({"Media": get_link(s.get('input_file'), inputs_id), "Prompt": prompt, "Response": response, "TTFT": s.get('ttft'), "TPS": s.get('tps')})
                     elif domain == "STS":
                         m = s.get('metrics', {})
                         row.update({"Input": get_link(s.get('input_file'), inputs_id), "Output": get_link(s.get('output_file'), session_out_id), "Text": response, "TTFT": s.get('ttft'), "STT Inf": s.get('stt_inf') or m.get('stt', [0,0])[1], "LLM Tot": s.get('llm_tot') or (m.get('llm', [0,0])[1] - m.get('llm', [0,0])[0]), "TTS Inf": s.get('tts_inf') or (m.get('tts', [0,0])[1] - m.get('tts', [0,0])[0])})
-                    
                     row.update({"Execution (s)": s.get('duration'), "Setup (s)": s.get('setup_time', 0), "Cleanup (s)": s.get('cleanup_time', 0), "VRAM Peak": s.get('vram_peak', 0)})
                     rows.append(row)
             if rows:
@@ -206,8 +185,7 @@ def generate_excel(upload=True, upload_outputs=False, session_dir=None):
         with pd.ExcelWriter(output_path, engine='openpyxl') as writer:
             for name, df in sheets.items():
                 df.to_excel(writer, sheet_name=name, index=False)
-                worksheet = writer.sheets[name]
-                last_data_row = len(df) + 1
+                worksheet = writer.sheets[name]; last_data_row = len(df) + 1
                 worksheet.auto_filter.ref = f"A1:{chr(64 + len(df.columns))}{last_data_row}"; worksheet.freeze_panes = "B2"
                 header_font = Font(bold=True, color="FFFFFF"); header_fill = PatternFill(start_color="4F81BD", end_color="4F81BD", fill_type="solid")
                 for cell in worksheet[1]: cell.font = header_font; cell.fill = header_fill
@@ -220,15 +198,14 @@ def generate_excel(upload=True, upload_outputs=False, session_dir=None):
                         elif col == "Metric": worksheet.column_dimensions[col_letter].width = 25
                         elif col == "Value": worksheet.column_dimensions[col_letter].width = 60
                         continue
+                    if col == "Loadout": worksheet.column_dimensions[col_letter].width = 35; continue
                     if any(x in col.lower() for x in ["audio", "media", "input", "output", "link"]):
                         worksheet.column_dimensions[col_letter].width = 15
                         for row_idx in range(2, last_data_row + 1): worksheet.cell(row=row_idx, column=idx+1).alignment = Alignment(horizontal='center', wrap_text=False)
                     else:
-                        series = df[col]; max_len = max((series.astype(str).map(len).max(), len(str(series.name)))) + 2
+                        series = df[col]; max_len = max((series.astype(str).map(len).max(), len(str(series.name)))) + 4
                         max_len = min(max_len, 80); worksheet.column_dimensions[col_letter].width = max_len
-                green_fill = PatternFill(start_color="C6EFCE", end_color="C6EFCE", fill_type="solid")
-                red_fill = PatternFill(start_color="FFC7CE", end_color="FFC7CE", fill_type="solid")
-                yellow_fill = PatternFill(start_color="FFEB9C", end_color="FFEB9C", fill_type="solid")
+                green_fill = PatternFill(start_color="C6EFCE", end_color="C6EFCE", fill_type="solid"); red_fill = PatternFill(start_color="FFC7CE", end_color="FFC7CE", fill_type="solid"); yellow_fill = PatternFill(start_color="FFEB9C", end_color="FFEB9C", fill_type="solid")
                 for idx, col in enumerate(df.columns):
                     col_letter = chr(65 + idx); range_str = f"{col_letter}2:{col_letter}{last_data_row}"
                     if col == "Status":
@@ -237,9 +214,7 @@ def generate_excel(upload=True, upload_outputs=False, session_dir=None):
                         worksheet.conditional_formatting.add(range_str, FormulaRule(formula=[f'{col_letter}2="MISSING"'], stopIfTrue=True, fill=yellow_fill))
                     elif "(s)" in col or col in ["TTFT", "TPS", "RTF", "WPS", "CPS"] or "VRAM" in col:
                         rule = ColorScaleRule(start_type='min', start_color='C6EFCE', mid_type='percentile', mid_value=50, mid_color='FFEB9C', end_type='max', end_color='FFC7CE')
-                        # Special case for throughput where higher is better (Green = High)
-                        if col in ["TPS", "WPS", "CPS"]:
-                            rule = ColorScaleRule(start_type='min', start_color='FFC7CE', mid_type='percentile', mid_value=50, mid_color='FFEB9C', end_type='max', end_color='C6EFCE')
+                        if col in ["TPS", "WPS", "CPS"]: rule = ColorScaleRule(start_type='min', start_color='FFC7CE', mid_type='percentile', mid_value=50, mid_color='FFEB9C', end_type='max', end_color='C6EFCE')
                         worksheet.conditional_formatting.add(range_str, rule)
         print(f"📊 Excel Report Generated: {output_path}"); return output_path
     except Exception as e:
