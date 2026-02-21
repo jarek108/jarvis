@@ -57,6 +57,7 @@ def upload_to_gdrive(file_path):
     return link
 
 def generate_excel(upload=True, upload_outputs=False, session_dir=None):
+    """Core logic for creating the Excel file and syncing artifacts."""
     try:
         project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         if session_dir:
@@ -124,19 +125,14 @@ def generate_excel(upload=True, upload_outputs=False, session_dir=None):
             if not local_path: return "N/A"
             abs_p = os.path.abspath(os.path.join(project_root, local_path))
             fname = os.path.basename(abs_p)
-            
-            # If we uploaded it, we have it in cache
             if asset_mgr:
                 fid = asset_mgr.get_folder_id(folder_name)
                 cache = asset_mgr.file_cache.get(fid, {})
                 if fname in cache:
                     label = "▶️ Play" if ".wav" in fname else "👁️ View"
                     return f'=HYPERLINK("{cache[fname]}", "{label}")'
-            
-            # Fallback to local path link
             return f'=HYPERLINK("{abs_p}", "📁 Local File")'
 
-        # Domain processing logic (compacted)
         for domain in ["STT", "TTS", "LLM", "VLM", "STS"]:
             fname = f"{domain.lower()}.json" if session_dir else f"latest_{domain.lower()}.json"
             data = load_json(os.path.join(artifacts_dir, fname))
@@ -170,22 +166,15 @@ def generate_excel(upload=True, upload_outputs=False, session_dir=None):
             for name, df in sheets.items():
                 df.to_excel(writer, sheet_name=name, index=False)
                 worksheet = writer.sheets[name]
-                
-                # 1. AutoFilter
                 last_data_row = len(df) + 1
                 worksheet.auto_filter.ref = f"A1:{chr(64 + len(df.columns))}{last_data_row}"
-                
-                # 2. Freeze Panes (Header row)
                 worksheet.freeze_panes = "A2"
-                
-                # 3. Header Style
                 header_font = Font(bold=True, color="FFFFFF")
                 header_fill = PatternFill(start_color="4F81BD", end_color="4F81BD", fill_type="solid")
                 for cell in worksheet[1]:
                     cell.font = header_font
                     cell.fill = header_fill
 
-                # 4. Column Widths
                 for idx, col in enumerate(df.columns):
                     col_letter = chr(65 + idx)
                     if name == "Summary":
@@ -193,8 +182,6 @@ def generate_excel(upload=True, upload_outputs=False, session_dir=None):
                         elif col == "Metric": worksheet.column_dimensions[col_letter].width = 25
                         elif col == "Value": worksheet.column_dimensions[col_letter].width = 60
                         continue
-
-                    # Media columns
                     if any(x in col.lower() for x in ["audio", "media", "input", "output", "link"]):
                         worksheet.column_dimensions[col_letter].width = 15
                         for row_idx in range(2, len(df) + 2):
@@ -205,7 +192,6 @@ def generate_excel(upload=True, upload_outputs=False, session_dir=None):
                         max_len = min(max_len, 80)
                         worksheet.column_dimensions[col_letter].width = max_len
 
-                # 5. Conditional Formatting
                 green_fill = PatternFill(start_color="C6EFCE", end_color="C6EFCE", fill_type="solid")
                 red_fill = PatternFill(start_color="FFC7CE", end_color="FFC7CE", fill_type="solid")
                 yellow_fill = PatternFill(start_color="FFEB9C", end_color="FFEB9C", fill_type="solid")
@@ -213,22 +199,12 @@ def generate_excel(upload=True, upload_outputs=False, session_dir=None):
                 for idx, col in enumerate(df.columns):
                     col_letter = chr(65 + idx)
                     range_str = f"{col_letter}2:{col_letter}{len(df)+1}"
-                    
                     if col == "Status":
                         worksheet.conditional_formatting.add(range_str, FormulaRule(formula=[f'{col_letter}2="PASSED"'], stopIfTrue=True, fill=green_fill))
                         worksheet.conditional_formatting.add(range_str, FormulaRule(formula=[f'{col_letter}2="FAILED"'], stopIfTrue=True, fill=red_fill))
                         worksheet.conditional_formatting.add(range_str, FormulaRule(formula=[f'{col_letter}2="MISSING"'], stopIfTrue=True, fill=yellow_fill))
-                    
-                    elif "(s)" in col or col in ["TTFT", "TPS"]:
-                        rule = ColorScaleRule(start_type='min', start_color='C6EFCE', 
-                                              mid_type='percentile', mid_value=50, mid_color='FFEB9C',
-                                              end_type='max', end_color='FFC7CE')
-                        worksheet.conditional_formatting.add(range_str, rule)
-                    
-                    elif "VRAM" in col:
-                        rule = ColorScaleRule(start_type='min', start_color='C6EFCE', 
-                                              mid_type='percentile', mid_value=50, mid_color='FFEB9C',
-                                              end_type='max', end_color='FFC7CE')
+                    elif "(s)" in col or col in ["TTFT", "TPS"] or "VRAM" in col:
+                        rule = ColorScaleRule(start_type='min', start_color='C6EFCE', mid_type='percentile', mid_value=50, mid_color='FFEB9C', end_type='max', end_color='FFC7CE')
                         worksheet.conditional_formatting.add(range_str, rule)
         
         print(f"📊 Excel Report Generated: {output_path}")
@@ -236,28 +212,32 @@ def generate_excel(upload=True, upload_outputs=False, session_dir=None):
     except Exception as e:
         print(f"❌ Excel Error: {e}"); traceback.print_exc(); return None
 
-def main():
-    parser = argparse.ArgumentParser(description="Generate and upload Jarvis benchmark reports.")
-    # Standard Boolean toggle (Defaults to True)
-    parser.add_argument("--upload-report", action=argparse.BooleanOptionalAction, default=True,
-                        help="Upload report and artifacts to GDrive (Default: True)")
-    
-    # Opt-in for transient data (Defaults to False)
-    parser.add_argument("--upload-outputs", action="store_true", 
-                        help="Include transient output audio/video in GDrive upload")
-    
-    parser.add_argument("--dir", type=str, help="Path to a specific session directory")
-    args = parser.parse_args()
-    
-    path = generate_excel(upload=args.upload_report, upload_outputs=args.upload_outputs, session_dir=args.dir)
+def generate_and_upload_report(session_dir, upload_report=True, upload_outputs=False, open_browser=True):
+    """Unified entry point for both standalone and runner modes."""
+    path = generate_excel(upload=upload_report, upload_outputs=upload_outputs, session_dir=session_dir)
     link = None
-    if args.upload_report and path:
+    if upload_report and path:
         link = upload_to_gdrive(path)
-        if link:
+        if link and open_browser:
             print(f"✅ GDrive Link: {link}")
             print(f"🌐 Opening report in browser...")
             webbrowser.open(link)
     return link or path
+
+def main():
+    parser = argparse.ArgumentParser(description="Generate and upload Jarvis benchmark reports.")
+    parser.add_argument("--upload-report", action=argparse.BooleanOptionalAction, default=True, help="Upload report and artifacts to GDrive")
+    parser.add_argument("--upload-outputs", action="store_true", help="Include transient output artifacts")
+    parser.add_argument("--no-open", action="store_false", dest="open_browser", help="Don't open browser automatically")
+    parser.add_argument("--dir", type=str, help="Path to a specific session directory")
+    args = parser.parse_args()
+    
+    return generate_and_upload_report(
+        session_dir=args.dir, 
+        upload_report=args.upload_report, 
+        upload_outputs=args.upload_outputs,
+        open_browser=args.open_browser
+    )
 
 if __name__ == "__main__":
     main()

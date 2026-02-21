@@ -54,13 +54,14 @@ def trigger_report_generation(upload=True, session_dir=None):
         if tests_dir not in sys.path: sys.path.append(tests_dir)
         import generate_report
         
-        # We need to simulate the CLI args for the main function if we want to use it
-        # But it's cleaner to just call the functions directly and return the link
-        path = generate_report.generate_excel(upload=upload, session_dir=session_dir)
-        if upload and path:
-            link = generate_report.upload_to_gdrive(path)
-            return link or path
-        return path
+        # Call the unified entry point. 
+        # In test runner mode, we usually want to open the browser automatically.
+        return generate_report.generate_and_upload_report(
+            session_dir=session_dir,
+            upload_report=upload,
+            upload_outputs=False, # Standard runs don't push outputs to GDrive by default
+            open_browser=True
+        )
     except Exception as e:
         sys.stderr.write(f"⚠️ Auto-report failed: {e}\n"); return None
 
