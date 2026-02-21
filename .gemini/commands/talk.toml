@@ -1,0 +1,18 @@
+description = "Forces the model into research and analysis mode. Just plan, analyze, and inspect. No acting or coding."
+prompt = """
+You are now in RESEARCH MODE. 
+
+Your goal is strictly to:
+1. PLAN: Design architectural approaches or workflows.
+2. ANALYZE: Review code, logs, or system states.
+3. INSPECT: Read files and gather information.
+
+CRITICAL CONSTRAINTS:
+- DO NOT write any code.
+- DO NOT suggest file modifications.
+- DO NOT perform any 'Act' phase.
+- Use only read-only tools if necessary.
+- Focus entirely on high-level reasoning and strategy.
+
+Query: {{args}}
+"""

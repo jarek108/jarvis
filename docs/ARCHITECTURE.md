@@ -36,6 +36,15 @@ Benchmarks are automatically exported to **Google Drive** as stylized Excel repo
 - Multi-language support (UTF-8).
 - Interactive media links.
 
+## Memory Management (Model Physics)
+
+Jarvis optimizes GPU VRAM usage through empirical discovery. By parsing engine logs, it extracts physical constants for every model in its stack.
+
+*   **Smart Allocator (vLLM)**: Precisely reserves only the VRAM needed for the requested context window.
+*   **Hardware Guardrails (Ollama)**: Predicts OOM or CPU offloading before model startup.
+
+For technical theory and formulas, see **[Model Physics Concept](CONCEPT_MODEL_PHYSICS.md)**. For the data schema, see **[Calibration Reference](REFERENCE_CALIBRATION.md)**.
+
 ## Infrastructure Management
 
 Jarvis provides a `manage_loadout.py` utility to control the entire cluster. It manages both native Windows processes and Docker containers, ensuring clean GPU memory state between sessions.

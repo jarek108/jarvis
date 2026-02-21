@@ -1,0 +1,23 @@
+description = "Analyzes, plans, and updates documentation using the Diátaxis framework (Tutorials, How-to, Reference, Concepts)."
+prompt = """
+You are now in DOCUMENTATION MODE, strictly following the Diátaxis framework.
+
+Your goal is to ensure documentation is accurate, complete, and correctly categorized into the four Diátaxis quadrants:
+1. TUTORIALS (Learning-oriented): Lessons that allow the user to learn by doing.
+2. HOW-TO GUIDES (Task-oriented): Practical steps to achieve a specific goal or solve a problem.
+3. REFERENCE (Information-oriented): Technical descriptions of the machinery (API, CLI flags, schemas).
+4. CONCEPTS/EXPLANATION (Understanding-oriented): Background context, theory, and architectural discussions.
+
+Topic: {{args}}
+
+Process:
+1. ANALYZE: Map existing documentation in `docs/` and `GEMINI.MD` to these four quadrants.
+2. IDENTIFY GAPS: Find missing quadrants or content that is misplaced (e.g., conceptual theory inside a how-to guide).
+3. PLAN: Define which files to create or modify to satisfy all four quadrants for the topic.
+4. EXECUTE: Apply surgical updates. Adhere to project style and technical precision.
+
+Engineering Standards:
+- Maintain strict separation between the four quadrants.
+- Consolidate logic into clean abstractions.
+- Never compromise idiomatic quality or completeness.
+"""

@@ -131,21 +131,24 @@ For a deep dive on why these parameters matter (and why VRAM usage looks static)
 
 ---
 
-## 7. Model Calibration
+## 7. Model Calibration (How-to)
 
-To enable the **Smart Allocator** (vLLM) or **Hardware Guardrails** (Ollama), you must calibrate new models once. This generates a physics file in `model_calibrations/`.
+Calibration translates raw logs into the physical constants Jarvis needs for VRAM management.
 
-Calibration is a **Zero-Config** log-parsing process. The engine and model name are auto-detected from the log content.
+### How to Calibrate a Single Model
+1.  Run the model once to generate a log file.
+2.  Run the calibrator:
+    ```powershell
+    python utils/calibrate_models.py path/to/your.log
+    ```
 
-### Step 1: Capture a Log
-*   **vLLM**: `docker logs vllm-server > model_startup.log`
-*   **Ollama**: Locate the log at `%LOCALAPPDATA%\Ollama\server.log`.
-
-### Step 2: Calibrate
-Simply point the script to the log file:
+### How to Refresh the Entire Physics Database
+Use this after a hardware upgrade (e.g., more VRAM) or a major engine update (Ollama/vLLM version bump).
 ```powershell
-python utils/calibrate_models.py path/to/your.log
+python utils/calibrate_models.py model_calibrations/source_logs/
 ```
 
-**Output:**
-A YAML file (e.g., `ol_qwen2.5-0.5b.yaml`) containing `base_vram_gb` and `kv_cache_gb_per_10k`. The source log is archived in `model_calibrations/source_logs/` for traceability.
+### How to Verify a Specification
+1.  Open `model_calibrations/[model_id].yaml`.
+2.  Check if `base_vram_gb` matches your model's weight size.
+3.  For more details, see the **[Calibration Reference](REFERENCE_CALIBRATION.md)** and the **[Model Physics Concept](CONCEPT_MODEL_PHYSICS.md)**.
