@@ -16,10 +16,8 @@ import utils
 def parse_size_gb(size_str):
     """Converts sizes like '18.1 GiB', '876.0 MiB', '0.93 GB' to float GB."""
     if not size_str: return 0.0
-    # Aggressive cleanup
     size_str = size_str.strip().replace('"', '').replace('(', '').replace(')', '')
     
-    # Match value and unit
     m = re.match(r"([\d\.]+)\s*([a-zA-Z]+)", size_str)
     if not m: return 0.0
     
@@ -34,11 +32,13 @@ def parse_size_gb(size_str):
 
 def save_calibration(model_id, engine, base_vram, gb_per_10k, source_tokens, source_cache_gb, log_source, project_root):
     cal_dir = os.path.join(project_root, "model_calibrations")
-    os.makedirs(cal_dir, exist_ok=True)
+    logs_dir = os.path.join(cal_dir, "source_logs")
+    os.makedirs(logs_dir, exist_ok=True)
+    
     prefix = "ol_" if engine == "ollama" else "vl_"
     safe_name = prefix + model_id.replace("/", "--").replace(":", "-").lower()
     yaml_path = os.path.join(cal_dir, f"{safe_name}.yaml")
-    dest_log_path = os.path.join(cal_dir, f"{safe_name}.log")
+    dest_log_path = os.path.join(logs_dir, f"{safe_name}.log")
     
     output_data = {
         "id": model_id, "engine": engine,
@@ -49,12 +49,17 @@ def save_calibration(model_id, engine, base_vram, gb_per_10k, source_tokens, sou
             "source_tokens": source_tokens, "source_cache_gb": round(source_cache_gb, 4)
         }
     }
+    
     with open(yaml_path, "w", encoding="utf-8") as f: 
         yaml.dump(output_data, f, sort_keys=False)
     
     if log_source and os.path.exists(log_source):
-        shutil.copy(log_source, dest_log_path)
-        print(f"💾 Log archived to: {os.path.relpath(dest_log_path, project_root)}")
+        # Normalize paths to check if they are the same
+        abs_src = os.path.abspath(log_source)
+        abs_dest = os.path.abspath(dest_log_path)
+        if abs_src != abs_dest:
+            shutil.copy(log_source, dest_log_path)
+            print(f"💾 Log archived to: {os.path.relpath(dest_log_path, project_root)}")
         
     print(f"✅ Specification saved: {os.path.relpath(yaml_path, project_root)}")
     return output_data
