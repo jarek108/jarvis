@@ -19,10 +19,34 @@ def detect_engine(content):
         return "vllm"
     
     # Ollama Signatures
-    if "source=server.go" in content or 'msg="' in content or "[GIN]" in content or "llama_kv_cache:" in content:
+    if "source=server.go" in content or 'msg="' in content or "[GIN]" in content or "llama_kv_cache:" in content or "clip_model_loader:" in content:
         return "ollama"
     
     return None
+
+def process_file(log_path, model_override=None, engine_override=None):
+    """Calibrates a single log file with error handling."""
+    try:
+        if not os.path.isfile(log_path):
+            return False
+
+        with open(log_path, "r", encoding="utf-8", errors="ignore") as f:
+            # Read sample for detection
+            sample = f.read(10000)
+        
+        engine = engine_override or detect_engine(sample)
+        if not engine:
+            print(f"⚠️  Skipping {os.path.basename(log_path)}: Could not auto-detect engine type.")
+            return False
+
+        if engine == "ollama":
+            calibrate_ollama(model_override, log_path, project_root)
+        else:
+            calibrate_vllm(model_override, log_path, project_root)
+        return True
+    except Exception as e:
+        print(f"💥 Error processing {os.path.basename(log_path)}: {e}")
+        return False
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
@@ -30,36 +54,38 @@ if __name__ == "__main__":
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  Fully Automated (Auto-Engine + Auto-Model):
+  Batch Calibrate Folder:
+    python utils/calibrate_model.py model_calibrations/source_logs/
+  
+  Single Log:
     python utils/calibrate_model.py my_log.log
   
   Manual Override:
     python utils/calibrate_model.py server.log --engine ollama --model gpt-oss:20b
         """
     )
-    parser.add_argument("log_file", type=str, help="Path to the log file to parse")
-    parser.add_argument("--model", type=str, help="Optional: Model ID (will auto-detect if omitted)")
-    parser.add_argument("--engine", type=str, choices=["vllm", "ollama"], help="Optional: Engine type (will auto-detect if omitted)")
+    parser.add_argument("path", type=str, help="Path to a log file or a directory of logs")
+    parser.add_argument("--model", type=str, help="Optional: Model ID override (only for single file mode)")
+    parser.add_argument("--engine", type=str, choices=["vllm", "ollama"], help="Optional: Engine type override")
     
     args = parser.parse_args()
     
-    if not os.path.exists(args.log_file):
-        print(f"❌ Log file not found: {args.log_file}")
+    if not os.path.exists(args.path):
+        print(f"❌ Path not found: {args.path}")
         sys.exit(1)
 
-    with open(args.log_file, "r", encoding="utf-8", errors="ignore") as f:
-        # Read first 10k chars for detection
-        sample = f.read(10000)
-    
-    engine = args.engine or detect_engine(sample)
-    
-    if not engine:
-        print("❌ Error: Could not auto-detect engine type. Please specify with --engine.")
-        sys.exit(1)
-
-    print(f"🤖 Detected Engine: {engine.upper()}")
-    
-    if engine == "ollama":
-        calibrate_ollama(args.model, args.log_file, project_root)
+    if os.path.isdir(args.path):
+        print(f"📂 Batch processing directory: {args.path}")
+        files = [os.path.join(args.path, f) for f in os.listdir(args.path) if os.path.isfile(os.path.join(args.path, f))]
+        
+        success_count = 0
+        for f_path in files:
+            # Skip hidden files or already generated yamls if any
+            if os.path.basename(f_path).startswith('.') or f_path.endswith('.yaml'):
+                continue
+            if process_file(f_path, engine_override=args.engine):
+                success_count += 1
+        
+        print(f"\n✨ Batch complete. Success: {success_count}/{len(files)}")
     else:
-        calibrate_vllm(args.model, args.log_file, project_root)
+        process_file(args.path, model_override=args.model, engine_override=args.engine)
