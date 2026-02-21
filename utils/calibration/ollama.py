@@ -7,7 +7,7 @@ import threading
 from .common import parse_size_gb, save_calibration
 import utils
 
-def extract_ollama_metrics(content):
+def extract_ollama_metrics(content, default_id=None):
     """Parses Ollama log content for memory metrics and model ID."""
     # High-level msg patterns
     re_total = re.compile(r'msg="total memory"\s+size="?([^ "]+)"?')
@@ -19,8 +19,8 @@ def extract_ollama_metrics(content):
     # Low-level llama.cpp patterns
     re_kv_low = re.compile(r'(?:llama_kv_cache:.*?size|KV buffer size)\s*=\s*([\d\.]+)\s*(\w+)i?B')
     re_tokens = re.compile(r'(?:llama_kv_cache: size|KV self size)\s*=\s*.*?\(\s*(\d+)\s*cells')
-    re_weight_low = re.compile(r'(?:model size:|model buffer size)\s*=\s*([\d\.]+)\s*(\w+)i?B')
-    re_compute_low = re.compile(r'compute buffer size\s*=\s*([\d\.]+)\s*(\w+)i?B')
+    re_weight_low = re.compile(r'(?:model size|model buffer size)\s*[:=]\s*([\d\.]+)\s*(\w+)i?B')
+    re_compute_low = re.compile(r'(?:compute buffer size|output buffer size)\s*[:=]\s*([\d\.]+)\s*(\w+)i?B')
     re_model_low = re.compile(r'general.name\s+=\s+(.*)')
 
     total_gb, kv_gb, cells, model_id = None, None, None, None
@@ -66,6 +66,9 @@ def extract_ollama_metrics(content):
         m = re_model_low.search(content)
         if m: model_id = m.group(1).strip()
 
+    if not model_id:
+        model_id = default_id
+
     if not total_gb and (weight_gb > 0 and kv_gb is not None):
         total_gb = weight_gb + kv_gb + compute_gb
 
@@ -81,7 +84,15 @@ def calibrate_from_log(model_id, log_path, project_root):
     with open(log_path, "r", encoding="utf-8", errors="ignore") as f:
         content = f.read()
     
-    total_gb, kv_gb, cells, extracted_id = extract_ollama_metrics(content)
+    # Derive default ID from filename (e.g. "ol_moondream.log" -> "moondream")
+    filename = os.path.basename(log_path)
+    default_id = None
+    if filename.startswith("ol_"):
+        default_id = filename[3:].replace(".log", "")
+    elif filename.endswith(".log"):
+        default_id = filename.replace(".log", "")
+
+    total_gb, kv_gb, cells, extracted_id = extract_ollama_metrics(content, default_id)
     
     target_id = model_id or extracted_id
     if not target_id:
@@ -90,11 +101,12 @@ def calibrate_from_log(model_id, log_path, project_root):
 
     if not (total_gb and kv_gb and cells):
         print(f"❌ Failed to extract metrics from {log_path}")
-        if not total_gb: print(f"  - Missing: Total/Weight metrics")
+        if not total_gb: print(f"  - Missing: Total/Weight metrics (Found Weight: {weight_gb if 'weight_gb' in locals() else 'None'} GB)")
         if not kv_gb: print("  - Missing: KV Cache metric")
         if not cells: print("  - Missing: Token cells metric")
         return None
         
     base_vram = total_gb - kv_gb
     gb_per_10k = (kv_gb / cells) * 10000
+    
     return save_calibration(target_id, "ollama", base_vram, gb_per_10k, cells, kv_gb, log_path, project_root)

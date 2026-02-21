@@ -1,10 +1,10 @@
-id: qwen2.5:0.5b
+id: Qwen2.5 0.5B Instruct
 engine: ollama
 constants:
   base_vram_gb: 0.856
   kv_cache_gb_per_10k: 0.114441
 metadata:
-  calibrated_at: '2026-02-21 03:10:24'
+  calibrated_at: '2026-02-21 03:23:47'
   gpu_vram_total_gb: 31.84
   source_tokens: 32768
   source_cache_gb: 0.375

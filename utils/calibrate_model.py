@@ -25,10 +25,11 @@ def detect_engine(content):
     return None
 
 def process_file(log_path, model_override=None, engine_override=None):
-    """Calibrates a single log file with error handling."""
+    """Calibrates a single log file with error handling. Returns status code."""
+    # Status codes: 0=Success, 1=Skipped, 2=Failed
     try:
         if not os.path.isfile(log_path):
-            return False
+            return 1
 
         with open(log_path, "r", encoding="utf-8", errors="ignore") as f:
             # Read sample for detection
@@ -37,16 +38,18 @@ def process_file(log_path, model_override=None, engine_override=None):
         engine = engine_override or detect_engine(sample)
         if not engine:
             print(f"⚠️  Skipping {os.path.basename(log_path)}: Could not auto-detect engine type.")
-            return False
+            return 1
 
+        result = None
         if engine == "ollama":
-            calibrate_ollama(model_override, log_path, project_root)
+            result = calibrate_ollama(model_override, log_path, project_root)
         else:
-            calibrate_vllm(model_override, log_path, project_root)
-        return True
+            result = calibrate_vllm(model_override, log_path, project_root)
+            
+        return 0 if result else 2
     except Exception as e:
         print(f"💥 Error processing {os.path.basename(log_path)}: {e}")
-        return False
+        return 2
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
@@ -78,14 +81,15 @@ Examples:
         print(f"📂 Batch processing directory: {args.path}")
         files = [os.path.join(args.path, f) for f in os.listdir(args.path) if os.path.isfile(os.path.join(args.path, f))]
         
-        success_count = 0
+        stats = {0: 0, 1: 0, 2: 0} # Success, Skipped, Failed
         for f_path in files:
-            # Skip hidden files or already generated yamls if any
+            # Skip hidden files, yamls, or non-logs if you prefer
             if os.path.basename(f_path).startswith('.') or f_path.endswith('.yaml'):
                 continue
-            if process_file(f_path, engine_override=args.engine):
-                success_count += 1
+            
+            code = process_file(f_path, engine_override=args.engine)
+            stats[code] += 1
         
-        print(f"\n✨ Batch complete. Success: {success_count}/{len(files)}")
+        print(f"\n✨ Batch complete. Success: {stats[0]}, Skipped: {stats[1]}, Failed: {stats[2]}")
     else:
         process_file(args.path, model_override=args.model, engine_override=args.engine)
