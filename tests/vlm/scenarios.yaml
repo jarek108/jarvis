@@ -13,9 +13,8 @@ three_objects:
 
 traffic:
   media: "traffic.mp4"
-  text: "Is the traffic moving fast or slow?"
+  text: "Which vehicle is the fastest?"
 
-# LONG FORM VLM (Vision to Story)
 vision_story:
   media: "bunny.mp4"
-  text: "Watch this video carefully and write a long, 500-word whimsical children's story based on the character's adventure. Describe the environment and the emotional journey."
+  text: "Watch this video carefully and write a detailed ~300-word description of the video. Describe the story, what characters are doing and what is the overall/final emotion behind it"

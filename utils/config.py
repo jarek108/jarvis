@@ -9,7 +9,7 @@ def load_config():
     if _config_cache is not None:
         return _config_cache
         
-    base_dir = os.path.dirname(os.path.abspath(__file__))
+    base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     config_path = os.path.join(base_dir, "config.yaml")
     with open(config_path, "r") as f:
         _config_cache = yaml.safe_load(f)
