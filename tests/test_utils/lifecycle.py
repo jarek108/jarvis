@@ -137,7 +137,7 @@ class LifecycleManager:
 
                 # --- RESOLVED ID for Reporting ---
                 res_id = f"OL_{model.upper()}"
-                if 'stream' in llm_flags or kwargs.get('stream'): res_id += "#STREAM"
+                if 'stream' in llm_flags or self.kwargs.get('stream'): res_id += "#STREAM"
                 res_id += f"#CTX={num_ctx}"
                 # ---------------------------------
 
@@ -197,8 +197,8 @@ class LifecycleManager:
 
                 # --- RESOLVED ID for Reporting ---
                 res_id = f"VL_{model.upper()}"
-                if kwargs.get('nativevideo'): res_id += "#NATIVE"
-                if kwargs.get('stream'): res_id += "#STREAM"
+                if self.kwargs.get('nativevideo'): res_id += "#NATIVE"
+                if self.kwargs.get('stream'): res_id += "#STREAM"
                 res_id += f"#CTX={max_len}"
                 if limits.get('image', 1) > 1: res_id += f"#IMG_LIM={limits['image']}"
                 if limits.get('video', 1) > 1: res_id += f"#VID_LIM={limits['video']}"
