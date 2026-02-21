@@ -90,11 +90,11 @@ def generate_excel(upload=True, upload_outputs=False, session_dir=None):
 
         if asset_mgr:
             input_folder_id = asset_mgr.get_folder_id("Jarvis_Artifacts_Inputs")
-            asset_mgr.batch_upload(input_paths, input_folder_id)
+            asset_mgr.batch_upload(input_paths, input_folder_id, label="input artifacts")
             
             if upload_outputs:
                 output_folder_id = asset_mgr.get_folder_id("Jarvis_Artifacts_Outputs")
-                asset_mgr.batch_upload(output_paths, output_folder_id)
+                asset_mgr.batch_upload(output_paths, output_folder_id, label="output artifacts")
             else:
                 print("ℹ️ Skipping output artifact upload (use --upload-outputs to force).")
 

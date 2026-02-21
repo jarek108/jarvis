@@ -117,14 +117,14 @@ class GDriveAssetManager:
         if folder_id in self.file_cache: self.file_cache[folder_id][file_name] = link
         return link
 
-    def batch_upload(self, local_paths, folder_id, max_workers=10):
+    def batch_upload(self, local_paths, folder_id, label="artifacts", max_workers=10):
         if not local_paths: return {}
         cache = self.preload_folder(folder_id)
         to_upload = [p for p in local_paths if os.path.basename(p) not in cache]
         if not to_upload:
-            print(f"✅ All artifacts already exist on GDrive.")
+            print(f"✅ All {label} already exist on GDrive.")
             return cache
-        print(f"🚀 Uploading {len(to_upload)} new artifacts in parallel...")
+        print(f"🚀 Uploading {len(to_upload)} new {label} in parallel...")
         def upload_one(path):
             try: return path, self.sync_file(path, folder_id, overwrite=False)
             except Exception as e:
