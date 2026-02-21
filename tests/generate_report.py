@@ -192,19 +192,45 @@ def generate_excel(upload=True, upload_outputs=False, session_dir=None):
                 for row_idx in range(2, last_data_row + 1): worksheet.row_dimensions[row_idx].height = 15
                 for idx, col in enumerate(df.columns):
                     col_letter = chr(65 + idx)
-                    for row_idx in range(2, last_data_row + 1): worksheet.cell(row=row_idx, column=idx+1).alignment = Alignment(wrap_text=False, vertical='center')
+                    
+                    # 1. Default alignment for data
+                    for row_idx in range(2, last_data_row + 1):
+                        worksheet.cell(row=row_idx, column=idx+1).alignment = Alignment(wrap_text=False, vertical='center')
+
+                    # 2. Specific Summary sizing
                     if name == "Summary":
                         if col == "Category": worksheet.column_dimensions[col_letter].width = 15
                         elif col == "Metric": worksheet.column_dimensions[col_letter].width = 25
                         elif col == "Value": worksheet.column_dimensions[col_letter].width = 60
                         continue
-                    if col == "Loadout": worksheet.column_dimensions[col_letter].width = 35; continue
+                    
+                    # 3. Loadout Column (Fixed)
+                    if col == "Loadout":
+                        worksheet.column_dimensions[col_letter].width = 35
+                        continue
+                    
+                    # 4. Media Columns (Centered)
                     if any(x in col.lower() for x in ["audio", "media", "input", "output", "link"]):
                         worksheet.column_dimensions[col_letter].width = 15
-                        for row_idx in range(2, last_data_row + 1): worksheet.cell(row=row_idx, column=idx+1).alignment = Alignment(horizontal='center', wrap_text=False)
-                    else:
-                        series = df[col]; max_len = max((series.astype(str).map(len).max(), len(str(series.name)))) + 4
-                        max_len = min(max_len, 80); worksheet.column_dimensions[col_letter].width = max_len
+                        for row_idx in range(2, last_data_row + 1):
+                            worksheet.cell(row=row_idx, column=idx+1).alignment = Alignment(horizontal='center', wrap_text=False)
+                        continue
+
+                    # 5. Numeric Columns (Right-aligned, auto-fit)
+                    is_numeric = "(s)" in col or col in ["TTFT", "TPS", "RTF", "WPS", "CPS", "Match %"] or "VRAM" in col or "Inf" in col or "Tot" in col
+                    
+                    series = df[col]
+                    # Filter out NaNs for width calculation to avoid 'nan' bloating
+                    valid_values = series.dropna().astype(str)
+                    max_val_len = valid_values.map(len).max() if not valid_values.empty else 0
+                    max_len = max(max_val_len, len(str(series.name))) + 4
+                    max_len = min(max_len, 80)
+                    
+                    worksheet.column_dimensions[col_letter].width = max_len
+                    
+                    if is_numeric:
+                        for row_idx in range(2, last_data_row + 1):
+                            worksheet.cell(row=row_idx, column=idx+1).alignment = Alignment(horizontal='right', wrap_text=False)
                 green_fill = PatternFill(start_color="C6EFCE", end_color="C6EFCE", fill_type="solid"); red_fill = PatternFill(start_color="FFC7CE", end_color="FFC7CE", fill_type="solid"); yellow_fill = PatternFill(start_color="FFEB9C", end_color="FFEB9C", fill_type="solid")
                 for idx, col in enumerate(df.columns):
                     col_letter = chr(65 + idx); range_str = f"{col_letter}2:{col_letter}{last_data_row}"
