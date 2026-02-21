@@ -173,7 +173,7 @@ def generate_excel(upload=True, upload_outputs=False, session_dir=None):
     except Exception as e:
         print(f"❌ Excel Error: {e}"); traceback.print_exc(); return None
 
-if __name__ == "__main__":
+def main():
     parser = argparse.ArgumentParser(description="Generate and upload Jarvis benchmark reports.")
     # Standard Boolean toggle (Defaults to True)
     parser.add_argument("--upload-report", action=argparse.BooleanOptionalAction, default=True,
@@ -187,8 +187,14 @@ if __name__ == "__main__":
     args = parser.parse_args()
     
     path = generate_excel(upload=args.upload_report, upload_outputs=args.upload_outputs, session_dir=args.dir)
+    link = None
     if args.upload_report and path:
         link = upload_to_gdrive(path)
         if link:
-            print(f"🌐 Opening report in browser: {link}")
+            print(f"✅ GDrive Link: {link}")
+            print(f"🌐 Opening report in browser...")
             webbrowser.open(link)
+    return link or path
+
+if __name__ == "__main__":
+    main()

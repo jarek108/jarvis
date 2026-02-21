@@ -52,9 +52,14 @@ def trigger_report_generation(upload=True, session_dir=None):
         project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
         tests_dir = os.path.join(project_root, "tests")
         if tests_dir not in sys.path: sys.path.append(tests_dir)
-        from generate_report import generate_excel, upload_to_gdrive
-        path = generate_excel(upload=upload, session_dir=session_dir)
-        if upload and path: upload_to_gdrive(path)
+        import generate_report
+        
+        # We need to simulate the CLI args for the main function if we want to use it
+        # But it's cleaner to just call the functions directly and return the link
+        path = generate_report.generate_excel(upload=upload, session_dir=session_dir)
+        if upload and path:
+            link = generate_report.upload_to_gdrive(path)
+            return link or path
         return path
     except Exception as e:
         sys.stderr.write(f"⚠️ Auto-report failed: {e}\n"); return None
@@ -124,9 +129,19 @@ class GDriveAssetManager:
         if not to_upload:
             print(f"✅ All {label} already exist on GDrive.")
             return cache
+        
         print(f"🚀 Uploading {len(to_upload)} new {label} in parallel...")
+        import threading
+        lock = threading.Lock()
+        
         def upload_one(path):
-            try: return path, self.sync_file(path, folder_id, overwrite=False)
+            try:
+                # The Google API service object is NOT thread-safe for uploads
+                # We use a lock to ensure sequential API calls but we still benefit 
+                # from parallel media preparation and IO.
+                with lock:
+                    link = self.sync_file(path, folder_id, overwrite=False)
+                return path, link
             except Exception as e:
                 print(f"  ❌ Failed to upload {os.path.basename(path)}: {e}")
                 return path, None
