@@ -1,9 +1,0 @@
-id: VL_QuantTrio/Qwen3-VL-30B-A3B-Instruct-AWQ
-constants:
-  base_vram_gb: 16.96
-  kv_cache_gb_per_10k: 0.915132
-metadata:
-  calibrated_at: '2026-02-20 10:45:00'
-  gpu_vram_total_gb: 31.8427734375
-  source_cache_gb: 4.93
-  source_tokens: 53872

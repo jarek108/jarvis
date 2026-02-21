@@ -135,17 +135,23 @@ For a deep dive on why these parameters matter (and why VRAM usage looks static)
 
 To enable the **Smart Allocator** (vLLM) or **Hardware Guardrails** (Ollama), you must calibrate new models once. This generates a physics file in `model_calibrations/`.
 
+Calibration is now a **Log-Parsing** process. You first capture a log from a successful model startup, then parse it.
+
 ### vLLM Calibration
-Spawns a container, loads the model, and extracts exact memory constants from the logs.
+1. Start the model (e.g., via a test run or manual docker command).
+2. Capture the log: `docker logs vllm-server > model_startup.log`
+3. Parse:
 ```powershell
-python utils/calibrate_model.py QuantTrio/Qwen3-VL-30B-A3B-Instruct-AWQ
+python utils/calibrate_model.py QuantTrio/Qwen3-VL-30B-A3B-Instruct-AWQ model_startup.log --engine vllm
 ```
 
 ### Ollama Calibration
-Restarts the local server, forces a model load, and measures the VRAM delta.
+1. Ensure Ollama is running and the model is loaded once.
+2. Locate the log (Windows: `%LOCALAPPDATA%\Ollama\server.log`).
+3. Parse:
 ```powershell
-python utils/calibrate_model.py gpt-oss:20b --engine ollama
+python utils/calibrate_model.py gpt-oss:20b $env:LOCALAPPDATA\Ollama\server.log --engine ollama
 ```
 
 **Output:**
-A YAML file (e.g., `vl_qwen3-vl-30b.yaml`) containing `base_vram_gb` and `kv_cache_gb_per_10k`.
+A YAML file (e.g., `vl_qwen3-vl-30b.yaml`) containing `base_vram_gb` and `kv_cache_gb_per_10k`. The source log is also archived for traceability.
