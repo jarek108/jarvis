@@ -50,10 +50,19 @@ def run_test_suite(variant_id, scenarios_to_run=None, trim_length=80, output_dir
                 with open(out_path, "wb") as f:
                     f.write(response.content)
                 
+                # Calculate audio duration
+                audio_dur = 0
+                try:
+                    import wave
+                    with wave.open(out_path, 'rb') as wf:
+                        audio_dur = wf.getnframes() / float(wf.getframerate())
+                except: pass
+
                 text_len = len(s['text'])
                 word_count = len(s['text'].split())
                 cps = text_len / duration if duration > 0 else 0
                 wps = word_count / duration if duration > 0 else 0
+                rtf = duration / audio_dur if audio_dur > 0 else 0
 
                 display_path = rel_path
                 if len(display_path) > trim_length:
@@ -63,9 +72,11 @@ def run_test_suite(variant_id, scenarios_to_run=None, trim_length=80, output_dir
                     "name": s['name'], 
                     "status": "PASSED", 
                     "duration": duration, 
+                    "audio_duration": audio_dur,
+                    "rtf": rtf,
                     "cps": cps,
                     "wps": wps,
-                    "result": f"CPS: {cps:.1f} | WPS: {wps:.1f}",
+                    "result": f"RTF: {rtf:.3f} | CPS: {cps:.1f} | WPS: {wps:.1f}",
                     "tts_model": variant_id,
                     "output_file": out_path,
                     "input_text": s['text'],

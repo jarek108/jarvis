@@ -161,6 +161,7 @@ def generate_excel(upload=True, upload_outputs=False, session_dir=None):
         if asset_mgr:
             asset_mgr.batch_upload(input_paths, inputs_id, label="input artifacts")
             if upload_outputs:
+                # Combine outputs and logs for bulk upload
                 asset_mgr.batch_upload(output_paths + log_paths, session_out_id, label="output artifacts and logs")
 
         sheets = {}; has_any_data = False
@@ -226,13 +227,19 @@ def generate_excel(upload=True, upload_outputs=False, session_dir=None):
                         elif domain == "TTS":
                             if not cps or cps == 0: cps = len(prompt) / exec_time
                             if not wps or wps == 0: wps = len(prompt.split()) / exec_time
+                            if not rtf or rtf == 0:
+                                audio_p = os.path.abspath(os.path.join(project_root, s.get('output_file', '')))
+                                if os.path.exists(audio_p):
+                                    try:
+                                        with wave.open(audio_p, 'rb') as wf: rtf = exec_time / (wf.getnframes() / float(wf.getframerate()))
+                                    except: pass
 
                     # --- ROW CONSTRUCTION (Order: Identity > Status > Metrics > Artifacts > Text) ---
                     row = {"Loadout": model_val, "Scenario": s.get('name'), "Status": s.get('status')}
                     
                     # 1. Metrics block
                     if domain == "STT": row.update({"RTF": r3(rtf), "WPS": r3(wps), "Match %": r3(s.get('match_pct'))})
-                    elif domain == "TTS": row.update({"CPS": r3(cps), "WPS": r3(wps)})
+                    elif domain == "TTS": row.update({"RTF": r3(rtf), "CPS": r3(cps), "WPS": r3(wps)})
                     elif domain == "LLM": row.update({"TTFT": r3(ttft), "TPS": r3(tps)})
                     elif domain == "VLM": row.update({"TTFT": r3(ttft), "TPS": r3(tps)})
                     elif domain == "STS":
@@ -315,7 +322,7 @@ def generate_excel(upload=True, upload_outputs=False, session_dir=None):
                         width = report_cfg.get('media_column_width', 12)
                         for row_idx in range(2, last_data_row + 1): worksheet.cell(row=row_idx, column=idx+1).alignment = Alignment(horizontal='center', wrap_text=False)
                     elif any(x in col.lower() for x in ["prompt", "response", "text", "result", "input"]): width = report_cfg.get('text_column_width', 50)
-                    elif col in ["Exec", "Setup", "Cleanup", "VRAM", "TTFT", "TPS", "RTF", "WPS", "CPS", "Match %"] or "Inf" in col or "Tot" in col:
+                    elif col in ["Exec", "Setup", "Cleanup", "VRAM", "TTFT", "TPS", "RTF", "WPS", "CPS", "Match %", "STT Inf", "LLM Tot", "TTS Inf"] or "Inf" in col or "Tot" in col:
                         width = report_cfg.get('metric_column_width', 12)
                         for row_idx in range(2, last_data_row + 1): worksheet.cell(row=row_idx, column=idx+1).alignment = Alignment(horizontal='right', wrap_text=False)
                     else: width = report_cfg.get('default_width', 15)
@@ -329,7 +336,6 @@ def generate_excel(upload=True, upload_outputs=False, session_dir=None):
                         worksheet.conditional_formatting.add(range_str, FormulaRule(formula=[f'{col_letter}2="MISSING"'], stopIfTrue=True, fill=yellow_fill))
                     elif col in ["Exec", "Setup", "Cleanup", "VRAM", "TTFT", "TPS", "RTF", "WPS", "CPS", "Match %", "STT Inf", "LLM Tot", "TTS Inf"]:
                         rule = ColorScaleRule(start_type='min', start_color='C6EFCE', mid_type='percentile', mid_value=50, mid_color='FFEB9C', end_type='max', end_color='FFC7CE')
-                        # "Higher is better" metrics
                         if col in ["TPS", "WPS", "CPS", "Match %"]: 
                             rule = ColorScaleRule(start_type='min', start_color='FFC7CE', mid_type='percentile', mid_value=50, mid_color='FFEB9C', end_type='max', end_color='C6EFCE')
                         worksheet.conditional_formatting.add(range_str, rule)
