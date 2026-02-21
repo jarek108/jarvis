@@ -1,11 +1,10 @@
 import os
 import re
-from .common import parse_size_gb, save_calibration
+from utils.calibration.common import parse_size_gb, save_calibration
 
 def extract_ollama_metrics(content, default_id=None):
     """Parses Ollama log content for memory metrics and model ID."""
     # Robust Patterns (handle multi-line msg structures)
-    # Use [^"]* to capture the full string inside quotes including spaces/units
     re_total = re.compile(r'msg="total memory".*?size="?([^"]+)"?', re.DOTALL)
     re_kv_msg = re.compile(r'msg="kv cache".*?size="?([^"]+)"?', re.DOTALL)
     re_weight_msg = re.compile(r'msg="model weights".*?size="?([^"]+)"?', re.DOTALL)
@@ -16,7 +15,7 @@ def extract_ollama_metrics(content, default_id=None):
     re_kv_low = re.compile(r'(?:llama_kv_cache:.*?size|KV buffer size)\s*=\s*([\d\.]+)\s*(\w+)i?B')
     re_tokens = re.compile(r'(?:llama_kv_cache: size|KV self size)\s*=\s*.*?\(\s*(\d+)\s*cells')
     re_weight_low = re.compile(r'(?:model size:|model buffer size)\s*[:=]\s*([\d\.]+)\s*(\w+)i?B')
-    re_compute_low = re.compile(r'(?:compute buffer size|output buffer size)\s*[:=]\s*([\d\.]+)\s*(\w+)i?B')
+    re_compute_low = re.compile(r'compute buffer size\s*[:=]\s*([\d\.]+)\s*(\w+)i?B')
     re_model_low = re.compile(r'general.name\s+=\s+(.*)')
     re_model_v3 = re.compile(r'general.name\s+\w+\s+=\s+(.*)')
     

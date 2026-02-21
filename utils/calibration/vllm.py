@@ -1,6 +1,6 @@
 import os
 import re
-from .common import save_calibration
+from utils.calibration.common import save_calibration
 
 def extract_vllm_metrics(content):
     """Parses vLLM log content for memory metrics and model ID."""
