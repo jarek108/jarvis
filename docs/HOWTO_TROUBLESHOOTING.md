@@ -37,7 +37,7 @@ Common issues and solutions for the Jarvis infrastructure.
 *   **Symptom:** `svc_*.log` shows CUDA OOM error.
 *   **Fix:**
     *   **Ollama:** Reduce context window or unload other models (`ollama stop model`).
-    *   **vLLM:** Check `config.yaml` > `model_vram_map`. Ensure the sum of active models fits in your GPU.
+    *   **vLLM:** Verify the model has been calibrated (`model_calibrations/`). If the calculated VRAM requirement exceeds your GPU capacity, lower the `default_context_size` in `config.yaml`.
 
 ## 3. Google Drive Reporting
 

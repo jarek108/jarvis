@@ -162,7 +162,9 @@ def process_file(log_path, model_override=None, engine_override=None):
                 m = re.search(r"svc_llm_VL_(.*?)_\d{8}_\d{6}", os.path.basename(log_path))
                 if m: target_id = m.group(1)
             if not (base and kv and tokens and target_id): return 2
-            save_calibration(target_id, "vllm", base, (kv/tokens)*10000, tokens, kv, log_path)
+            # Add 1GB floor for compute buffers / activations
+            base_with_overhead = base + 1.0
+            save_calibration(target_id, "vllm", base_with_overhead, (kv/tokens)*10000, tokens, kv, log_path)
         return 0
     except Exception as e:
         print(f"💥 Error in {os.path.basename(log_path)}: {e}"); return 2

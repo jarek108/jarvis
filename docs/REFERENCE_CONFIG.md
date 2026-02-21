@@ -36,27 +36,23 @@ tts_loadout:
 ```
 
 ## 5. vLLM Configuration
-Controls the Dockerized inference engine behavior.
+Controls the Dockerized inference engine behavior using **Model Physics** discovery.
 
 ```yaml
 vllm:
-  check_docker: true        # If false, skips Docker daemon checks (useful for native vLLM)
+  check_docker: true        # If false, skips Docker daemon checks
   model_startup_timeout: 800 # Seconds to wait for vLLM to become ready
   
-  # Default VRAM usage (0.0 - 1.0) if no specific map entry exists
-  gpu_memory_utilization: 0.5 
+  # Default context window for all models
+  default_context_size: 16384
   
-  # Specific VRAM allocation per model (in GB).
-  # Used to calculate the --gpu-memory-utilization flag dynamically.
-  model_vram_map:
-    "qwen2.5-0.5b": 3.0
-    "qwen3-vl-30b": 30.0
-    "default": 30.0
+  # Safety net settings for models without a calibration YAML
+  uncalibrated_safe_ctx: 8192
+  uncalibrated_safe_vram_gb: 4.0
     
-  # Context window overrides (max tokens)
+  # Specific context window overrides (if needed)
   model_max_len_map:
-    "qwen3-vl-30b": 16384
-    "default": 32768
+    "default": 16384
     
   # Multi-modal limits (JSON string)
   model_mm_limit_map:

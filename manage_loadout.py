@@ -125,22 +125,31 @@ def apply_loadout(name, loud=False, soft=False):
         elif engine == "vllm":
             vllm_port = cfg['ports'].get('vllm', 8300)
             
-            # Dynamic VRAM Calculation (GB -> %)
-            from utils import get_gpu_total_vram
+            # --- START SMART ALLOCATOR ---
+            from utils import get_gpu_total_vram, get_model_calibration
             total_vram = get_gpu_total_vram()
-            vram_map = cfg.get('vllm', {}).get('model_vram_map', {})
             
-            match_gb = None
-            for key, val in vram_map.items():
-                if key.lower() in model.lower():
-                    match_gb = val
-                    break
+            # Resolve Context Size
+            default_ctx = cfg.get('vllm', {}).get('default_context_size', 16384)
             
-            if match_gb:
-                vllm_util = min(0.95, max(0.1, match_gb / total_vram))
-                logger.info(f"🧠 VRAM Mapper: {model} needs {match_gb}GB. Setting util to {vllm_util:.3f}")
+            # Try to load physics
+            base_gb, cost_10k = get_model_calibration(model, engine="vllm")
+            
+            if base_gb:
+                # Formula: Required = Base + (Ctx / 10000 * Cost)
+                required_gb = base_gb + ((default_ctx / 10000.0) * cost_10k)
+                vllm_util = (required_gb / total_vram) + 0.05
+                logger.info(f"🧠 SmartAllocator: Physics found. {base_gb}GB base + {default_ctx} ctx. Setting util to {vllm_util:.3f}")
             else:
-                vllm_util = cfg.get('vllm', {}).get('gpu_memory_utilization', 0.5)
+                # SAFETY NET
+                safe_ctx = cfg.get('vllm', {}).get('uncalibrated_safe_ctx', 8192)
+                safe_vram = cfg.get('vllm', {}).get('uncalibrated_safe_vram_gb', 4.0)
+                vllm_util = (safe_vram / total_vram)
+                default_ctx = safe_ctx
+                logger.warning(f"⚠️ SmartAllocator: No calibration for {model}. SAFETY NET: {safe_ctx} ctx @ {vllm_util:.3f} util.")
+            
+            vllm_util = min(0.95, max(0.1, vllm_util))
+            # --- END SMART ALLOCATOR ---
 
             if not os.system(f"netstat -ano | findstr :{vllm_port} > nul"):
                 logger.info(f"ℹ️ vLLM already running on port {vllm_port}.")
@@ -154,7 +163,8 @@ def apply_loadout(name, loud=False, soft=False):
                     "-v", f"{hf_cache}:/root/.cache/huggingface",
                     "vllm/vllm-openai",
                     "--model", model,
-                    "--gpu-memory-utilization", str(vllm_util)
+                    "--gpu-memory-utilization", str(round(vllm_util, 3)),
+                    "--max-model-len", str(default_ctx)
                 ]
                 # We use subprocess.run for docker -d as it returns immediately
                 subprocess.run(cmd, capture_output=True)

@@ -21,7 +21,7 @@ from loguru import logger
 script_dir = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(script_dir)
 
-from tests.utils import get_service_status, kill_process_on_port, load_config, list_all_loadouts, get_system_health, get_loaded_ollama_models, kill_all_jarvis_services
+from utils import get_service_status, kill_process_on_port, load_config, list_all_loadouts, get_system_health, get_loaded_ollama_models, kill_all_jarvis_services
 
 # --- UI CONSTANTS ---
 BG_COLOR = "#0B0F19"

@@ -28,6 +28,10 @@ class LifecycleManager:
         self.project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
         self.python_exe = utils.resolve_path(self.cfg['paths']['venv_python'])
         
+        # Ensure project root is in sys.path for absolute imports
+        if self.project_root not in sys.path:
+            sys.path.insert(0, self.project_root)
+        
         # Broadcast standard ENV vars
         os.environ['HF_HOME'] = utils.get_hf_home(silent=True)
         os.environ['OLLAMA_MODELS'] = utils.get_ollama_models(silent=True)
@@ -117,25 +121,16 @@ class LifecycleManager:
                         num_ctx = int(llm_flags['ctx'])
                     
                     # 2. Try to load calibration
-                    safe_model_id = original_id.replace("/", "--").replace(":", "-").lower()
-                    cal_path = os.path.join(self.project_root, "model_calibrations", f"ol_{safe_model_id}.yaml")
+                    base_gb, cost_10k = utils.get_model_calibration(model, engine="ollama")
                     
-                    if os.path.exists(cal_path):
-                        with open(cal_path, "r", encoding="utf-8") as f:
-                            cal = yaml.safe_load(f)
-                        
-                        base_gb = cal['constants']['base_vram_gb']
-                        cost_10k = cal['constants']['kv_cache_gb_per_10k']
+                    if base_gb:
                         predicted_gb = base_gb + ((num_ctx / 10000.0) * cost_10k)
+                        current_free_gb = utils.get_gpu_total_vram() - utils.get_gpu_vram_usage()
                         
-                        current_free_gb = utils.get_gpu_vram_usage() # This returns usage, need free
-                        total_gpu_gb = utils.get_gpu_total_vram()
-                        free_gb = total_gpu_gb - current_free_gb
-                        
-                        if predicted_gb > (free_gb * 0.95): # 5% buffer
+                        if predicted_gb > (current_free_gb * 0.95): # 5% buffer
                             print(f"\n⚠️  [OllamaGuard] WARNING: Model {original_id} requires ~{predicted_gb:.2f}GB VRAM for {num_ctx} ctx.")
-                            print(f"⚠️  [OllamaGuard] Only {free_gb:.2f}GB is available. CPU OFFLOAD / SLOW PERFORMANCE LIKELY.\n")
-                except Exception as e:
+                            print(f"⚠️  [OllamaGuard] Only {current_free_gb:.2f}GB is available. CPU OFFLOAD / SLOW PERFORMANCE LIKELY.\n")
+                except Exception:
                     pass # Guardrail failure shouldn't block the run
                 # --- END OLLAMA GUARDRAIL ---
 
@@ -155,56 +150,29 @@ class LifecycleManager:
                 vllm_util = None
                 max_len = None
                 
-                # 1. Resolve Context Length first (needed for utility calculation)
+                # 1. Resolve Context Length
                 if 'ctx' in llm_flags:
                     max_len = int(llm_flags['ctx'])
                 else:
-                    max_len_map = self.cfg.get('vllm', {}).get('model_max_len_map', {})
-                    max_len = max_len_map.get('default', 32768)
-                    for key, val in max_len_map.items():
-                        if key.lower() in model.lower():
-                            max_len = val; break
+                    max_len = self.cfg.get('vllm', {}).get('default_context_size', 16384)
 
                 # 2. Try to load physical specs for utility calculation
-                safe_model_id = original_id.replace("/", "--").replace(":", "-").lower()
-                spec_path = os.path.join(self.project_root, "model_calibrations", f"vl_{safe_model_id}.yaml")
+                base_gb, cost_10k = utils.get_model_calibration(model, engine="vllm")
                 
-                if os.path.exists(spec_path):
-                    try:
-                        with open(spec_path, "r", encoding="utf-8") as f:
-                            spec = yaml.safe_load(f)
-                        
-                        base_gb = spec['constants']['base_vram_gb']
-                        cost_10k = spec['constants']['kv_cache_gb_per_10k']
-                        
-                        # Calculation: Required = Base + (Ctx / 10000 * Cost)
-                        required_gb = base_gb + ((max_len / 10000.0) * cost_10k)
-                        
-                        # Add a 5% safety buffer to the percentage
-                        vllm_util = (required_gb / total_vram) + 0.05
-                        vllm_util = round(vllm_util, 3)
-                        # print(f"  [SmartAllocator] Model specs found. Calculated Utility: {vllm_util} for {max_len} ctx.")
-                    except Exception as e:
-                        print(f"  [SmartAllocator] Warning: Failed to parse spec at {spec_path}: {e}")
+                if base_gb:
+                    # Formula: Required = Base + (Ctx / 10000 * Cost)
+                    required_gb = base_gb + ((max_len / 10000.0) * cost_10k) + 1.0
+                    vllm_util = (required_gb / total_vram) + 0.15
+                    print(f"  [SmartAllocator] Physics discovered: {base_gb}GB base + {max_len} ctx. Calculated Util: {round(vllm_util, 3)}")
+                else:
+                    # SAFETY NET for uncalibrated models
+                    max_len = self.cfg.get('vllm', {}).get('uncalibrated_safe_ctx', 8192)
+                    safe_vram = self.cfg.get('vllm', {}).get('uncalibrated_safe_vram_gb', 4.0)
+                    vllm_util = (safe_vram / total_vram)
+                    print(f"\n⚠️  [SmartAllocator] WARNING: No calibration found for {model}.")
+                    print(f"⚠️  [SmartAllocator] Falling back to SAFETY NET: {max_len} ctx @ {safe_vram}GB VRAM.\n")
 
-                # 3. Fallback to manual heuristics if no spec or calculation failed
-                if vllm_util is None:
-                    if 'gpu_util' in llm_flags:
-                        vllm_util = float(llm_flags['gpu_util'])
-                    else:
-                        vram_map = self.cfg.get('vllm', {}).get('model_vram_map', {})
-                        match_gb = None
-                        sorted_keys = sorted(vram_map.keys(), key=len, reverse=True)
-                        for key in sorted_keys:
-                            if key.lower() in model.lower():
-                                match_gb = vram_map[key]; break
-                        
-                        if match_gb:
-                            vllm_util = min(0.95, max(0.1, match_gb / total_vram))
-                        else:
-                            vllm_util = self.cfg.get('vllm', {}).get('gpu_memory_utilization', 0.5)
-
-                # Clamp final value
+                # 4. Final Clamping
                 vllm_util = min(0.95, max(0.1, vllm_util))
                 # --- END SMART ALLOCATOR ---
                 
