@@ -45,35 +45,21 @@ def get_gdrive_service():
     except Exception as e:
         print(f"❌ GDrive Auth Error: {e}"); return None
 
-def upload_to_gdrive(file_path):
-    service = get_gdrive_service()
-    if not service: return
-    manager = GDriveAssetManager(service)
-    reports_folder = manager.get_folder_id("Jarvis_Reports")
-    print(f"📤 Uploading report to GDrive: {os.path.basename(file_path)}...")
-    link = manager.sync_file(file_path, reports_folder, overwrite=False)
-    if link: print(f"✅ GDrive Upload Successful: {link}")
-    return link
-
-def find_log_fallback(artifacts_dir, model_id, domain_type):
-    """Searches directory for a log file matching the model and domain type."""
-    # Sanitize model_id to match file naming (replace / and : with --)
-    safe_id = model_id.replace("/", "--").replace(":", "-")
-    # vLLM logs often have full ID, Ollama might have short
-    pattern = f"svc_{domain_type}_{safe_id}"
-    for f in os.listdir(artifacts_dir):
-        if f.startswith(pattern) and f.endswith(".log"):
-            return os.path.join(artifacts_dir, f)
-    return None
-
 def infer_detailed_name(model_id):
-    """Adds resolved defaults to legacy model names for transparent reporting."""
     if not model_id or model_id == "N/A": return model_id
     name = model_id.upper()
     if "#CTX=" not in name:
         ctx = "4096" if "OL_" in name else "16384"
         name += f"#CTX={ctx}"
     return name
+
+def find_log_fallback(artifacts_dir, model_id, domain_type):
+    safe_id = model_id.replace("/", "--").replace(":", "-")
+    pattern = f"svc_{domain_type}_{safe_id}"
+    for f in os.listdir(artifacts_dir):
+        if f.startswith(pattern) and f.endswith(".log"):
+            return os.path.join(artifacts_dir, f)
+    return None
 
 def generate_excel(upload=True, upload_outputs=False, session_dir=None):
     try:
@@ -91,10 +77,15 @@ def generate_excel(upload=True, upload_outputs=False, session_dir=None):
         service = get_gdrive_service() if upload else None
         asset_mgr = GDriveAssetManager(service) if service else None
         
-        # --- TURBO SYNC: DISCOVERY PHASE ---
+        # --- HIERARCHY SETUP ---
+        master_id = asset_mgr.get_folder_id("Jarvis") if asset_mgr else None
+        inputs_id = asset_mgr.get_folder_id("Inputs", master_id) if asset_mgr else None
+        outputs_root_id = asset_mgr.get_folder_id("Outputs", master_id) if asset_mgr else None
+        session_out_id = asset_mgr.get_folder_id(session_id, outputs_root_id) if asset_mgr else None
+        session_out_link = asset_mgr.get_folder_link(session_id, outputs_root_id) if asset_mgr else None
+
+        # --- DISCOVERY PHASE ---
         input_paths = set(); output_paths = set(); log_paths = set(); domains = ["stt", "tts", "llm", "vlm", "sts"]
-        
-        # Pre-scan artifacts to support legacy log discovery
         all_data = {}
         for d in domains:
             fname = f"{d}.json" if session_dir else f"latest_{d}.json"
@@ -105,17 +96,14 @@ def generate_excel(upload=True, upload_outputs=False, session_dir=None):
                 for s in entry.get('scenarios', []):
                     if s.get('input_file'): input_paths.add(s['input_file'])
                     if s.get('output_file'): output_paths.add(s['output_file'])
-                    
-                    # 1. Resolve Log Path (Explicit or Fallback)
                     l_path = s.get('log_path')
                     if not l_path:
                         m_id = s.get('llm_model') or s.get('stt_model') or s.get('tts_model') or entry.get('loadout')
                         if m_id:
                             m_type = "llm" if any(x in m_id.lower() for x in ["ol_", "vl_", "vllm:"]) else d
                             l_path = find_log_fallback(artifacts_dir, m_id, m_type)
-                    
                     if l_path:
-                        s['log_path'] = l_path # Update object for later linking
+                        s['log_path'] = l_path
                         log_paths.add(l_path)
 
         input_paths = [os.path.abspath(os.path.join(project_root, p)) for p in input_paths if p]
@@ -123,19 +111,19 @@ def generate_excel(upload=True, upload_outputs=False, session_dir=None):
         log_paths = [os.path.abspath(os.path.join(project_root, p)) for p in log_paths if p]
 
         if asset_mgr:
-            fid_in = asset_mgr.get_folder_id("Jarvis_Artifacts_Inputs")
-            asset_mgr.batch_upload(input_paths, fid_in, label="input artifacts")
+            asset_mgr.batch_upload(input_paths, inputs_id, label="input artifacts")
             if upload_outputs:
-                fid_out = asset_mgr.get_folder_id("Jarvis_Artifacts_Outputs")
-                asset_mgr.batch_upload(output_paths + log_paths, fid_out, label="output artifacts and logs")
+                asset_mgr.batch_upload(output_paths + log_paths, session_out_id, label="output artifacts and logs")
 
         sheets = {}; has_any_data = False
         sys_info_path = os.path.join(artifacts_dir, "system_info.yaml")
         if os.path.exists(sys_info_path):
             import yaml
             with open(sys_info_path, "r", encoding="utf-8") as f: sys_info = yaml.safe_load(f)
+            
+            run_val = f'=HYPERLINK("{session_out_link}", "{session_id}")' if session_out_link else session_id
             summary_rows = [
-                {"Category": "Session", "Metric": "Run ID", "Value": session_id},
+                {"Category": "Session", "Metric": "Run ID", "Value": run_val},
                 {"Category": "Session", "Metric": "Original Timestamp", "Value": sys_info.get("timestamp", "N/A")},
                 {"Category": "Session", "Metric": "Report Generated", "Value": time.strftime("%Y-%m-%d %H:%M:%S")}
             ]
@@ -147,13 +135,12 @@ def generate_excel(upload=True, upload_outputs=False, session_dir=None):
             sheets["Summary"] = pd.DataFrame(summary_rows)
             has_any_data = True
 
-        def get_link(local_path, folder_name="Jarvis_Artifacts_Inputs"):
+        def get_link(local_path, folder_id=None):
             if not local_path: return "N/A"
             abs_p = os.path.abspath(os.path.join(project_root, local_path))
             fname = os.path.basename(abs_p)
-            if asset_mgr:
-                fid = asset_mgr.get_folder_id(folder_name)
-                cache = asset_mgr.file_cache.get(fid, {})
+            if asset_mgr and folder_id:
+                cache = asset_mgr.file_cache.get(folder_id, {})
                 if fname in cache:
                     label = "▶️ Play" if ".wav" in fname else ("👁️ View" if "." in fname else "📄 Log")
                     return f'=HYPERLINK("{cache[fname]}", "{label}")'
@@ -167,31 +154,21 @@ def generate_excel(upload=True, upload_outputs=False, session_dir=None):
             for entry in data:
                 loadout_name = entry.get('loadout', 'N/A')
                 for s in entry.get('scenarios', []):
-                    # 1. Resolve Model Display Name (with inferred defaults)
                     raw_model = s.get('detailed_model') or loadout_name
-                    if raw_model == 'N/A':
-                        raw_model = s.get('llm_model') or s.get('stt_model') or s.get('tts_model') or "N/A"
+                    if raw_model == 'N/A': raw_model = s.get('llm_model') or s.get('stt_model') or s.get('tts_model') or "N/A"
                     model_col = infer_detailed_name(raw_model)
+                    log_link = get_link(s.get('log_path'), session_out_id)
+                    model_val = f'=HYPERLINK("{log_link.split(chr(34))[1]}", "{model_col}")' if log_link and log_link.startswith("=") else model_col
                     
-                    # 2. Hyper-link to Log
-                    log_link = get_link(s.get('log_path'), "Jarvis_Artifacts_Outputs")
-                    if log_link and log_link.startswith("="):
-                        url_only = log_link.split('"')[1]
-                        model_val = f'=HYPERLINK("{url_only}", "{model_col}")'
-                    else:
-                        model_val = model_col
-
                     prompt = str(s.get('input_text', 'N/A')).replace('\n', ' ').replace('\r', ' ')
                     response = str(s.get('text') or s.get('raw_text') or s.get('llm_text') or "N/A").replace('\n', ' ').replace('\r', ' ')
-
                     model_key = "Setup" if domain == "STS" else "Model"
                     row = {model_key: model_val, "Scenario": s.get('name'), "Status": s.get('status')}
-                    if domain == "STT": row.update({"Audio": get_link(s.get('input_file')), "Result": response, "Match %": s.get('match_pct', 0)})
-                    elif domain == "TTS": row.update({"Audio": get_link(s.get('output_file'), "Jarvis_Artifacts_Outputs"), "Input": prompt})
+                    if domain == "STT": row.update({"Audio": get_link(s.get('input_file'), inputs_id), "Result": response, "Match %": s.get('match_pct', 0)})
+                    elif domain == "TTS": row.update({"Audio": get_link(s.get('output_file'), session_out_id), "Input": prompt})
                     elif domain == "LLM": row.update({"Prompt": prompt, "Response": response, "TTFT": s.get('ttft'), "TPS": s.get('tps')})
-                    elif domain == "VLM": row.update({"Media": get_link(s.get('input_file')), "Prompt": prompt, "Response": response})
-                    elif domain == "STS": row.update({"Input": get_link(s.get('input_file')), "Output": get_link(s.get('output_file'), "Jarvis_Artifacts_Outputs"), "Text": response})
-                    
+                    elif domain == "VLM": row.update({"Media": get_link(s.get('input_file'), inputs_id), "Prompt": prompt, "Response": response})
+                    elif domain == "STS": row.update({"Input": get_link(s.get('input_file'), inputs_id), "Output": get_link(s.get('output_file'), session_out_id), "Text": response})
                     row.update({"Execution (s)": s.get('duration'), "Setup (s)": s.get('setup_time', 0), "Cleanup (s)": s.get('cleanup_time', 0), "VRAM Peak": s.get('vram_peak', 0)})
                     rows.append(row)
             if rows:
@@ -199,10 +176,8 @@ def generate_excel(upload=True, upload_outputs=False, session_dir=None):
                 has_any_data = True
 
         if not has_any_data: return None
-
         from openpyxl.styles import Font, PatternFill, Alignment
         from openpyxl.formatting.rule import FormulaRule, ColorScaleRule
-
         with pd.ExcelWriter(output_path, engine='openpyxl') as writer:
             for name, df in sheets.items():
                 df.to_excel(writer, sheet_name=name, index=False)
@@ -245,14 +220,25 @@ def generate_excel(upload=True, upload_outputs=False, session_dir=None):
         print(f"❌ Excel Error: {e}"); traceback.print_exc(); return None
 
 def generate_and_upload_report(session_dir, upload_report=True, upload_outputs=False, open_browser=True):
+    project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    service = get_gdrive_service() if upload_report else None
+    asset_mgr = GDriveAssetManager(service) if service else None
+    
+    # 1. Excel Generation
     path = generate_excel(upload=upload_report, upload_outputs=upload_outputs, session_dir=session_dir)
+    if not path: return None
+    
+    # 2. Report Upload to Master 'Jarvis' folder
     link = None
-    if upload_report and path:
-        link = upload_to_gdrive(path)
-        if link and open_browser:
+    if upload_report:
+        master_id = asset_mgr.get_folder_id("Jarvis")
+        print(f"📤 Uploading report to GDrive master folder...")
+        link = asset_mgr.sync_file(path, master_id, overwrite=False)
+        if link:
             print(f"✅ GDrive Link: {link}")
-            print(f"🌐 Opening report in browser...")
-            webbrowser.open(link)
+            if open_browser:
+                print(f"🌐 Opening report in browser...")
+                webbrowser.open(link)
     return link or path
 
 def main():

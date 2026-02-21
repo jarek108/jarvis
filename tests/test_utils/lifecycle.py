@@ -351,12 +351,13 @@ class LifecycleManager:
 
         log_dir = self.session_dir if self.session_dir else os.path.join(self.project_root, "tests", "artifacts", "logs")
         os.makedirs(log_dir, exist_ok=True)
-        timestamp = time.strftime("%Y%m%d_%H%M%S")
 
         # 3. Parallel Spawning
         services_to_start = [s for s in required_services if health_snapshot.get(s['port'], {}).get('status') != "ON"]
         for s in services_to_start:
-            log_path = os.path.join(log_dir, f"svc_{s['type']}_{s['id'].replace(':', '-').replace('/', '--')}_{timestamp}.log")
+            # Add microsecond-precision or unique enough timestamp to prevent collisions
+            spawn_ts = time.strftime("%H%M%S")
+            log_path = os.path.join(log_dir, f"svc_{s['type']}_{s['id'].replace(':', '-').replace('/', '--')}_{spawn_ts}.log")
             if self.on_phase: self.on_phase(f"log_path:{s['type']}:{log_path}")
             f_log = open(log_path, "w")
             proc = utils.start_server(s['cmd'], log_file=f_log)

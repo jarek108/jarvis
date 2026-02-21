@@ -53,13 +53,10 @@ def trigger_report_generation(upload=True, session_dir=None):
         tests_dir = os.path.join(project_root, "tests")
         if tests_dir not in sys.path: sys.path.append(tests_dir)
         import generate_report
-        
-        # Call the unified entry point. 
-        # In test runner mode, we usually want to open the browser automatically.
         return generate_report.generate_and_upload_report(
             session_dir=session_dir,
             upload_report=upload,
-            upload_outputs=False, # Standard runs don't push outputs to GDrive by default
+            upload_outputs=False,
             open_browser=True
         )
     except Exception as e:
@@ -68,24 +65,35 @@ def trigger_report_generation(upload=True, session_dir=None):
 class GDriveAssetManager:
     def __init__(self, service):
         self.service = service
-        self.folders = {} # Name -> ID
+        self.folders = {} # Path -> ID
         self.file_cache = {} # folder_id -> {filename: link}
 
     def get_folder_id(self, name, parent_id=None):
-        if name in self.folders: return self.folders[name]
+        """Creates or finds a folder by name under an optional parent."""
+        cache_key = f"{parent_id or 'root'}/{name}"
+        if cache_key in self.folders: return self.folders[cache_key]
+        
         query = f"name = '{name}' and mimeType = 'application/vnd.google-apps.folder' and trashed = false"
         if parent_id: query += f" and '{parent_id}' in parents"
-        results = self.service.files().list(q=query, fields='files(id)').execute()
+        else: query += " and 'root' in parents"
+        
+        results = self.service.files().list(q=query, fields='files(id, webViewLink)').execute()
         files = results.get('files', [])
         if not files:
             meta = {'name': name, 'mimeType': 'application/vnd.google-apps.folder'}
             if parent_id: meta['parents'] = [parent_id]
-            folder = self.service.files().create(body=meta, fields='id').execute()
-            fid = folder.get('id')
+            folder = self.service.files().create(body=meta, fields='id, webViewLink').execute()
+            fid, link = folder.get('id'), folder.get('webViewLink')
         else:
-            fid = files[0].get('id')
-        self.folders[name] = fid
+            fid, link = files[0].get('id'), files[0].get('webViewLink')
+        
+        self.folders[cache_key] = fid
+        self.folders[f"{cache_key}_link"] = link
         return fid
+
+    def get_folder_link(self, name, parent_id=None):
+        self.get_folder_id(name, parent_id)
+        return self.folders.get(f"{parent_id or 'root'}/{name}_link")
 
     def preload_folder(self, folder_id):
         if folder_id in self.file_cache: return self.file_cache[folder_id]
@@ -110,6 +118,7 @@ class GDriveAssetManager:
         file_name = os.path.basename(local_path)
         cache = self.file_cache.get(folder_id, {})
         if file_name in cache and not overwrite: return cache[file_name]
+        
         from googleapiclient.http import MediaFileUpload
         ext = os.path.splitext(file_name)[1].lower()
         mimetype = 'application/octet-stream'
@@ -117,11 +126,17 @@ class GDriveAssetManager:
         elif ext in ['.png', '.jpg', '.jpeg']: mimetype = 'image/png' if ext == '.png' else 'image/jpeg'
         elif ext in ['.mp4']: mimetype = 'video/mp4'
         media = MediaFileUpload(local_path, mimetype=mimetype, resumable=True)
-        meta = {'name': file_name, 'parents': [folder_id]}
-        created = self.service.files().create(body=meta, media_body=media, fields='webViewLink').execute()
-        link = created.get('webViewLink')
-        if folder_id in self.file_cache: self.file_cache[folder_id][file_name] = link
-        return link
+        
+        import threading
+        if not hasattr(self, '_api_lock'): self._api_lock = threading.Lock()
+        
+        with self._api_lock:
+            meta = {'name': file_name, 'parents': [folder_id]}
+            created = self.service.files().create(body=meta, media_body=media, fields='webViewLink').execute()
+            link = created.get('webViewLink')
+            if folder_id not in self.file_cache: self.file_cache[folder_id] = {}
+            self.file_cache[folder_id][file_name] = link
+            return link
 
     def batch_upload(self, local_paths, folder_id, label="artifacts", max_workers=10):
         if not local_paths: return {}
@@ -130,22 +145,11 @@ class GDriveAssetManager:
         if not to_upload:
             print(f"✅ All {label} already exist on GDrive.")
             return cache
-        
         print(f"🚀 Uploading {len(to_upload)} new {label} in parallel...")
-        import threading
-        lock = threading.Lock()
-        
         def upload_one(path):
-            try:
-                # The Google API service object is NOT thread-safe for uploads
-                # We use a lock to ensure sequential API calls but we still benefit 
-                # from parallel media preparation and IO.
-                with lock:
-                    link = self.sync_file(path, folder_id, overwrite=False)
-                return path, link
+            try: return path, self.sync_file(path, folder_id, overwrite=False)
             except Exception as e:
-                print(f"  ❌ Failed to upload {os.path.basename(path)}: {e}")
-                return path, None
+                print(f"  ❌ Failed to upload {os.path.basename(path)}: {e}"); return path, None
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
             results = list(executor.map(upload_one, to_upload))
         for path, link in results:
