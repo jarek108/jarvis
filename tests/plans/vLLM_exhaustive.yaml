@@ -1,5 +1,5 @@
 name: "vLLM Exhaustive Comparison"
-description: "Detailed benchmarks across all core vLLM models."
+description: "Detailed benchmarks across all core vLLM models and context windows."
 settings:
   purge_on_entry: true
   purge_on_exit: true
@@ -7,13 +7,18 @@ settings:
 execution:
   - domain: llm
     loadouts:
+      - ["VL_Qwen/Qwen2.5-0.5B-Instruct#ctx=4096"]
+      - ["VL_Qwen/Qwen2.5-0.5B-Instruct#stream#ctx=4096"]
       - ["VL_Qwen/Qwen2.5-0.5B-Instruct"]
       - ["VL_Qwen/Qwen2.5-0.5B-Instruct#stream"]
-    scenarios: [english_std, short2long, long_story]
+      - ["VL_Qwen/Qwen2.5-0.5B-Instruct#ctx=32768"]
+      - ["VL_Qwen/Qwen2.5-0.5B-Instruct#stream#ctx=32768"]
   - domain: vlm
     loadouts:
-      - ["VL_Qwen/Qwen2-VL-2B-Instruct"]
       - ["VL_Qwen/Qwen2-VL-2B-Instruct#stream"]
+      - ["VL_QuantTrio/Qwen3-VL-30B-A3B-Instruct-AWQ#ctx=4096"]
+      - ["VL_QuantTrio/Qwen3-VL-30B-A3B-Instruct-AWQ#stream#ctx=4096"]
       - ["VL_QuantTrio/Qwen3-VL-30B-A3B-Instruct-AWQ"]
       - ["VL_QuantTrio/Qwen3-VL-30B-A3B-Instruct-AWQ#stream"]
-    scenarios: [jarvis_logo, vision_story]
+      - ["VL_QuantTrio/Qwen3-VL-30B-A3B-Instruct-AWQ#ctx=32768"]
+      - ["VL_QuantTrio/Qwen3-VL-30B-A3B-Instruct-AWQ#stream#ctx=32768"]

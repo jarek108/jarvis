@@ -1,5 +1,5 @@
-name: "TTS Exhaustive Comparison"
-description: "Full sweep of all TTS variants."
+name: "TTS Performance Sweep"
+description: "Comparison across all synthesis models."
 settings:
   purge_on_entry: true
   purge_on_exit: true
@@ -10,4 +10,3 @@ execution:
       - ["chatterbox-eng"]
       - ["chatterbox-multilingual"]
       - ["chatterbox-turbo"]
-    scenarios: [all]

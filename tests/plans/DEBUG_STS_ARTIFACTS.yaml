@@ -9,6 +9,4 @@ settings:
 execution:
   - domain: sts
     loadouts:
-      - ["faster-whisper-tiny", "OL_qwen2.5:0.5b", "chatterbox-turbo"]
       - ["faster-whisper-tiny", "OL_qwen2.5:0.5b#stream", "chatterbox-turbo"]
-    scenarios: [english_std]

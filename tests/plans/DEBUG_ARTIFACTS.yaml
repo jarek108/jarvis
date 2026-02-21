@@ -11,9 +11,6 @@ execution:
     loadouts:
       - ["faster-whisper-tiny"]
       - ["faster-whisper-base"]
-    scenarios: [english_std, chinese_std]
   - domain: vlm
     loadouts:
-      - ["VL_Qwen/Qwen2-VL-2B-Instruct"]
       - ["VL_Qwen/Qwen2-VL-2B-Instruct#stream"]
-    scenarios: [jarvis_logo]

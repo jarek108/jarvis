@@ -7,36 +7,27 @@ settings:
   track_prior_vram: true
 
 execution:
-  # - domain: llm
-  #   loadouts:
-  #     - ["OL_qwen2.5:0.5b"]
-  #     - ["VL_Qwen/Qwen2.5-0.5B-Instruct#stream#ctx=4096"]
-  #     - ["VL_Qwen/Qwen2.5-0.5B-Instruct#stream"]
-  #   scenarios: [all]
+  - domain: llm
+    loadouts:
+      - ["OL_qwen2.5:0.5b#stream"]
+      - ["VL_Qwen/Qwen2.5-0.5B-Instruct#stream#ctx=4096"]
+      - ["VL_Qwen/Qwen2.5-0.5B-Instruct#stream"]
 
   - domain: vlm
     loadouts:
-      # - ["OL_moondream#stream"]
-      - ["VL_QuantTrio/Qwen3-VL-30B-A3B-Instruct-AWQ#nativevideo#stream#ctx=4096"]
-      - ["VL_QuantTrio/Qwen3-VL-30B-A3B-Instruct-AWQ#nativevideo#stream"]
-      - ["VL_QuantTrio/Qwen3-VL-30B-A3B-Instruct-AWQ#nativevideo"]
-      - ["VL_QuantTrio/Qwen3-VL-30B-A3B-Instruct-AWQ"]
-      - ["VL_QuantTrio/Qwen3-VL-30B-A3B-Instruct-AWQ#nativevideo#stream#ctx=4096"]
-    scenarios: [all]
+      - ["OL_moondream#stream"]
+      - ["VL_Qwen/Qwen2-VL-2B-Instruct#stream"]
+      - ["VL_QuantTrio/Qwen3-VL-30B-A3B-Instruct-AWQ#stream"]
 
-  # - domain: stt
-  #   loadouts:
-  #     - ["faster-whisper-base"]
-  #   scenarios: [english_std]
+  - domain: stt
+    loadouts:
+      - ["faster-whisper-base"]
 
-  # - domain: tts
-  #   loadouts:
-  #     - ["chatterbox-turbo"]
-  #   scenarios: [all]
+  - domain: tts
+    loadouts:
+      - ["chatterbox-turbo"]
 
   - domain: sts
     loadouts:
-      # - ["faster-whisper-base", "OL_qwen2.5:0.5b", "chatterbox-turbo"]
-      - ["faster-whisper-base", "VL_Qwen/Qwen2.5-0.5B-Instruct#stream#ctx=4096", "chatterbox-turbo"]
+      - ["faster-whisper-base", "OL_qwen2.5:0.5b#stream", "chatterbox-turbo"]
       - ["faster-whisper-base", "VL_Qwen/Qwen2.5-0.5B-Instruct#stream", "chatterbox-turbo"]
-    scenarios: [all]

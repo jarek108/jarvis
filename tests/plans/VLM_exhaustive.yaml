@@ -1,5 +1,5 @@
 name: "VLM Exhaustive Comparison"
-description: "Full sweep of vision-language scenarios (Native + Stream)."
+description: "Full sweep of vision-language scenarios across engines."
 settings:
   purge_on_entry: true
   purge_on_exit: true
@@ -8,6 +8,7 @@ execution:
   - domain: vlm
     loadouts:
       - ["OL_moondream#stream"]
-      - ["VL_QuantTrio/Qwen3-VL-30B-A3B-Instruct-AWQ#nativevideo"]
-      - ["VL_QuantTrio/Qwen3-VL-30B-A3B-Instruct-AWQ#nativevideo#stream"]
-    scenarios: [all]
+      - ["VL_Qwen/Qwen2-VL-2B-Instruct#stream"]
+      - ["VL_QuantTrio/Qwen3-VL-30B-A3B-Instruct-AWQ"]
+      - ["VL_QuantTrio/Qwen3-VL-30B-A3B-Instruct-AWQ#stream"]
+      - ["VL_QuantTrio/Qwen3-VL-30B-A3B-Instruct-AWQ#stream#ctx=32768"]

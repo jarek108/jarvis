@@ -8,4 +8,3 @@ execution:
   - domain: tts
     loadouts:
       - ["chatterbox-turbo"]
-    scenarios: [standard]

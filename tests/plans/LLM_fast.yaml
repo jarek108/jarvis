@@ -7,8 +7,6 @@ settings:
 execution:
   - domain: llm
     loadouts:
-      - ["OL_qwen2.5:0.5b"]
       - ["OL_qwen2.5:0.5b#stream"]
-      - ["VL_Qwen/Qwen2.5-0.5B-Instruct"]
+      - ["VL_Qwen/Qwen2.5-0.5B-Instruct#stream#ctx=4096"]
       - ["VL_Qwen/Qwen2.5-0.5B-Instruct#stream"]
-    scenarios: [english_std, polish_explicit, long_story]
