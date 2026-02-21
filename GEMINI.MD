@@ -10,7 +10,7 @@ This file contains foundational mandates for the AI assistant (Jarvis). These in
 ## 🛠️ Infrastructure Directives
 *   **Cluster Management**: Use `python manage_loadout.py --status` to check health and `--apply [preset]` to switch environments. Use `--kill all` to ensure VRAM is released.
 *   **Strict Path Policy**: Never download models to the C: drive. Verify `HF_HOME` and `OLLAMA_MODELS` environment variables are set before starting any model engine.
-*   **VRAM Allocation**: vLLM must be configured using the "GB-first" strategy from the physics database.
+*   **VRAM Allocation**: vLLM must be configured using the "GB-first" strategy from the physics database. Tuning via `vram_safety_buffer` and `vram_static_floor` in `config.yaml` is mandatory for pipeline stability.
 
 ## 🧪 Testing & Refactoring Directives
 *   **Refactor Guard**: Always run `python tests/runner.py tests/plans/ALL_fast.yaml --plumbing` after code changes.

@@ -46,20 +46,36 @@ vllm:
   # Default context window for all models
   default_context_size: 16384
   
+  # VRAM Tuning
+  vram_safety_buffer: 0.15  # Extra % of total VRAM to reserve (0.15 = 15%)
+  vram_static_floor: 1.0    # Flat GB added to base weight cost
+
   # Safety net settings for models without a calibration YAML
   uncalibrated_safe_ctx: 8192
   uncalibrated_safe_vram_gb: 4.0
-    
-  # Specific context window overrides (if needed)
-  model_max_len_map:
-    "default": 16384
-    
-  # Multi-modal limits (JSON string)
-  model_mm_limit_map:
-    "default": '{"image": 8}'
 ```
 
-## 6. Mock Mode
+## 6. Reporting & Excel Layout
+Controls the visual structure of generated Excel reports.
+
+```yaml
+reporting:
+  excel:
+    loadout_width: 50        # Width of the frozen first column
+    text_column_width: 50    # Width for prompts and responses
+    metric_column_width: 12  # Width for numeric metrics
+    media_column_width: 12   # Width for audio/video links
+    default_width: 15        # Fallback width
+    
+    # Overrides for specific columns in specific domains
+    domain_overrides:
+      stt:
+        "Result": 60
+      tts:
+        "Input": 60
+```
+
+## 7. Mock Mode
 Settings for the simulated testing mode (`--mock`).
 ```yaml
 mock:

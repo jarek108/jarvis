@@ -22,7 +22,8 @@ execution:
       - ["VL_QuantTrio/Qwen3-VL-30B-A3B-Instruct-AWQ"]
       - ["VL_QuantTrio/Qwen3-VL-30B-A3B-Instruct-AWQ#stream"]
       - ["VL_QuantTrio/Qwen3-VL-30B-A3B-Instruct-AWQ#stream#nativevideo"]
-      - ["VL_QuantTrio/Qwen3-VL-30B-A3B-Instruct-AWQ#stream#ctx=32768"]
+      - ["VL_QuantTrio/Qwen3-VL-30B-A3B-Instruct-AWQ#stream#nativevideo#ctx=32768"]
+      - ["VL_QuantTrio/Qwen3-VL-30B-A3B-Instruct-AWQ#stream#nativevideo#ctx=4096"]
 
   - domain: stt
     loadouts:
@@ -40,5 +41,7 @@ execution:
     loadouts:
       - ["faster-whisper-tiny", "VL_Qwen/Qwen2.5-0.5B-Instruct#stream#ctx=4096", "chatterbox-turbo"]
       - ["faster-whisper-base", "OL_qwen2.5:0.5b#stream", "chatterbox-turbo"]
-      - ["faster-whisper-large", "VL_QuantTrio/Qwen3-VL-30B-A3B-Instruct-AWQ#stream", "chatterbox-multilingual"]
+      - ["faster-whisper-base", "VL_QuantTrio/Qwen3-VL-30B-A3B-Instruct-AWQ#stream", "chatterbox-multilingual"]
+      - ["faster-whisper-base", "VL_QuantTrio/Qwen3-VL-30B-A3B-Instruct-AWQ#stream#ctx=4096", "chatterbox-multilingual"]
+      - ["faster-whisper-base", "VL_QuantTrio/Qwen3-VL-30B-A3B-Instruct-AWQ#stream#ctx=16384", "chatterbox-multilingual"]
       - ["faster-whisper-large", "VL_QuantTrio/Qwen3-VL-30B-A3B-Instruct-AWQ#stream#ctx=4096", "chatterbox-multilingual"]

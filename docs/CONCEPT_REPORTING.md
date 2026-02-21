@@ -27,7 +27,18 @@ To handle benchmarks with hundreds of scenarios, Jarvis uses a specialized synch
 4.  **Zero-Latency Linking**: The Excel generation phase uses the pre-fetched manifest to create hyperlinks instantly, without any further API calls.
 
 ## 4. Google Drive Hierarchy
-Jarvis organizes its data into a dedicated folder structure:
-*   `Jarvis_Reports/`: Final `.xlsx` files named by Run ID.
-*   `Jarvis_Artifacts_Inputs/`: Centralized store for reusable test media.
-*   `Jarvis_Artifacts_Outputs/`: Run-specific generated results.
+Jarvis organizes its data into a clean, hierarchical structure:
+*   `Jarvis/`: The master folder.
+    *   `Inputs/`: Centralized store for reusable test media (audio/video).
+    *   `Outputs/`: Parent for all benchmark results.
+        *   `[RunID]/`: Unique folder per session containing generated audio and service logs.
+    *   `Jarvis_Benchmark_Report_[RunID].xlsx`: The polished final reports.
+
+## 5. Self-Healing Metrics
+The Jarvis reporting engine is designed to be resilient. If a benchmark run fails to capture specific metrics (e.g., due to an older version of the runner or a network glitch), the generator implements **On-the-fly Recovery**:
+
+*   **Audio Duration**: If missing, the engine locally opens the `.wav` files to calculate their exact length.
+*   **RTF (Real-Time Factor)**: Calculated using the discovered duration and the execution time.
+*   **WPS/CPS**: Derived from the character/word count of the input or result text and the inference duration.
+
+This ensures that legacy logs can be re-processed into modern, data-rich reports.

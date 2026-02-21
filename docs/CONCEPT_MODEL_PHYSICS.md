@@ -38,20 +38,27 @@ To understand VRAM allocation, especially in rigid engines like vLLM, distinguis
 Rather than relying on vague estimates, Jarvis uses **Calibration** to discover these three constants for any specific model/hardware combination.
 
 ### The Physics Formula
-Jarvis calculates the required VRAM ($V_{req}$) for a given context length ($C$) using:
-$$V_{req} = Base + (C 	imes Cost_{token})$$
+Jarvis calculates the required VRAM utilization ratio ($U_{vllm}$) for a given context length ($C$) using a two-stage formula:
 
-*   **Base**: Model Weights + Compute Buffer.
-*   **Cost per token**: The slope of KV cache growth.
+1.  **Total Required GB**:
+    $$V_{req} = Base + (C \times Cost_{token}) + Floor$$
+2.  **Utilization Ratio**:
+    $$U_{vllm} = (V_{req} / V_{total}) + Buffer$$
+
+*   **Base**: Model Weights + Static Compute Buffer (from calibration).
+*   **Cost per token**: The linear growth rate of the KV cache (from calibration).
+*   **Floor** (`vram_static_floor`): A flat GB amount added to ensure CUDA kernels and activation buffers have adequate room (default: 1.0 GB).
+*   **Buffer** (`vram_safety_buffer`): A percentage of total VRAM reserved *after* the calculation to account for fragmentation and system stability (default: 0.15 or 15%).
 
 ## 3. Engine-Specific Applications
 
 ### vLLM: Deterministic Allocation
 vLLM is a "Control Freak." It demands a rigid memory budget at startup via the `--gpu-memory-utilization` flag. 
-Jarvis uses the physics database to calculate the **Smart Allocation**:
-1.  User requests `#ctx=16384`.
-2.  Jarvis calculates: $Util = (Base + (16384 	imes Cost)) / Total_{VRAM} + 5\%$.
-3.  The container starts with the *exact* amount of VRAM needed, leaving the rest free for the OS or other models.
+Jarvis uses the physics database and the configured tuning parameters to perform **Smart Allocation**:
+
+1.  **Context-Aware**: If a user requests `#ctx=4096`, the allocator calculates a lower utilization than for `#ctx=16384`.
+2.  **Pipeline-Safe**: By explicitly defining the `Floor` and `Buffer`, Jarvis ensures that vLLM leaves exactly enough "air" on the GPU for concurrent models (like Whisper or Chatterbox) to load without causing Out-of-Memory (OOM) errors.
+3.  **Deterministic Capacity**: Because vLLM pre-fills the allocated space with KV cache pages, the number of concurrent requests a model can handle is predictable (e.g., 55k tokens total / 4k per request = ~13 concurrent slots).
 
 ### Ollama: Predictive Guardrails
 Ollama is a "Lazy Loader." It dynamically manages its own memory and will offload layers to the CPU if VRAM is insufficient.
