@@ -163,10 +163,73 @@ def generate_excel(upload=True, upload_outputs=False, session_dir=None):
 
         if not has_any_data: return None
 
+        from openpyxl.styles import Font, PatternFill, Alignment
+        from openpyxl.formatting.rule import FormulaRule, ColorScaleRule
+
         with pd.ExcelWriter(output_path, engine='openpyxl') as writer:
             for name, df in sheets.items():
                 df.to_excel(writer, sheet_name=name, index=False)
-                # (Styles omitted for brevity, keeping existing formatting logic internally)
+                worksheet = writer.sheets[name]
+                
+                # 1. AutoFilter
+                last_data_row = len(df) + 1
+                worksheet.auto_filter.ref = f"A1:{chr(64 + len(df.columns))}{last_data_row}"
+                
+                # 2. Freeze Panes (Header row)
+                worksheet.freeze_panes = "A2"
+                
+                # 3. Header Style
+                header_font = Font(bold=True, color="FFFFFF")
+                header_fill = PatternFill(start_color="4F81BD", end_color="4F81BD", fill_type="solid")
+                for cell in worksheet[1]:
+                    cell.font = header_font
+                    cell.fill = header_fill
+
+                # 4. Column Widths
+                for idx, col in enumerate(df.columns):
+                    col_letter = chr(65 + idx)
+                    if name == "Summary":
+                        if col == "Category": worksheet.column_dimensions[col_letter].width = 15
+                        elif col == "Metric": worksheet.column_dimensions[col_letter].width = 25
+                        elif col == "Value": worksheet.column_dimensions[col_letter].width = 60
+                        continue
+
+                    # Media columns
+                    if any(x in col.lower() for x in ["audio", "media", "input", "output", "link"]):
+                        worksheet.column_dimensions[col_letter].width = 15
+                        for row_idx in range(2, len(df) + 2):
+                            worksheet.cell(row=row_idx, column=idx+1).alignment = Alignment(horizontal='center')
+                    else:
+                        series = df[col]
+                        max_len = max((series.astype(str).map(len).max(), len(str(series.name)))) + 2
+                        max_len = min(max_len, 80)
+                        worksheet.column_dimensions[col_letter].width = max_len
+
+                # 5. Conditional Formatting
+                green_fill = PatternFill(start_color="C6EFCE", end_color="C6EFCE", fill_type="solid")
+                red_fill = PatternFill(start_color="FFC7CE", end_color="FFC7CE", fill_type="solid")
+                yellow_fill = PatternFill(start_color="FFEB9C", end_color="FFEB9C", fill_type="solid")
+
+                for idx, col in enumerate(df.columns):
+                    col_letter = chr(65 + idx)
+                    range_str = f"{col_letter}2:{col_letter}{len(df)+1}"
+                    
+                    if col == "Status":
+                        worksheet.conditional_formatting.add(range_str, FormulaRule(formula=[f'{col_letter}2="PASSED"'], stopIfTrue=True, fill=green_fill))
+                        worksheet.conditional_formatting.add(range_str, FormulaRule(formula=[f'{col_letter}2="FAILED"'], stopIfTrue=True, fill=red_fill))
+                        worksheet.conditional_formatting.add(range_str, FormulaRule(formula=[f'{col_letter}2="MISSING"'], stopIfTrue=True, fill=yellow_fill))
+                    
+                    elif "(s)" in col or col in ["TTFT", "TPS"]:
+                        rule = ColorScaleRule(start_type='min', start_color='C6EFCE', 
+                                              mid_type='percentile', mid_value=50, mid_color='FFEB9C',
+                                              end_type='max', end_color='FFC7CE')
+                        worksheet.conditional_formatting.add(range_str, rule)
+                    
+                    elif "VRAM" in col:
+                        rule = ColorScaleRule(start_type='min', start_color='C6EFCE', 
+                                              mid_type='percentile', mid_value=50, mid_color='FFEB9C',
+                                              end_type='max', end_color='FFC7CE')
+                        worksheet.conditional_formatting.add(range_str, rule)
         
         print(f"📊 Excel Report Generated: {output_path}")
         return output_path
