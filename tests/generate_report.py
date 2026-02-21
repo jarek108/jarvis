@@ -168,39 +168,50 @@ def generate_excel(upload=True, upload_outputs=False, session_dir=None):
                     model_col = infer_detailed_name(raw_model)
                     log_link = get_link(s.get('log_path'), session_out_id)
                     model_val = f'=HYPERLINK("{log_link.split(chr(34))[1]}", "{model_col}")' if log_link and log_link.startswith("=") else model_col
-                    
                     prompt = str(s.get('input_text', 'N/A')).replace('\n', ' ').replace('\r', ' ')
                     response = str(s.get('text') or s.get('raw_text') or s.get('llm_text') or "N/A").replace('\n', ' ').replace('\r', ' ')
                     
-                    # --- METRIC RECOVERY LOGIC ---
-                    rtf = s.get('rtf', 0); wps = s.get('wps', 0); cps = s.get('cps', 0); ttft = s.get('ttft', 0); tps = s.get('tps', 0)
-                    exec_time = s.get('duration', 0)
-                    
+                    # Resolve metrics
+                    rtf = s.get('rtf', 0); wps = s.get('wps', 0); cps = s.get('cps', 0); ttft = s.get('ttft', 0); tps = s.get('tps', 0); exec_time = s.get('duration', 0)
                     if exec_time > 0:
                         if domain == "STT":
                             if not wps or wps == 0: wps = len(response.split()) / exec_time
                             if not rtf or rtf == 0:
                                 audio_p = os.path.abspath(os.path.join(project_root, s.get('input_file', '')))
-                                if os.path.exists(audio_p) and audio_p.endswith(".wav"):
+                                if os.path.exists(audio_p):
                                     try:
-                                        with wave.open(audio_p, 'rb') as wf:
-                                            aud_dur = wf.getnframes() / float(wf.getframerate())
-                                            rtf = exec_time / aud_dur if aud_dur > 0 else 0
+                                        with wave.open(audio_p, 'rb') as wf: rtf = exec_time / (wf.getnframes() / float(wf.getframerate()))
                                     except: pass
                         elif domain == "TTS":
                             if not cps or cps == 0: cps = len(prompt) / exec_time
                             if not wps or wps == 0: wps = len(prompt.split()) / exec_time
-                    # -----------------------------
 
+                    # --- ROW CONSTRUCTION (Order: Identity > Status > Metrics > Artifacts > Text) ---
                     row = {"Loadout": model_val, "Scenario": s.get('name'), "Status": s.get('status')}
-                    if domain == "STT": row.update({"Audio": get_link(s.get('input_file'), inputs_id), "Result": response, "Match %": r3(s.get('match_pct')), "RTF": r3(rtf), "WPS": r3(wps)})
-                    elif domain == "TTS": row.update({"Audio": get_link(s.get('output_file'), session_out_id), "Input": prompt, "CPS": r3(cps), "WPS": r3(wps)})
-                    elif domain == "LLM": row.update({"Prompt": prompt, "Response": response, "TTFT": r3(ttft), "TPS": r3(tps)})
-                    elif domain == "VLM": row.update({"Media": get_link(s.get('input_file'), inputs_id), "Prompt": prompt, "Response": response, "TTFT": r3(ttft), "TPS": r3(tps)})
+                    
+                    # 1. Metrics block
+                    if domain == "STT": row.update({"RTF": r3(rtf), "WPS": r3(wps), "Match %": r3(s.get('match_pct'))})
+                    elif domain == "TTS": row.update({"CPS": r3(cps), "WPS": r3(wps)})
+                    elif domain == "LLM": row.update({"TTFT": r3(ttft), "TPS": r3(tps)})
+                    elif domain == "VLM": row.update({"TTFT": r3(ttft), "TPS": r3(tps)})
                     elif domain == "STS":
                         m = s.get('metrics', {})
-                        row.update({"Input": get_link(s.get('input_file'), inputs_id), "Output": get_link(s.get('output_file'), session_out_id), "Text": response, "TTFT": r3(ttft), "STT Inf": r3(s.get('stt_inf') or m.get('stt', [0,0])[1]), "LLM Tot": r3(s.get('llm_tot') or (m.get('llm', [0,0])[1] - m.get('llm', [0,0])[0])), "TTS Inf": r3(s.get('tts_inf') or (m.get('tts', [0,0])[1] - m.get('tts', [0,0])[0]))})
+                        row.update({"TTFT": r3(ttft), "STT Inf": r3(s.get('stt_inf') or m.get('stt', [0,0])[1]), "LLM Tot": r3(s.get('llm_tot') or (m.get('llm', [0,0])[1] - m.get('llm', [0,0])[0])), "TTS Inf": r3(s.get('tts_inf') or (m.get('tts', [0,0])[1] - m.get('tts', [0,0])[0]))})
+                    
                     row.update({"Exec": r3(exec_time), "Setup": r3(s.get('setup_time')), "Cleanup": r3(s.get('cleanup_time')), "VRAM": r3(s.get('vram_peak'))})
+                    
+                    # 2. Artifacts block
+                    if domain == "STT": row.update({"Audio": get_link(s.get('input_file'), inputs_id)})
+                    elif domain == "TTS": row.update({"Audio": get_link(s.get('output_file'), session_out_id)})
+                    elif domain == "VLM": row.update({"Media": get_link(s.get('input_file'), inputs_id)})
+                    elif domain == "STS": row.update({"Input": get_link(s.get('input_file'), inputs_id), "Output": get_link(s.get('output_file'), session_out_id)})
+                    
+                    # 3. Text block
+                    if domain == "STT": row.update({"Result": response})
+                    elif domain == "TTS": row.update({"Input": prompt})
+                    elif domain in ["LLM", "VLM"]: row.update({"Prompt": prompt, "Response": response})
+                    elif domain == "STS": row.update({"Text": response})
+                    
                     rows.append(row)
             if rows:
                 sheets[domain] = pd.DataFrame(rows); has_any_data = True
