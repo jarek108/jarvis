@@ -66,9 +66,12 @@ def find_log_fallback(artifacts_dir, model_id, domain_type):
 def infer_detailed_name(model_id):
     if not model_id or model_id == "N/A": return model_id
     name = model_id.upper()
+    # Support legacy nativevideo flag in loadout name
     if "NATIVEVIDEO" in name and "#NATIVE" not in name:
         name = name.replace("NATIVEVIDEO", "#NATIVE")
-    if "#CTX=" not in name:
+    
+    # Only infer CTX for LLM/VLM engines
+    if "#CTX=" not in name and ("OL_" in name or "VL_" in name):
         ctx = "4096" if "OL_" in name else "16384"
         name += f"#CTX={ctx}"
     return name

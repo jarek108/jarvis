@@ -265,14 +265,13 @@ class LifecycleManager:
 
     def format_models_for_display(self):
         display_parts = []
-        if self.cat['stt']: display_parts.append(self.cat['stt']['id'].upper())
+        if self.cat['stt']: 
+            display_parts.append(self.cat['stt']['id'].upper())
         
         if self.cat['llm']:
             llm = self.cat['llm']
             prefix = "VL_" if llm['engine'] == "vllm" else "OL_"
             
-            # Use the most detailed ID available from the services list if already calculated
-            # Otherwise, build a basic detailed name
             flags = llm.get('flags', {})
             model_id = llm['model'].upper()
             name = f"{prefix}{model_id}"
@@ -280,27 +279,25 @@ class LifecycleManager:
             if flags.get('nativevideo') or kwargs.get('nativevideo'):
                 name += "#NATIVE"
             
-            if flags.get('stream') or self.full: # Heuristic for display
+            if flags.get('stream') or self.full: 
                 name += "#STREAM"
             
-            # We don't have the resolved max_len yet during init, 
-            # so we'll just use the engine-appropriate default/flag
             ctx = flags.get('ctx')
             if not ctx:
                 if llm['engine'] == "ollama": ctx = 4096
                 else: ctx = self.cfg.get('vllm', {}).get('default_context_size', 16384)
             name += f"#CTX={ctx}"
             
-            # Add multi-modal defaults for display if relevant
             if llm['engine'] == "vllm":
-                img_lim = flags.get('img_lim') or 8 # Default from config
+                img_lim = flags.get('img_lim') or 8
                 vid_lim = flags.get('vid_lim')
                 if img_lim and int(img_lim) > 1: name += f"#IMG_LIM={img_lim}"
                 if vid_lim and int(vid_lim) > 1: name += f"#VID_LIM={vid_lim}"
 
             display_parts.append(name)
             
-        if self.cat['tts']: display_parts.append(self.cat['tts']['id'].upper())
+        if self.cat['tts']: 
+            display_parts.append(self.cat['tts']['id'].upper())
         return " + ".join(display_parts) or self.setup_name.upper()
 
     def reconcile(self, domain):
