@@ -6,6 +6,7 @@ import pickle
 import time
 import traceback
 import webbrowser
+import re
 from google_auth_oauthlib.flow import InstalledAppFlow
 from google.auth.transport.requests import Request
 from googleapiclient.discovery import build
@@ -54,6 +55,26 @@ def upload_to_gdrive(file_path):
     if link: print(f"✅ GDrive Upload Successful: {link}")
     return link
 
+def find_log_fallback(artifacts_dir, model_id, domain_type):
+    """Searches directory for a log file matching the model and domain type."""
+    # Sanitize model_id to match file naming (replace / and : with --)
+    safe_id = model_id.replace("/", "--").replace(":", "-")
+    # vLLM logs often have full ID, Ollama might have short
+    pattern = f"svc_{domain_type}_{safe_id}"
+    for f in os.listdir(artifacts_dir):
+        if f.startswith(pattern) and f.endswith(".log"):
+            return os.path.join(artifacts_dir, f)
+    return None
+
+def infer_detailed_name(model_id):
+    """Adds resolved defaults to legacy model names for transparent reporting."""
+    if not model_id or model_id == "N/A": return model_id
+    name = model_id.upper()
+    if "#CTX=" not in name:
+        ctx = "4096" if "OL_" in name else "16384"
+        name += f"#CTX={ctx}"
+    return name
+
 def generate_excel(upload=True, upload_outputs=False, session_dir=None):
     try:
         project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -72,14 +93,30 @@ def generate_excel(upload=True, upload_outputs=False, session_dir=None):
         
         # --- TURBO SYNC: DISCOVERY PHASE ---
         input_paths = set(); output_paths = set(); log_paths = set(); domains = ["stt", "tts", "llm", "vlm", "sts"]
+        
+        # Pre-scan artifacts to support legacy log discovery
+        all_data = {}
         for d in domains:
             fname = f"{d}.json" if session_dir else f"latest_{d}.json"
-            data = load_json(os.path.join(artifacts_dir, fname))
+            all_data[d] = load_json(os.path.join(artifacts_dir, fname))
+
+        for d, data in all_data.items():
             for entry in data:
                 for s in entry.get('scenarios', []):
                     if s.get('input_file'): input_paths.add(s['input_file'])
                     if s.get('output_file'): output_paths.add(s['output_file'])
-                    if s.get('log_path'): log_paths.add(s['log_path'])
+                    
+                    # 1. Resolve Log Path (Explicit or Fallback)
+                    l_path = s.get('log_path')
+                    if not l_path:
+                        m_id = s.get('llm_model') or s.get('stt_model') or s.get('tts_model') or entry.get('loadout')
+                        if m_id:
+                            m_type = "llm" if any(x in m_id.lower() for x in ["ol_", "vl_", "vllm:"]) else d
+                            l_path = find_log_fallback(artifacts_dir, m_id, m_type)
+                    
+                    if l_path:
+                        s['log_path'] = l_path # Update object for later linking
+                        log_paths.add(l_path)
 
         input_paths = [os.path.abspath(os.path.join(project_root, p)) for p in input_paths if p]
         output_paths = [os.path.abspath(os.path.join(project_root, p)) for p in output_paths if p]
@@ -90,7 +127,6 @@ def generate_excel(upload=True, upload_outputs=False, session_dir=None):
             asset_mgr.batch_upload(input_paths, fid_in, label="input artifacts")
             if upload_outputs:
                 fid_out = asset_mgr.get_folder_id("Jarvis_Artifacts_Outputs")
-                # Combine outputs and logs for bulk upload
                 asset_mgr.batch_upload(output_paths + log_paths, fid_out, label="output artifacts and logs")
 
         sheets = {}; has_any_data = False
@@ -119,37 +155,36 @@ def generate_excel(upload=True, upload_outputs=False, session_dir=None):
                 fid = asset_mgr.get_folder_id(folder_name)
                 cache = asset_mgr.file_cache.get(fid, {})
                 if fname in cache:
-                    label = "▶️ Play" if ".wav" in fname else "👁️ View"
+                    label = "▶️ Play" if ".wav" in fname else ("👁️ View" if "." in fname else "📄 Log")
                     return f'=HYPERLINK("{cache[fname]}", "{label}")'
             return f'=HYPERLINK("{abs_p}", "📁 Local File")'
 
         for domain in ["STT", "TTS", "LLM", "VLM", "STS"]:
-            fname = f"{domain.lower()}.json" if session_dir else f"latest_{domain.lower()}.json"
-            data = load_json(os.path.join(artifacts_dir, fname))
+            data = all_data.get(domain.lower())
             if not data: continue
             print(f"📊 Processing {domain} sheet...")
             rows = []
             for entry in data:
                 loadout_name = entry.get('loadout', 'N/A')
                 for s in entry.get('scenarios', []):
-                    model_col = s.get('detailed_model') or loadout_name
-                    if model_col == 'N/A':
-                        model_col = s.get('llm_model') or s.get('stt_model') or s.get('tts_model') or "N/A"
+                    # 1. Resolve Model Display Name (with inferred defaults)
+                    raw_model = s.get('detailed_model') or loadout_name
+                    if raw_model == 'N/A':
+                        raw_model = s.get('llm_model') or s.get('stt_model') or s.get('tts_model') or "N/A"
+                    model_col = infer_detailed_name(raw_model)
                     
-                    prompt = str(s.get('input_text', 'N/A')).replace('\n', ' ').replace('\r', ' ')
-                    response = str(s.get('text') or s.get('raw_text') or s.get('llm_text') or "N/A").replace('\n', ' ').replace('\r', ' ')
-
-                    model_key = "Setup" if domain == "STS" else "Model"
+                    # 2. Hyper-link to Log
                     log_link = get_link(s.get('log_path'), "Jarvis_Artifacts_Outputs")
-                    
-                    # Wrap the model name in a hyperlink to its log if possible
                     if log_link and log_link.startswith("="):
-                        # Extract URL from =HYPERLINK("url", "label")
                         url_only = log_link.split('"')[1]
                         model_val = f'=HYPERLINK("{url_only}", "{model_col}")'
                     else:
                         model_val = model_col
 
+                    prompt = str(s.get('input_text', 'N/A')).replace('\n', ' ').replace('\r', ' ')
+                    response = str(s.get('text') or s.get('raw_text') or s.get('llm_text') or "N/A").replace('\n', ' ').replace('\r', ' ')
+
+                    model_key = "Setup" if domain == "STS" else "Model"
                     row = {model_key: model_val, "Scenario": s.get('name'), "Status": s.get('status')}
                     if domain == "STT": row.update({"Audio": get_link(s.get('input_file')), "Result": response, "Match %": s.get('match_pct', 0)})
                     elif domain == "TTS": row.update({"Audio": get_link(s.get('output_file'), "Jarvis_Artifacts_Outputs"), "Input": prompt})
@@ -175,21 +210,12 @@ def generate_excel(upload=True, upload_outputs=False, session_dir=None):
                 last_data_row = len(df) + 1
                 worksheet.auto_filter.ref = f"A1:{chr(64 + len(df.columns))}{last_data_row}"
                 worksheet.freeze_panes = "B2"
-                
-                header_font = Font(bold=True, color="FFFFFF")
-                header_fill = PatternFill(start_color="4F81BD", end_color="4F81BD", fill_type="solid")
-                for cell in worksheet[1]:
-                    cell.font = header_font; cell.fill = header_fill
-
-                for row_idx in range(2, last_data_row + 1):
-                    worksheet.row_dimensions[row_idx].height = 15 # Fixed "Flat" height
-
+                header_font = Font(bold=True, color="FFFFFF"); header_fill = PatternFill(start_color="4F81BD", end_color="4F81BD", fill_type="solid")
+                for cell in worksheet[1]: cell.font = header_font; cell.fill = header_fill
+                for row_idx in range(2, last_data_row + 1): worksheet.row_dimensions[row_idx].height = 15
                 for idx, col in enumerate(df.columns):
                     col_letter = chr(65 + idx)
-                    # Enforce NO WRAP for all data cells
-                    for row_idx in range(2, last_data_row + 1):
-                        worksheet.cell(row=row_idx, column=idx+1).alignment = Alignment(wrap_text=False, vertical='center')
-
+                    for row_idx in range(2, last_data_row + 1): worksheet.cell(row=row_idx, column=idx+1).alignment = Alignment(wrap_text=False, vertical='center')
                     if name == "Summary":
                         if col == "Category": worksheet.column_dimensions[col_letter].width = 15
                         elif col == "Metric": worksheet.column_dimensions[col_letter].width = 25
@@ -197,21 +223,15 @@ def generate_excel(upload=True, upload_outputs=False, session_dir=None):
                         continue
                     if any(x in col.lower() for x in ["audio", "media", "input", "output", "link"]):
                         worksheet.column_dimensions[col_letter].width = 15
-                        for row_idx in range(2, last_data_row + 1):
-                            worksheet.cell(row=row_idx, column=idx+1).alignment = Alignment(horizontal='center', wrap_text=False)
+                        for row_idx in range(2, last_data_row + 1): worksheet.cell(row=row_idx, column=idx+1).alignment = Alignment(horizontal='center', wrap_text=False)
                     else:
-                        series = df[col]
-                        max_len = max((series.astype(str).map(len).max(), len(str(series.name)))) + 2
-                        max_len = min(max_len, 80)
-                        worksheet.column_dimensions[col_letter].width = max_len
-
+                        series = df[col]; max_len = max((series.astype(str).map(len).max(), len(str(series.name)))) + 2
+                        max_len = min(max_len, 80); worksheet.column_dimensions[col_letter].width = max_len
                 green_fill = PatternFill(start_color="C6EFCE", end_color="C6EFCE", fill_type="solid")
                 red_fill = PatternFill(start_color="FFC7CE", end_color="FFC7CE", fill_type="solid")
                 yellow_fill = PatternFill(start_color="FFEB9C", end_color="FFEB9C", fill_type="solid")
-
                 for idx, col in enumerate(df.columns):
-                    col_letter = chr(65 + idx)
-                    range_str = f"{col_letter}2:{col_letter}{last_data_row}"
+                    col_letter = chr(65 + idx); range_str = f"{col_letter}2:{col_letter}{last_data_row}"
                     if col == "Status":
                         worksheet.conditional_formatting.add(range_str, FormulaRule(formula=[f'{col_letter}2="PASSED"'], stopIfTrue=True, fill=green_fill))
                         worksheet.conditional_formatting.add(range_str, FormulaRule(formula=[f'{col_letter}2="FAILED"'], stopIfTrue=True, fill=red_fill))
