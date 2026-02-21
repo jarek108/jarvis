@@ -150,6 +150,10 @@ def generate_excel(upload=True, upload_outputs=False, session_dir=None):
                     return f'=HYPERLINK("{cache[fname]}", "{label}")'
             return f'=HYPERLINK("{abs_p}", "📁 Local File")'
 
+        def r3(val):
+            try: return round(float(val), 3) if val is not None else 0
+            except: return 0
+
         for domain in ["STT", "TTS", "LLM", "VLM", "STS"]:
             data = all_data.get(domain.lower())
             if not data: continue
@@ -163,18 +167,17 @@ def generate_excel(upload=True, upload_outputs=False, session_dir=None):
                     model_col = infer_detailed_name(raw_model)
                     log_link = get_link(s.get('log_path'), session_out_id)
                     model_val = f'=HYPERLINK("{log_link.split(chr(34))[1]}", "{model_col}")' if log_link and log_link.startswith("=") else model_col
-                    
                     prompt = str(s.get('input_text', 'N/A')).replace('\n', ' ').replace('\r', ' ')
                     response = str(s.get('text') or s.get('raw_text') or s.get('llm_text') or "N/A").replace('\n', ' ').replace('\r', ' ')
                     row = {"Loadout": model_val, "Scenario": s.get('name'), "Status": s.get('status')}
-                    if domain == "STT": row.update({"Audio": get_link(s.get('input_file'), inputs_id), "Result": response, "Match %": s.get('match_pct', 0), "RTF": s.get('rtf'), "WPS": s.get('wps')})
-                    elif domain == "TTS": row.update({"Audio": get_link(s.get('output_file'), session_out_id), "Input": prompt, "CPS": s.get('cps'), "WPS": s.get('wps')})
-                    elif domain == "LLM": row.update({"Prompt": prompt, "Response": response, "TTFT": s.get('ttft'), "TPS": s.get('tps')})
-                    elif domain == "VLM": row.update({"Media": get_link(s.get('input_file'), inputs_id), "Prompt": prompt, "Response": response, "TTFT": s.get('ttft'), "TPS": s.get('tps')})
+                    if domain == "STT": row.update({"Audio": get_link(s.get('input_file'), inputs_id), "Result": response, "Match %": r3(s.get('match_pct')), "RTF": r3(s.get('rtf')), "WPS": r3(s.get('wps'))})
+                    elif domain == "TTS": row.update({"Audio": get_link(s.get('output_file'), session_out_id), "Input": prompt, "CPS": r3(s.get('cps')), "WPS": r3(s.get('wps'))})
+                    elif domain == "LLM": row.update({"Prompt": prompt, "Response": response, "TTFT": r3(s.get('ttft')), "TPS": r3(s.get('tps'))})
+                    elif domain == "VLM": row.update({"Media": get_link(s.get('input_file'), inputs_id), "Prompt": prompt, "Response": response, "TTFT": r3(s.get('ttft')), "TPS": r3(s.get('tps'))})
                     elif domain == "STS":
                         m = s.get('metrics', {})
-                        row.update({"Input": get_link(s.get('input_file'), inputs_id), "Output": get_link(s.get('output_file'), session_out_id), "Text": response, "TTFT": s.get('ttft'), "STT Inf": s.get('stt_inf') or m.get('stt', [0,0])[1], "LLM Tot": s.get('llm_tot') or (m.get('llm', [0,0])[1] - m.get('llm', [0,0])[0]), "TTS Inf": s.get('tts_inf') or (m.get('tts', [0,0])[1] - m.get('tts', [0,0])[0])})
-                    row.update({"Execution (s)": s.get('duration'), "Setup (s)": s.get('setup_time', 0), "Cleanup (s)": s.get('cleanup_time', 0), "VRAM Peak": s.get('vram_peak', 0)})
+                        row.update({"Input": get_link(s.get('input_file'), inputs_id), "Output": get_link(s.get('output_file'), session_out_id), "Text": response, "TTFT": r3(s.get('ttft')), "STT Inf": r3(s.get('stt_inf') or m.get('stt', [0,0])[1]), "LLM Tot": r3(s.get('llm_tot') or (m.get('llm', [0,0])[1] - m.get('llm', [0,0])[0])), "TTS Inf": r3(s.get('tts_inf') or (m.get('tts', [0,0])[1] - m.get('tts', [0,0])[0]))})
+                    row.update({"Execution (s)": r3(s.get('duration')), "Setup (s)": r3(s.get('setup_time')), "Cleanup (s)": r3(s.get('cleanup_time')), "VRAM Peak": r3(s.get('vram_peak'))})
                     rows.append(row)
             if rows:
                 sheets[domain] = pd.DataFrame(rows); has_any_data = True
@@ -192,45 +195,24 @@ def generate_excel(upload=True, upload_outputs=False, session_dir=None):
                 for row_idx in range(2, last_data_row + 1): worksheet.row_dimensions[row_idx].height = 15
                 for idx, col in enumerate(df.columns):
                     col_letter = chr(65 + idx)
-                    
-                    # 1. Default alignment for data
-                    for row_idx in range(2, last_data_row + 1):
-                        worksheet.cell(row=row_idx, column=idx+1).alignment = Alignment(wrap_text=False, vertical='center')
-
-                    # 2. Specific Summary sizing
+                    for row_idx in range(2, last_data_row + 1): worksheet.cell(row=row_idx, column=idx+1).alignment = Alignment(wrap_text=False, vertical='center')
                     if name == "Summary":
                         if col == "Category": worksheet.column_dimensions[col_letter].width = 15
                         elif col == "Metric": worksheet.column_dimensions[col_letter].width = 25
                         elif col == "Value": worksheet.column_dimensions[col_letter].width = 60
                         continue
-                    
-                    # 3. Loadout Column (Fixed)
-                    if col == "Loadout":
-                        worksheet.column_dimensions[col_letter].width = 35
-                        continue
-                    
-                    # 4. Media Columns (Centered)
+                    if col == "Loadout": worksheet.column_dimensions[col_letter].width = 35; continue
                     if any(x in col.lower() for x in ["audio", "media", "input", "output", "link"]):
-                        worksheet.column_dimensions[col_letter].width = 15
-                        for row_idx in range(2, last_data_row + 1):
-                            worksheet.cell(row=row_idx, column=idx+1).alignment = Alignment(horizontal='center', wrap_text=False)
+                        worksheet.column_dimensions[col_letter].width = 12
+                        for row_idx in range(2, last_data_row + 1): worksheet.cell(row=row_idx, column=idx+1).alignment = Alignment(horizontal='center', wrap_text=False)
                         continue
-
-                    # 5. Numeric Columns (Right-aligned, auto-fit)
+                    if col in ["Prompt", "Response", "Text", "Result", "Input"]:
+                        worksheet.column_dimensions[col_letter].width = 45; continue
                     is_numeric = "(s)" in col or col in ["TTFT", "TPS", "RTF", "WPS", "CPS", "Match %"] or "VRAM" in col or "Inf" in col or "Tot" in col
-                    
-                    series = df[col]
-                    # Filter out NaNs for width calculation to avoid 'nan' bloating
-                    valid_values = series.dropna().astype(str)
-                    max_val_len = valid_values.map(len).max() if not valid_values.empty else 0
-                    max_len = max(max_val_len, len(str(series.name))) + 4
-                    max_len = min(max_len, 80)
-                    
-                    worksheet.column_dimensions[col_letter].width = max_len
-                    
+                    series = df[col]; valid_values = series.dropna().astype(str); max_val_len = valid_values.map(len).max() if not valid_values.empty else 0
+                    max_len = max(max_val_len, len(str(series.name))) + 2; max_len = min(max_len, 15) if is_numeric else min(max_len, 80); worksheet.column_dimensions[col_letter].width = max_len
                     if is_numeric:
-                        for row_idx in range(2, last_data_row + 1):
-                            worksheet.cell(row=row_idx, column=idx+1).alignment = Alignment(horizontal='right', wrap_text=False)
+                        for row_idx in range(2, last_data_row + 1): worksheet.cell(row=row_idx, column=idx+1).alignment = Alignment(horizontal='right', wrap_text=False)
                 green_fill = PatternFill(start_color="C6EFCE", end_color="C6EFCE", fill_type="solid"); red_fill = PatternFill(start_color="FFC7CE", end_color="FFC7CE", fill_type="solid"); yellow_fill = PatternFill(start_color="FFEB9C", end_color="FFEB9C", fill_type="solid")
                 for idx, col in enumerate(df.columns):
                     col_letter = chr(65 + idx); range_str = f"{col_letter}2:{col_letter}{last_data_row}"
