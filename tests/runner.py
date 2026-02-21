@@ -154,7 +154,7 @@ def run_domain_tests(domain, setup_name, models, scenarios, settings, session_di
             if domain == "stt": res["stt_model"] = model_display
             elif domain == "tts": res["tts_model"] = model_display
             else: res["llm_model"] = model_display
-    return final_results
+    return final_results, model_display
 
 def main():
     parser = argparse.ArgumentParser(description="Jarvis Plan-Driven Test Runner")
@@ -241,7 +241,7 @@ def main():
                                 dashboard.update_scenario(domain, s_name, res['name'], res['status'])
 
                             start_l = time.perf_counter()
-                            res = run_domain_tests(domain, s_name, models, scenarios, settings, session_dir, dashboard, plumbing=args.plumbing, on_scenario=dashboard_capture, on_phase=lambda p: dashboard.update_phase(domain, s_name, p))
+                            res, model_display = run_domain_tests(domain, s_name, models, scenarios, settings, session_dir, dashboard, plumbing=args.plumbing, on_scenario=dashboard_capture, on_phase=lambda p: dashboard.update_phase(domain, s_name, p))
                             
                             # Aggregate Peak VRAM
                             if res:

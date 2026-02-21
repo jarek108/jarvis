@@ -12,7 +12,7 @@ from .ui import LiveFilter
 import asyncio
 
 class LifecycleManager:
-    def __init__(self, setup_name, models=None, purge_on_entry=True, purge_on_exit=False, full=False, benchmark_mode=False, force_download=False, track_prior_vram=True, session_dir=None, on_phase=None, stub_mode=False):
+    def __init__(self, setup_name, models=None, purge_on_entry=True, purge_on_exit=False, full=False, benchmark_mode=False, force_download=False, track_prior_vram=True, session_dir=None, on_phase=None, stub_mode=False, **kwargs):
         self.setup_name = setup_name
         self.models = models or [] # List of model strings
         self.purge_on_entry = purge_on_entry
@@ -24,6 +24,7 @@ class LifecycleManager:
         self.session_dir = session_dir
         self.on_phase = on_phase
         self.stub_mode = stub_mode
+        self.kwargs = kwargs
         self.cfg = utils.load_config()
         self.project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
         self.python_exe = utils.resolve_path(self.cfg['paths']['venv_python'])
@@ -276,7 +277,7 @@ class LifecycleManager:
             model_id = llm['model'].upper()
             name = f"{prefix}{model_id}"
             
-            if flags.get('nativevideo') or kwargs.get('nativevideo'):
+            if flags.get('nativevideo') or self.kwargs.get('nativevideo'):
                 name += "#NATIVE"
             
             if flags.get('stream') or self.full: 
@@ -402,9 +403,9 @@ class LifecycleManager:
                     except: pass
         return time.perf_counter() - start_c
 
-def run_test_lifecycle(domain, setup_name, models, purge_on_entry, purge_on_exit, full, test_func, benchmark_mode=False, force_download=False, track_prior_vram=True, session_dir=None, on_phase=None, stub_mode=False, reporter=None):
+def run_test_lifecycle(domain, setup_name, models, purge_on_entry, purge_on_exit, full, test_func, benchmark_mode=False, force_download=False, track_prior_vram=True, session_dir=None, on_phase=None, stub_mode=False, reporter=None, **kwargs):
     ensure_utf8_output()
-    manager = LifecycleManager(setup_name, models=models, purge_on_entry=purge_on_entry, purge_on_exit=purge_on_exit, full=full, benchmark_mode=benchmark_mode, force_download=force_download, track_prior_vram=track_prior_vram, session_dir=session_dir, on_phase=on_phase, stub_mode=stub_mode)
+    manager = LifecycleManager(setup_name, models=models, purge_on_entry=purge_on_entry, purge_on_exit=purge_on_exit, full=full, benchmark_mode=benchmark_mode, force_download=force_download, track_prior_vram=track_prior_vram, session_dir=session_dir, on_phase=on_phase, stub_mode=stub_mode, **kwargs)
     model_display = manager.format_models_for_display()
     f = LiveFilter()
     

@@ -57,21 +57,62 @@ def upload_to_gdrive(file_path):
     return link
 
 def find_log_fallback(artifacts_dir, model_id, domain_type):
-    safe_id = model_id.replace("/", "--").replace(":", "-")
-    pattern = f"svc_{domain_type}_{safe_id}"
-    for f in os.listdir(artifacts_dir):
-        if f.startswith(pattern) and f.endswith(".log"):
-            return os.path.join(artifacts_dir, f)
+    """Searches directory for a log file matching the model and domain type."""
+    # 1. Extract core model ID from potential multi-model STS string
+    clean_id = model_id
+    if "_" in model_id and domain_type == "llm":
+        # Search for the component with engine prefix
+        parts = model_id.split("_")
+        for p in parts:
+            if any(x in p.upper() for x in ["OL_", "VL_", "VLLM:"]):
+                clean_id = p; break
+    
+    # 2. Strip flags (#) and sanitize
+    base_id = clean_id.split('#')[0].replace("/", "--").replace(":", "-").lower()
+    
+    # 3. Try multiple patterns
+    patterns = [
+        f"svc_{domain_type.lower()}_{base_id}",
+        # Fallback for STS where model_id might be engine-less
+        f"svc_llm_vl_{base_id}",
+        f"svc_llm_ol_{base_id}",
+        f"svc_llm_{base_id}",
+        f"svc_{domain_type.lower()}"
+    ]
+    
+    # Sort files by name length to find most specific match first
+    candidates = sorted(os.listdir(artifacts_dir), key=len, reverse=True)
+    for f in candidates:
+        if not f.endswith(".log"): continue
+        f_lower = f.lower()
+        for p in patterns:
+            if p.lower() in f_lower:
+                return os.path.join(artifacts_dir, f)
     return None
 
 def infer_detailed_name(model_id):
+    """Adds resolved defaults to legacy model names for transparent reporting."""
     if not model_id or model_id == "N/A": return model_id
+    
+    # If it's a combined STS loadout string (joined by _)
+    if "_" in model_id:
+        parts = model_id.split("_")
+        # Recursively infer for each part and join with +
+        return " + ".join([infer_detailed_name(p) for p in parts])
+
     name = model_id.upper()
+    # Support legacy nativevideo flag in loadout name
     if "NATIVEVIDEO" in name and "#NATIVE" not in name:
         name = name.replace("NATIVEVIDEO", "#NATIVE")
-    if "#CTX=" not in name and ("OL_" in name or "VL_" in name):
-        ctx = "4096" if "OL_" in name else "16384"
-        name += f"#CTX={ctx}"
+    
+    # Only infer CTX for LLM/VLM engines
+    if "#CTX=" not in name:
+        # Check if it contains LLM engine patterns
+        if "OL_" in name: name += "#CTX=4096"
+        elif "VL_" in name: name += "#CTX=16384"
+        elif "/" in name or ":" in name: # Guess it's an LLM if it has these markers
+            name += "#CTX=16384"
+            
     return name
 
 def generate_excel(upload=True, upload_outputs=False, session_dir=None):
