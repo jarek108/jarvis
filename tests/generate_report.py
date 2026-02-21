@@ -173,11 +173,18 @@ def generate_excel(upload=True, upload_outputs=False, session_dir=None):
         print(f"❌ Excel Error: {e}"); traceback.print_exc(); return None
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--upload", action="store_true")
-    parser.add_argument("--upload-outputs", action="store_true")
-    parser.add_argument("--dir", type=str)
+    parser = argparse.ArgumentParser(description="Generate and upload Jarvis benchmark reports.")
+    # Standard Boolean toggle (Defaults to True)
+    parser.add_argument("--upload-report", action=argparse.BooleanOptionalAction, default=True,
+                        help="Upload report and artifacts to GDrive (Default: True)")
+    
+    # Opt-in for transient data (Defaults to False)
+    parser.add_argument("--upload-outputs", action="store_true", 
+                        help="Include transient output audio/video in GDrive upload")
+    
+    parser.add_argument("--dir", type=str, help="Path to a specific session directory")
     args = parser.parse_args()
     
-    path = generate_excel(upload=args.upload, upload_outputs=args.upload_outputs, session_dir=args.dir)
-    if args.upload and path: upload_to_gdrive(path)
+    path = generate_excel(upload=args.upload_report, upload_outputs=args.upload_outputs, session_dir=args.dir)
+    if args.upload_report and path:
+        upload_to_gdrive(path)

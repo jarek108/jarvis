@@ -59,18 +59,13 @@ Both modes allow testing without loading actual model weights, but they operate 
 
 Every test run (real, mock, or plumbing) generates a unique session directory in `tests/logs/RUN_YYYYMMDD_HHMMSS/`.
 
-### Persistent Artifacts
-*   **`system_info.yaml`**: Host specs (GPU, RAM, CPU) and the plan executed.
-*   **`progression.log`**: A human-readable textual snapshot of the execution flow.
-*   **`svc_*.log`**: Full stdout/stderr capture for every spawned service.
-    *   **vLLM Note**: Captured in real-time from the Docker container via `docker logs -f`.
-*   **`domain.json`**: Incremental result data for each domain.
-*   **`Jarvis_Benchmark_Report_*.xlsx`**: The final stylized Excel report.
+### Documentation Suite
+*   **[How-to: Reporting](HOWTO_REPORTING.md)**: Instructions for generating and syncing reports.
+*   **[Concept: Artifact Lifecycle](CONCEPT_REPORTING.md)**: Architectural theory behind "Turbo Sync."
+*   **[Reference: Reporting Schema](REFERENCE_REPORTING.md)**: CLI flags and JSON data specifications.
 
 ### Excel Reporting
-*   Reports are automatically generated and uploaded to Google Drive at the end of a run.
-*   Links to the GDrive file are displayed in the dashboard's "System Status" panel.
-*   If upload fails, the local path is provided.
+Reports are automatically generated and uploaded to Google Drive at the end of a run. Links to the GDrive file are displayed in the dashboard's "System Status" panel.
 
 ---
 

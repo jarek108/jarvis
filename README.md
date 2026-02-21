@@ -47,6 +47,7 @@ python manage_loadout.py --status
 
 ### 🛠️ How-to Guides (Tasks)
 - **[Benchmarking](docs/HOWTO_BENCHMARK.md)**: Running tests and generating performance reports.
+- **[Reporting](docs/HOWTO_REPORTING.md)**: Regenerating and synchronizing benchmark data.
 - **[Engine Management](docs/HOWTO_ENGINE_MANAGEMENT.md)**: Configuring Ollama and vLLM (Docker) lifecycles.
 - **[Troubleshooting](docs/HOWTO_TROUBLESHOOTING.md)**: Common errors, CUDA issues, and log analysis.
 - **[Using the GUI](docs/HOWTO_USING_THE_GUI.md)**: Interacting with the Speech-to-Speech assistant client.
@@ -54,12 +55,14 @@ python manage_loadout.py --status
 ### 📚 Concepts (Understanding)
 - **[System Architecture](docs/CONCEPT_ARCHITECTURE.md)**: High-level component breakdown and data flow.
 - **[Model Physics](docs/CONCEPT_MODEL_PHYSICS.md)**: VRAM management, KV cache scaling, and calibration theory.
+- **[Reporting Architecture](docs/CONCEPT_REPORTING.md)**: Artifact lifecycles and the "Turbo Sync" engine.
 - **[Streaming Strategy](docs/CONCEPT_STREAMING.md)**: Latency trade-offs between batch and streaming modes.
 - **[Vision Strategies](docs/CONCEPT_VLM_STRATEGIES.md)**: How Jarvis handles multi-image and video data.
 - **[Persona & Tone](docs/CONCEPT_PERSONA.md)**: Philosophical stance on assistant behavior and honesty.
 
 ### 📖 Reference (Information)
 - **[API Reference](docs/REFERENCE_API.md)**: HTTP endpoints and JSON schemas.
+- **[Reporting & Data](docs/REFERENCE_REPORTING.md)**: CLI flags, JSON schemas, and GDrive structure.
 - **[Configuration](docs/REFERENCE_CONFIG.md)**: `config.yaml` dictionary and environment variables.
 - **[Hardware Matrix](docs/REFERENCE_HARDWARE.md)**: GPU and library compatibility guide (RTX 5090).
 - **[Calibration Database](docs/REFERENCE_CALIBRATION.md)**: Physics YAML schemas and evidence store.
