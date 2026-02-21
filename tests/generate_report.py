@@ -7,6 +7,7 @@ import time
 import traceback
 import webbrowser
 import re
+import wave
 from google_auth_oauthlib.flow import InstalledAppFlow
 from google.auth.transport.requests import Request
 from googleapiclient.discovery import build
@@ -167,17 +168,39 @@ def generate_excel(upload=True, upload_outputs=False, session_dir=None):
                     model_col = infer_detailed_name(raw_model)
                     log_link = get_link(s.get('log_path'), session_out_id)
                     model_val = f'=HYPERLINK("{log_link.split(chr(34))[1]}", "{model_col}")' if log_link and log_link.startswith("=") else model_col
+                    
                     prompt = str(s.get('input_text', 'N/A')).replace('\n', ' ').replace('\r', ' ')
                     response = str(s.get('text') or s.get('raw_text') or s.get('llm_text') or "N/A").replace('\n', ' ').replace('\r', ' ')
+                    
+                    # --- METRIC RECOVERY LOGIC ---
+                    rtf = s.get('rtf', 0); wps = s.get('wps', 0); cps = s.get('cps', 0); ttft = s.get('ttft', 0); tps = s.get('tps', 0)
+                    exec_time = s.get('duration', 0)
+                    
+                    if exec_time > 0:
+                        if domain == "STT":
+                            if not wps or wps == 0: wps = len(response.split()) / exec_time
+                            if not rtf or rtf == 0:
+                                audio_p = os.path.abspath(os.path.join(project_root, s.get('input_file', '')))
+                                if os.path.exists(audio_p) and audio_p.endswith(".wav"):
+                                    try:
+                                        with wave.open(audio_p, 'rb') as wf:
+                                            aud_dur = wf.getnframes() / float(wf.getframerate())
+                                            rtf = exec_time / aud_dur if aud_dur > 0 else 0
+                                    except: pass
+                        elif domain == "TTS":
+                            if not cps or cps == 0: cps = len(prompt) / exec_time
+                            if not wps or wps == 0: wps = len(prompt.split()) / exec_time
+                    # -----------------------------
+
                     row = {"Loadout": model_val, "Scenario": s.get('name'), "Status": s.get('status')}
-                    if domain == "STT": row.update({"Audio": get_link(s.get('input_file'), inputs_id), "Result": response, "Match %": r3(s.get('match_pct')), "RTF": r3(s.get('rtf')), "WPS": r3(s.get('wps'))})
-                    elif domain == "TTS": row.update({"Audio": get_link(s.get('output_file'), session_out_id), "Input": prompt, "CPS": r3(s.get('cps')), "WPS": r3(s.get('wps'))})
-                    elif domain == "LLM": row.update({"Prompt": prompt, "Response": response, "TTFT": r3(s.get('ttft')), "TPS": r3(s.get('tps'))})
-                    elif domain == "VLM": row.update({"Media": get_link(s.get('input_file'), inputs_id), "Prompt": prompt, "Response": response, "TTFT": r3(s.get('ttft')), "TPS": r3(s.get('tps'))})
+                    if domain == "STT": row.update({"Audio": get_link(s.get('input_file'), inputs_id), "Result": response, "Match %": r3(s.get('match_pct')), "RTF": r3(rtf), "WPS": r3(wps)})
+                    elif domain == "TTS": row.update({"Audio": get_link(s.get('output_file'), session_out_id), "Input": prompt, "CPS": r3(cps), "WPS": r3(wps)})
+                    elif domain == "LLM": row.update({"Prompt": prompt, "Response": response, "TTFT": r3(ttft), "TPS": r3(tps)})
+                    elif domain == "VLM": row.update({"Media": get_link(s.get('input_file'), inputs_id), "Prompt": prompt, "Response": response, "TTFT": r3(ttft), "TPS": r3(tps)})
                     elif domain == "STS":
                         m = s.get('metrics', {})
-                        row.update({"Input": get_link(s.get('input_file'), inputs_id), "Output": get_link(s.get('output_file'), session_out_id), "Text": response, "TTFT": r3(s.get('ttft')), "STT Inf": r3(s.get('stt_inf') or m.get('stt', [0,0])[1]), "LLM Tot": r3(s.get('llm_tot') or (m.get('llm', [0,0])[1] - m.get('llm', [0,0])[0])), "TTS Inf": r3(s.get('tts_inf') or (m.get('tts', [0,0])[1] - m.get('tts', [0,0])[0]))})
-                    row.update({"Exec": r3(s.get('duration')), "Setup": r3(s.get('setup_time')), "Cleanup": r3(s.get('cleanup_time')), "VRAM": r3(s.get('vram_peak'))})
+                        row.update({"Input": get_link(s.get('input_file'), inputs_id), "Output": get_link(s.get('output_file'), session_out_id), "Text": response, "TTFT": r3(ttft), "STT Inf": r3(s.get('stt_inf') or m.get('stt', [0,0])[1]), "LLM Tot": r3(s.get('llm_tot') or (m.get('llm', [0,0])[1] - m.get('llm', [0,0])[0])), "TTS Inf": r3(s.get('tts_inf') or (m.get('tts', [0,0])[1] - m.get('tts', [0,0])[0]))})
+                    row.update({"Exec": r3(exec_time), "Setup": r3(s.get('setup_time')), "Cleanup": r3(s.get('cleanup_time')), "VRAM": r3(s.get('vram_peak'))})
                     rows.append(row)
             if rows:
                 sheets[domain] = pd.DataFrame(rows); has_any_data = True
@@ -186,9 +209,7 @@ def generate_excel(upload=True, upload_outputs=False, session_dir=None):
         from openpyxl.styles import Font, PatternFill, Alignment
         from openpyxl.formatting.rule import FormulaRule, ColorScaleRule
         from utils import load_config
-        cfg = load_config()
-        report_cfg = cfg.get('reporting', {}).get('excel', {})
-
+        cfg = load_config(); report_cfg = cfg.get('reporting', {}).get('excel', {})
         with pd.ExcelWriter(output_path, engine='openpyxl') as writer:
             for name, df in sheets.items():
                 df.to_excel(writer, sheet_name=name, index=False)
@@ -197,47 +218,26 @@ def generate_excel(upload=True, upload_outputs=False, session_dir=None):
                 header_font = Font(bold=True, color="FFFFFF"); header_fill = PatternFill(start_color="4F81BD", end_color="4F81BD", fill_type="solid")
                 for cell in worksheet[1]: cell.font = header_font; cell.fill = header_fill
                 for row_idx in range(2, last_data_row + 1): worksheet.row_dimensions[row_idx].height = 15
-                
-                # Fetch domain-specific overrides
                 domain_overrides = report_cfg.get('domain_overrides', {}).get(name.lower(), {})
-
                 for idx, col in enumerate(df.columns):
                     col_letter = chr(65 + idx)
                     for row_idx in range(2, last_data_row + 1): worksheet.cell(row=row_idx, column=idx+1).alignment = Alignment(wrap_text=False, vertical='center')
-                    
                     if name == "Summary":
                         if col == "Category": worksheet.column_dimensions[col_letter].width = 15
                         elif col == "Metric": worksheet.column_dimensions[col_letter].width = 25
                         elif col == "Value": worksheet.column_dimensions[col_letter].width = 60
                         continue
-
-                    # --- RESOLVE COLUMN WIDTH ---
-                    # 1. Domain Specific Override
-                    if col in domain_overrides:
-                        width = domain_overrides[col]
-                    # 2. Loadout Column
-                    elif col == "Loadout":
-                        width = report_cfg.get('loadout_width', 35)
-                    # 3. Media Columns
+                    if col in domain_overrides: width = domain_overrides[col]
+                    elif col == "Loadout": width = report_cfg.get('loadout_width', 35)
                     elif any(x in col.lower() for x in ["audio", "media", "input", "output", "link"]):
                         width = report_cfg.get('media_column_width', 12)
-                        for row_idx in range(2, last_data_row + 1):
-                            worksheet.cell(row=row_idx, column=idx+1).alignment = Alignment(horizontal='center', wrap_text=False)
-                    # 4. Text Columns
-                    elif any(x in col.lower() for x in ["prompt", "response", "text", "result", "input"]):
-                        width = report_cfg.get('text_column_width', 50)
-                    # 5. Numeric / Metric Columns
+                        for row_idx in range(2, last_data_row + 1): worksheet.cell(row=row_idx, column=idx+1).alignment = Alignment(horizontal='center', wrap_text=False)
+                    elif any(x in col.lower() for x in ["prompt", "response", "text", "result", "input"]): width = report_cfg.get('text_column_width', 50)
                     elif col in ["Exec", "Setup", "Cleanup", "VRAM", "TTFT", "TPS", "RTF", "WPS", "CPS", "Match %"] or "Inf" in col or "Tot" in col:
                         width = report_cfg.get('metric_column_width', 12)
-                        for row_idx in range(2, last_data_row + 1):
-                            worksheet.cell(row=row_idx, column=idx+1).alignment = Alignment(horizontal='right', wrap_text=False)
-                    # 6. Default fallback
-                    else:
-                        width = report_cfg.get('default_width', 15)
-                    
+                        for row_idx in range(2, last_data_row + 1): worksheet.cell(row=row_idx, column=idx+1).alignment = Alignment(horizontal='right', wrap_text=False)
+                    else: width = report_cfg.get('default_width', 15)
                     worksheet.column_dimensions[col_letter].width = width
-                    # ----------------------------
-
                 green_fill = PatternFill(start_color="C6EFCE", end_color="C6EFCE", fill_type="solid"); red_fill = PatternFill(start_color="FFC7CE", end_color="FFC7CE", fill_type="solid"); yellow_fill = PatternFill(start_color="FFEB9C", end_color="FFEB9C", fill_type="solid")
                 for idx, col in enumerate(df.columns):
                     col_letter = chr(65 + idx); range_str = f"{col_letter}2:{col_letter}{last_data_row}"
@@ -254,13 +254,19 @@ def generate_excel(upload=True, upload_outputs=False, session_dir=None):
         print(f"❌ Excel Error: {e}"); traceback.print_exc(); return None
 
 def generate_and_upload_report(session_dir, upload_report=True, upload_outputs=False, open_browser=True):
+    project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    service = get_gdrive_service() if upload_report else None
+    asset_mgr = GDriveAssetManager(service) if service else None
     path = generate_excel(upload=upload_report, upload_outputs=upload_outputs, session_dir=session_dir)
+    if not path: return None
     link = None
-    if upload_report and path:
-        link = upload_to_gdrive(path)
-        if link and open_browser:
+    if upload_report:
+        master_id = asset_mgr.get_folder_id("Jarvis")
+        print(f"📤 Uploading report to GDrive master folder...")
+        link = asset_mgr.sync_file(path, master_id, overwrite=False)
+        if link:
             print(f"✅ GDrive Link: {link}\n🌐 Opening report in browser...")
-            webbrowser.open(link)
+            if open_browser: webbrowser.open(link)
     return link or path
 
 def main():

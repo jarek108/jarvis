@@ -17,4 +17,4 @@ traffic:
 
 vision_story:
   media: "bunny.mp4"
-  text: "Watch this video carefully and write a detailed ~300-word description of the video. Describe the story, what characters are doing and what is the overall/final emotion behind it"
+  text: "Write a ~100-word description of the scenario/story in this video. What is its point and tone?"
