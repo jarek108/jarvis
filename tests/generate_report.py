@@ -150,17 +150,28 @@ def generate_excel(upload=True, upload_outputs=False, session_dir=None):
                     if model_col == 'N/A':
                         model_col = s.get('llm_model') or s.get('stt_model') or s.get('tts_model') or "N/A"
                     
-                    row = {"Scenario": s.get('name'), "Status": s.get('status'), "Execution (s)": s.get('duration'), "Setup (s)": s.get('setup_time', 0), "Cleanup (s)": s.get('cleanup_time', 0), "VRAM Peak": s.get('vram_peak', 0)}
+                    # Initialize row with Model/Setup as the FIRST column
+                    model_key = "Setup" if domain == "STS" else "Model"
+                    row = {model_key: model_col, "Scenario": s.get('name'), "Status": s.get('status')}
+                    
                     if domain == "STT":
-                        row.update({"Model": model_col, "Audio": get_link(s.get('input_file')), "Result": s.get('output_text'), "Match %": s.get('match_pct', 0)})
+                        row.update({"Audio": get_link(s.get('input_file')), "Result": s.get('output_text'), "Match %": s.get('match_pct', 0)})
                     elif domain == "TTS":
-                        row.update({"Model": model_col, "Audio": get_link(s.get('output_file'), "Jarvis_Artifacts_Outputs"), "Input": s.get('input_text')})
+                        row.update({"Audio": get_link(s.get('output_file'), "Jarvis_Artifacts_Outputs"), "Input": s.get('input_text')})
                     elif domain == "LLM":
-                        row.update({"Model": model_col, "Prompt": s.get('input_text'), "Response": s.get('text') or s.get('raw_text'), "TTFT": s.get('ttft'), "TPS": s.get('tps')})
+                        row.update({"Prompt": s.get('input_text'), "Response": s.get('text') or s.get('raw_text'), "TTFT": s.get('ttft'), "TPS": s.get('tps')})
                     elif domain == "VLM":
-                        row.update({"Model": model_col, "Media": get_link(s.get('input_file')), "Prompt": s.get('input_text'), "Response": s.get('text') or s.get('raw_text')})
+                        row.update({"Media": get_link(s.get('input_file')), "Prompt": s.get('input_text'), "Response": s.get('text') or s.get('raw_text')})
                     elif domain == "STS":
-                        row.update({"Setup": model_col, "Input": get_link(s.get('input_file')), "Output": get_link(s.get('output_file'), "Jarvis_Artifacts_Outputs"), "Text": s.get('llm_text')})
+                        row.update({"Input": get_link(s.get('input_file')), "Output": get_link(s.get('output_file'), "Jarvis_Artifacts_Outputs"), "Text": s.get('llm_text')})
+                    
+                    # Append common metrics at the end
+                    row.update({
+                        "Execution (s)": s.get('duration'), 
+                        "Setup (s)": s.get('setup_time', 0), 
+                        "Cleanup (s)": s.get('cleanup_time', 0), 
+                        "VRAM Peak": s.get('vram_peak', 0)
+                    })
                     rows.append(row)
             if rows:
                 sheets[domain] = pd.DataFrame(rows)
@@ -177,7 +188,7 @@ def generate_excel(upload=True, upload_outputs=False, session_dir=None):
                 worksheet = writer.sheets[name]
                 last_data_row = len(df) + 1
                 worksheet.auto_filter.ref = f"A1:{chr(64 + len(df.columns))}{last_data_row}"
-                worksheet.freeze_panes = "A2"
+                worksheet.freeze_panes = "B2"
                 header_font = Font(bold=True, color="FFFFFF")
                 header_fill = PatternFill(start_color="4F81BD", end_color="4F81BD", fill_type="solid")
                 for cell in worksheet[1]:
