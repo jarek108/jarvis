@@ -13,14 +13,16 @@ from utils.calibration.vllm import calibrate_from_log as calibrate_vllm
 from utils.calibration.ollama import calibrate_from_log as calibrate_ollama
 
 def detect_engine(content):
-    """Identifies the inference engine based on log signatures."""
-    # vLLM Signatures
-    if "(APIServer" in content or "vLLM API server" in content or "Model loading took" in content:
-        return "vllm"
-    
+    """Identifies the inference engine based on log signatures.
+    Prioritize Ollama because its signatures are often found inside wrapper logs.
+    """
     # Ollama Signatures
     if "source=server.go" in content or 'msg="' in content or "[GIN]" in content or "llama_kv_cache:" in content or "clip_model_loader:" in content:
         return "ollama"
+    
+    # vLLM Signatures
+    if "(APIServer" in content or "vLLM API server" in content or "Model loading took" in content:
+        return "vllm"
     
     return None
 
@@ -32,12 +34,11 @@ def process_file(log_path, model_override=None, engine_override=None):
             return 1
 
         with open(log_path, "r", encoding="utf-8", errors="ignore") as f:
-            # Read sample for detection
-            sample = f.read(10000)
+            # Read enough to catch fingerprints anywhere in the boot sequence
+            sample = f.read(50000)
         
         engine = engine_override or detect_engine(sample)
         if not engine:
-            print(f"⚠️  Skipping {os.path.basename(log_path)}: Could not auto-detect engine type.")
             return 1
 
         result = None
@@ -83,8 +84,9 @@ Examples:
         
         stats = {0: 0, 1: 0, 2: 0} # Success, Skipped, Failed
         for f_path in files:
-            # Skip hidden files, yamls, or non-logs if you prefer
-            if os.path.basename(f_path).startswith('.') or f_path.endswith('.yaml'):
+            # Skip hidden files, yamls, or non-logs
+            if os.path.basename(f_path).startswith('.') or f_path.endswith('.yaml') or f_path.endswith('.xlsx') or f_path.endswith('.json') or f_path.endswith('.wav'):
+                stats[1] += 1
                 continue
             
             code = process_file(f_path, engine_override=args.engine)

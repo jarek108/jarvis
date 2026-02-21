@@ -21,32 +21,33 @@ def extract_vllm_metrics(content):
     if m: tokens = int(m.group(1).replace(",", ""))
 
     m = re_model.search(content)
-    if m: model_id = m.group(1)
+    if m: model_id = m.group(1).split('#')[0] # Strip flags
     
     return base_vram, cache_gb, tokens, model_id
 
 def calibrate_from_log(model_id, log_path, project_root):
     """Generates a calibration file from an existing vLLM log."""
     if not os.path.exists(log_path):
-        print(f"❌ Log file not found: {log_path}")
-        return
+        return None
 
-    print(f"📄 Parsing vLLM log: {log_path}")
     with open(log_path, "r", encoding="utf-8", errors="ignore") as f:
         content = f.read()
     
     base_vram, cache_gb, tokens, extracted_id = extract_vllm_metrics(content)
     
+    # Filename fallback for vLLM
+    filename = os.path.basename(log_path)
+    if not extracted_id and filename.startswith("svc_llm_VL_"):
+        m = re.search(r"svc_llm_VL_(.*?)_\d{8}_\d{6}", filename)
+        if m: extracted_id = m.group(1)
+
     target_id = model_id or extracted_id
-    if not target_id:
-        print("❌ Error: Could not extract Model ID from log. Please provide it manually.")
-        return
+    if not target_id: return None
+
+    # Sanitize target_id (remove flags)
+    target_id = target_id.split('#')[0]
 
     if not (base_vram and cache_gb and tokens):
-        print(f"❌ Failed to extract metrics from {log_path}")
-        if not base_vram: print("  - Missing: Base VRAM metric")
-        if not cache_gb: print("  - Missing: Cache memory metric")
-        if not tokens: print("  - Missing: KV Tokens metric")
         return None
         
     gb_per_10k = (cache_gb / tokens) * 10000

@@ -17,13 +17,10 @@ def parse_size_gb(size_str):
     """Converts sizes like '18.1 GiB', '876.0 MiB', '0.93 GB' to float GB."""
     if not size_str: return 0.0
     size_str = size_str.strip().replace('"', '').replace('(', '').replace(')', '')
-    
     m = re.match(r"([\d\.]+)\s*([a-zA-Z]+)", size_str)
     if not m: return 0.0
-    
     val = float(m.group(1))
     unit = m.group(2).upper()
-    
     if unit.startswith('M'): return val / 1024.0
     if unit.startswith('G'): return val
     if unit.startswith('K'): return val / (1024.0 * 1024.0)
@@ -36,7 +33,10 @@ def save_calibration(model_id, engine, base_vram, gb_per_10k, source_tokens, sou
     os.makedirs(logs_dir, exist_ok=True)
     
     prefix = "ol_" if engine == "ollama" else "vl_"
-    safe_name = prefix + model_id.replace("/", "--").replace(":", "-").lower()
+    # CLEAN ID for filenaming: e.g. "Qwen2.5 0.5B Instruct" -> "ol_qwen2.5-0.5b-instruct"
+    clean_id = model_id.lower().replace(" ", "-").replace("/", "--").replace(":", "-")
+    safe_name = prefix + clean_id
+    
     yaml_path = os.path.join(cal_dir, f"{safe_name}.yaml")
     dest_log_path = os.path.join(logs_dir, f"{safe_name}.log")
     
@@ -54,12 +54,11 @@ def save_calibration(model_id, engine, base_vram, gb_per_10k, source_tokens, sou
         yaml.dump(output_data, f, sort_keys=False)
     
     if log_source and os.path.exists(log_source):
-        # Normalize paths to check if they are the same
         abs_src = os.path.abspath(log_source)
         abs_dest = os.path.abspath(dest_log_path)
         if abs_src != abs_dest:
             shutil.copy(log_source, dest_log_path)
-            print(f"💾 Log archived to: {os.path.relpath(dest_log_path, project_root)}")
+            # print(f"  √ Log archived to: {os.path.relpath(dest_log_path, project_root)}")
         
     print(f"✅ Specification saved: {os.path.relpath(yaml_path, project_root)}")
     return output_data
