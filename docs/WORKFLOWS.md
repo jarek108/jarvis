@@ -144,7 +144,7 @@ Calibration is a **Zero-Config** log-parsing process. The engine and model name 
 ### Step 2: Calibrate
 Simply point the script to the log file:
 ```powershell
-python utils/calibrate_model.py path/to/your.log
+python utils/calibrate_models.py path/to/your.log
 ```
 
 **Output:**
