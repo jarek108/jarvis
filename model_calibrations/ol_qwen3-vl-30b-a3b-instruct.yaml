@@ -4,7 +4,7 @@ constants:
   base_vram_gb: 19.0
   kv_cache_gb_per_10k: 0.915527
 metadata:
-  calibrated_at: '2026-02-21 03:49:29'
+  calibrated_at: '2026-02-21 03:50:25'
   gpu_vram_total_gb: 31.84
   source_tokens: 32768
   source_cache_gb: 3.0
