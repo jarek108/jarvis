@@ -5,6 +5,7 @@ import argparse
 import pickle
 import time
 import traceback
+import webbrowser
 from google_auth_oauthlib.flow import InstalledAppFlow
 from google.auth.transport.requests import Request
 from googleapiclient.discovery import build
@@ -187,4 +188,7 @@ if __name__ == "__main__":
     
     path = generate_excel(upload=args.upload_report, upload_outputs=args.upload_outputs, session_dir=args.dir)
     if args.upload_report and path:
-        upload_to_gdrive(path)
+        link = upload_to_gdrive(path)
+        if link:
+            print(f"🌐 Opening report in browser: {link}")
+            webbrowser.open(link)
