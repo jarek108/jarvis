@@ -17,15 +17,15 @@ if __name__ == "__main__":
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  vLLM:
-    python utils/calibrate_model.py Qwen/Qwen2-VL-2B-Instruct vllm_startup.log --engine vllm
+  Auto-detect Model ID:
+    python utils/calibrate_model.py model_startup.log --engine vllm
   
-  Ollama:
-    python utils/calibrate_model.py gpt-oss:20b $env:LOCALAPPDATA/Ollama/server.log --engine ollama
+  Manual Model ID Override:
+    python utils/calibrate_model.py $env:LOCALAPPDATA/Ollama/server.log --engine ollama --model gpt-oss:20b
         """
     )
-    parser.add_argument("model", type=str, help="Model ID (e.g., qwen2.5:0.5b or VL_Qwen/Qwen2-VL-2B-Instruct)")
     parser.add_argument("log_file", type=str, help="Path to the log file to parse")
+    parser.add_argument("--model", type=str, help="Optional: Model ID (will try to auto-detect if omitted)")
     parser.add_argument("--engine", type=str, choices=["vllm", "ollama"], default="vllm", help="Engine type (vllm or ollama)")
     
     args = parser.parse_args()
