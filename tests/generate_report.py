@@ -28,10 +28,8 @@ def get_gdrive_service():
         project_root = os.path.dirname(tests_dir)
         pickle_path = os.path.join(project_root, 'token.pickle')
         creds_path = os.path.join(project_root, 'credentials.json')
-        
         if os.path.exists(pickle_path):
             with open(pickle_path, 'rb') as token: creds = pickle.load(token)
-        
         if not creds or not creds.valid:
             if creds and creds.expired and creds.refresh_token:
                 try: creds.refresh(Request())
@@ -57,7 +55,6 @@ def upload_to_gdrive(file_path):
     return link
 
 def generate_excel(upload=True, upload_outputs=False, session_dir=None):
-    """Core logic for creating the Excel file and syncing artifacts."""
     try:
         project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         if session_dir:
@@ -73,11 +70,7 @@ def generate_excel(upload=True, upload_outputs=False, session_dir=None):
         service = get_gdrive_service() if upload else None
         asset_mgr = GDriveAssetManager(service) if service else None
         
-        # --- TURBO SYNC: DISCOVERY PHASE ---
-        input_paths = set()
-        output_paths = set()
-        domains = ["stt", "tts", "llm", "vlm", "sts"]
-        
+        input_paths = set(); output_paths = set(); domains = ["stt", "tts", "llm", "vlm", "sts"]
         for d in domains:
             fname = f"{d}.json" if session_dir else f"latest_{d}.json"
             data = load_json(os.path.join(artifacts_dir, fname))
@@ -86,24 +79,17 @@ def generate_excel(upload=True, upload_outputs=False, session_dir=None):
                     if s.get('input_file'): input_paths.add(s['input_file'])
                     if s.get('output_file'): output_paths.add(s['output_file'])
 
-        # Absolute resolution
         input_paths = [os.path.abspath(os.path.join(project_root, p)) for p in input_paths if p]
         output_paths = [os.path.abspath(os.path.join(project_root, p)) for p in output_paths if p]
 
         if asset_mgr:
-            input_folder_id = asset_mgr.get_folder_id("Jarvis_Artifacts_Inputs")
-            asset_mgr.batch_upload(input_paths, input_folder_id, label="input artifacts")
-            
+            fid_in = asset_mgr.get_folder_id("Jarvis_Artifacts_Inputs")
+            asset_mgr.batch_upload(input_paths, fid_in, label="input artifacts")
             if upload_outputs:
-                output_folder_id = asset_mgr.get_folder_id("Jarvis_Artifacts_Outputs")
-                asset_mgr.batch_upload(output_paths, output_folder_id, label="output artifacts")
-            else:
-                print("ℹ️ Skipping output artifact upload (use --upload-outputs to force).")
+                fid_out = asset_mgr.get_folder_id("Jarvis_Artifacts_Outputs")
+                asset_mgr.batch_upload(output_paths, fid_out, label="output artifacts")
 
-        # --- EXCEL GENERATION PHASE ---
-        sheets = {}
-        has_any_data = False
-
+        sheets = {}; has_any_data = False
         sys_info_path = os.path.join(artifacts_dir, "system_info.yaml")
         if os.path.exists(sys_info_path):
             import yaml
@@ -142,36 +128,22 @@ def generate_excel(upload=True, upload_outputs=False, session_dir=None):
             for entry in data:
                 loadout_name = entry.get('loadout', 'N/A')
                 for s in entry.get('scenarios', []):
-                    # Priority: 
-                    # 1. detailed_model (New runs, contains resolved defaults)
-                    # 2. loadout_name (Parent entry name, usually has flags)
-                    # 3. scenario-level model ID
                     model_col = s.get('detailed_model') or loadout_name
                     if model_col == 'N/A':
                         model_col = s.get('llm_model') or s.get('stt_model') or s.get('tts_model') or "N/A"
                     
-                    # Initialize row with Model/Setup as the FIRST column
+                    prompt = str(s.get('input_text', 'N/A')).replace('\n', ' ').replace('\r', ' ')
+                    response = str(s.get('text') or s.get('raw_text') or s.get('llm_text') or "N/A").replace('\n', ' ').replace('\r', ' ')
+
                     model_key = "Setup" if domain == "STS" else "Model"
                     row = {model_key: model_col, "Scenario": s.get('name'), "Status": s.get('status')}
+                    if domain == "STT": row.update({"Audio": get_link(s.get('input_file')), "Result": response, "Match %": s.get('match_pct', 0)})
+                    elif domain == "TTS": row.update({"Audio": get_link(s.get('output_file'), "Jarvis_Artifacts_Outputs"), "Input": prompt})
+                    elif domain == "LLM": row.update({"Prompt": prompt, "Response": response, "TTFT": s.get('ttft'), "TPS": s.get('tps')})
+                    elif domain == "VLM": row.update({"Media": get_link(s.get('input_file')), "Prompt": prompt, "Response": response})
+                    elif domain == "STS": row.update({"Input": get_link(s.get('input_file')), "Output": get_link(s.get('output_file'), "Jarvis_Artifacts_Outputs"), "Text": response})
                     
-                    if domain == "STT":
-                        row.update({"Audio": get_link(s.get('input_file')), "Result": s.get('output_text'), "Match %": s.get('match_pct', 0)})
-                    elif domain == "TTS":
-                        row.update({"Audio": get_link(s.get('output_file'), "Jarvis_Artifacts_Outputs"), "Input": s.get('input_text')})
-                    elif domain == "LLM":
-                        row.update({"Prompt": s.get('input_text'), "Response": s.get('text') or s.get('raw_text'), "TTFT": s.get('ttft'), "TPS": s.get('tps')})
-                    elif domain == "VLM":
-                        row.update({"Media": get_link(s.get('input_file')), "Prompt": s.get('input_text'), "Response": s.get('text') or s.get('raw_text')})
-                    elif domain == "STS":
-                        row.update({"Input": get_link(s.get('input_file')), "Output": get_link(s.get('output_file'), "Jarvis_Artifacts_Outputs"), "Text": s.get('llm_text')})
-                    
-                    # Append common metrics at the end
-                    row.update({
-                        "Execution (s)": s.get('duration'), 
-                        "Setup (s)": s.get('setup_time', 0), 
-                        "Cleanup (s)": s.get('cleanup_time', 0), 
-                        "VRAM Peak": s.get('vram_peak', 0)
-                    })
+                    row.update({"Execution (s)": s.get('duration'), "Setup (s)": s.get('setup_time', 0), "Cleanup (s)": s.get('cleanup_time', 0), "VRAM Peak": s.get('vram_peak', 0)})
                     rows.append(row)
             if rows:
                 sheets[domain] = pd.DataFrame(rows)
@@ -189,14 +161,21 @@ def generate_excel(upload=True, upload_outputs=False, session_dir=None):
                 last_data_row = len(df) + 1
                 worksheet.auto_filter.ref = f"A1:{chr(64 + len(df.columns))}{last_data_row}"
                 worksheet.freeze_panes = "B2"
+                
                 header_font = Font(bold=True, color="FFFFFF")
                 header_fill = PatternFill(start_color="4F81BD", end_color="4F81BD", fill_type="solid")
                 for cell in worksheet[1]:
-                    cell.font = header_font
-                    cell.fill = header_fill
+                    cell.font = header_font; cell.fill = header_fill
+
+                for row_idx in range(2, last_data_row + 1):
+                    worksheet.row_dimensions[row_idx].height = 15 # Fixed "Flat" height
 
                 for idx, col in enumerate(df.columns):
                     col_letter = chr(65 + idx)
+                    # Enforce NO WRAP for all data cells
+                    for row_idx in range(2, last_data_row + 1):
+                        worksheet.cell(row=row_idx, column=idx+1).alignment = Alignment(wrap_text=False, vertical='center')
+
                     if name == "Summary":
                         if col == "Category": worksheet.column_dimensions[col_letter].width = 15
                         elif col == "Metric": worksheet.column_dimensions[col_letter].width = 25
@@ -204,8 +183,8 @@ def generate_excel(upload=True, upload_outputs=False, session_dir=None):
                         continue
                     if any(x in col.lower() for x in ["audio", "media", "input", "output", "link"]):
                         worksheet.column_dimensions[col_letter].width = 15
-                        for row_idx in range(2, len(df) + 2):
-                            worksheet.cell(row=row_idx, column=idx+1).alignment = Alignment(horizontal='center')
+                        for row_idx in range(2, last_data_row + 1):
+                            worksheet.cell(row=row_idx, column=idx+1).alignment = Alignment(horizontal='center', wrap_text=False)
                     else:
                         series = df[col]
                         max_len = max((series.astype(str).map(len).max(), len(str(series.name)))) + 2
@@ -218,7 +197,7 @@ def generate_excel(upload=True, upload_outputs=False, session_dir=None):
 
                 for idx, col in enumerate(df.columns):
                     col_letter = chr(65 + idx)
-                    range_str = f"{col_letter}2:{col_letter}{len(df)+1}"
+                    range_str = f"{col_letter}2:{col_letter}{last_data_row}"
                     if col == "Status":
                         worksheet.conditional_formatting.add(range_str, FormulaRule(formula=[f'{col_letter}2="PASSED"'], stopIfTrue=True, fill=green_fill))
                         worksheet.conditional_formatting.add(range_str, FormulaRule(formula=[f'{col_letter}2="FAILED"'], stopIfTrue=True, fill=red_fill))
@@ -226,14 +205,12 @@ def generate_excel(upload=True, upload_outputs=False, session_dir=None):
                     elif "(s)" in col or col in ["TTFT", "TPS"] or "VRAM" in col:
                         rule = ColorScaleRule(start_type='min', start_color='C6EFCE', mid_type='percentile', mid_value=50, mid_color='FFEB9C', end_type='max', end_color='FFC7CE')
                         worksheet.conditional_formatting.add(range_str, rule)
-        
         print(f"📊 Excel Report Generated: {output_path}")
         return output_path
     except Exception as e:
         print(f"❌ Excel Error: {e}"); traceback.print_exc(); return None
 
 def generate_and_upload_report(session_dir, upload_report=True, upload_outputs=False, open_browser=True):
-    """Unified entry point for both standalone and runner modes."""
     path = generate_excel(upload=upload_report, upload_outputs=upload_outputs, session_dir=session_dir)
     link = None
     if upload_report and path:
@@ -251,13 +228,7 @@ def main():
     parser.add_argument("--no-open", action="store_false", dest="open_browser", help="Don't open browser automatically")
     parser.add_argument("--dir", type=str, help="Path to a specific session directory")
     args = parser.parse_args()
-    
-    return generate_and_upload_report(
-        session_dir=args.dir, 
-        upload_report=args.upload_report, 
-        upload_outputs=args.upload_outputs,
-        open_browser=args.open_browser
-    )
+    return generate_and_upload_report(session_dir=args.dir, upload_report=args.upload_report, upload_outputs=args.upload_outputs, open_browser=args.open_browser)
 
 if __name__ == "__main__":
     main()
