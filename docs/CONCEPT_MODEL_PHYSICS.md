@@ -17,7 +17,23 @@ Every Large Language Model (LLM) or Vision Model (VLM) consumes VRAM in three di
     *   Temporary memory used for activations, intermediate tensors, and the "Compute Graph."
     *   This is typically a fixed overhead allocated during model initialization.
 
-## 2. Calibration: Empirical Discovery
+## 2. The "Container vs. Cup" Analogy
+
+To understand VRAM allocation, especially in rigid engines like vLLM, distinguish between the **Physical Capacity** and the **Declared Limit**.
+
+1.  **The Container (Physical Capacity)**:
+    *   Determined by: `gpu_memory_utilization` (e.g., 26GB on an RTX 5090).
+    *   **Formula**: `(Total VRAM - Model Weights) = Surplus for KV Cache`.
+    *   If you allocate a 26GB container for a 17GB model, you have a **~9GB Surplus** for tokens.
+
+2.  **The Cup (Declared Limit)**:
+    *   Determined by: `#ctx` (`--max-model-len`).
+    *   **Function**: The maximum context size reserved for a *single request*.
+
+**Startup Constraint**: The engine checks if `Container Size >= Cup Size`. If your surplus can only fit 45k tokens but you request a 64k "Cup," the engine will fail to start.
+
+## 3. Calibration: Empirical Discovery
+... [rest of file] ...
 
 Rather than relying on vague estimates, Jarvis uses **Calibration** to discover these three constants for any specific model/hardware combination.
 
