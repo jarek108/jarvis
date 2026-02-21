@@ -12,8 +12,8 @@ project_root = os.path.dirname(script_dir)
 if project_root not in sys.path:
     sys.path.append(project_root)
 
-# Local imports from the same folder
-from vram import get_gpu_total_vram
+# Full package imports to avoid relative issues when running from root
+import utils.vram
 
 # --- SHARED UTILITIES ---
 
@@ -48,7 +48,7 @@ def save_calibration(model_id, engine, base_vram, gb_per_10k, source_tokens, sou
         "constants": {"base_vram_gb": round(base_vram, 4), "kv_cache_gb_per_10k": round(gb_per_10k, 6)},
         "metadata": {
             "calibrated_at": time.strftime("%Y-%m-%d %H:%M:%S"),
-            "gpu_vram_total_gb": round(get_gpu_total_vram(), 2),
+            "gpu_vram_total_gb": round(utils.vram.get_gpu_total_vram(), 2),
             "source_tokens": source_tokens, "source_cache_gb": round(source_cache_gb, 4)
         }
     }
