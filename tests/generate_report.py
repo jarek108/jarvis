@@ -170,8 +170,22 @@ def generate_excel(upload=True, upload_outputs=False, session_dir=None):
                     response = str(s.get('text') or s.get('raw_text') or s.get('llm_text') or "N/A").replace('\n', ' ').replace('\r', ' ')
                     model_key = "Setup" if domain == "STS" else "Model"
                     row = {model_key: model_val, "Scenario": s.get('name'), "Status": s.get('status')}
-                    if domain == "STT": row.update({"Audio": get_link(s.get('input_file'), inputs_id), "Result": response, "Match %": s.get('match_pct', 0)})
-                    elif domain == "TTS": row.update({"Audio": get_link(s.get('output_file'), session_out_id), "Input": prompt})
+                                        if domain == "STT":
+                                            row.update({
+                                                "Audio": get_link(s.get('input_file'), inputs_id), 
+                                                "Result": response, 
+                                                "Match %": s.get('match_pct', 0),
+                                                "RTF": s.get('rtf'),
+                                                "WPS": s.get('wps')
+                                            })
+                                        elif domain == "TTS":
+                                            row.update({
+                                                "Audio": get_link(s.get('output_file'), session_out_id), 
+                                                "Input": prompt,
+                                                "CPS": s.get('cps'),
+                                                "WPS": s.get('wps')
+                                            })
+                    
                     elif domain == "LLM": row.update({"Prompt": prompt, "Response": response, "TTFT": s.get('ttft'), "TPS": s.get('tps')})
                     elif domain == "VLM": row.update({"Media": get_link(s.get('input_file'), inputs_id), "Prompt": prompt, "Response": response, "TTFT": s.get('ttft'), "TPS": s.get('tps')})
                     elif domain == "STS":
@@ -218,8 +232,11 @@ def generate_excel(upload=True, upload_outputs=False, session_dir=None):
                         worksheet.conditional_formatting.add(range_str, FormulaRule(formula=[f'{col_letter}2="PASSED"'], stopIfTrue=True, fill=green_fill))
                         worksheet.conditional_formatting.add(range_str, FormulaRule(formula=[f'{col_letter}2="FAILED"'], stopIfTrue=True, fill=red_fill))
                         worksheet.conditional_formatting.add(range_str, FormulaRule(formula=[f'{col_letter}2="MISSING"'], stopIfTrue=True, fill=yellow_fill))
-                    elif "(s)" in col or col in ["TTFT", "TPS"] or "VRAM" in col:
+                    elif "(s)" in col or col in ["TTFT", "TPS", "RTF", "WPS", "CPS"] or "VRAM" in col:
                         rule = ColorScaleRule(start_type='min', start_color='C6EFCE', mid_type='percentile', mid_value=50, mid_color='FFEB9C', end_type='max', end_color='FFC7CE')
+                        # Special case for throughput where higher is better (Green = High)
+                        if col in ["TPS", "WPS", "CPS"]:
+                            rule = ColorScaleRule(start_type='min', start_color='FFC7CE', mid_type='percentile', mid_value=50, mid_color='FFEB9C', end_type='max', end_color='C6EFCE')
                         worksheet.conditional_formatting.add(range_str, rule)
         print(f"📊 Excel Report Generated: {output_path}"); return output_path
     except Exception as e:

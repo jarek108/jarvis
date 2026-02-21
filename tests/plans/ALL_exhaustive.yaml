@@ -21,6 +21,7 @@ execution:
       - ["OL_qwen3-vl:30b-a3b-instruct#stream"]
       - ["VL_QuantTrio/Qwen3-VL-30B-A3B-Instruct-AWQ"]
       - ["VL_QuantTrio/Qwen3-VL-30B-A3B-Instruct-AWQ#stream"]
+      - ["VL_QuantTrio/Qwen3-VL-30B-A3B-Instruct-AWQ#stream#nativevideo"]
       - ["VL_QuantTrio/Qwen3-VL-30B-A3B-Instruct-AWQ#stream#ctx=32768"]
 
   - domain: stt

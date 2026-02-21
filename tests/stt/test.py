@@ -55,32 +55,45 @@ def run_test_suite(model_id, scenarios_to_run=None, trim_length=80, output_dir=N
             continue
         
         try:
+            import wave
             start_time = time.perf_counter()
             with open(audio_path, "rb") as f:
+                # Get duration
+                with wave.open(audio_path, 'rb') as wav_f:
+                    frames = wav_f.getnframes()
+                    rate = wav_f.getframerate()
+                    duration_audio = frames / float(rate)
+
                 files = {"file": f}
                 data = {"language": s.get('hint')} if s.get('hint') else {}
                 response = requests.post(url, files=files, data=data)
-            duration = time.perf_counter() - start_time
+            duration_inf = time.perf_counter() - start_time
             
             if response.status_code == 200:
                 result = response.json()
                 transcription = result.get('text', '').replace("\n", " ").strip()
                 similarity = calculate_similarity(transcription, ground_truth)
                 
+                word_count = len(transcription.split())
+                rtf = duration_inf / duration_audio if duration_audio > 0 else 0
+                wps = word_count / duration_inf if duration_inf > 0 else 0
+
                 display_text = transcription
                 if len(display_text) > trim_length:
                     display_text = display_text[:trim_length] + "..."
 
                 res_obj.update({
                     "status": "PASSED",
-                    "duration": duration,
-                    "result": f"Match: {similarity:.1%} | [{display_text}]",
+                    "duration": duration_inf,
+                    "rtf": rtf,
+                    "wps": wps,
+                    "result": f"RTF: {rtf:.2f} | WPS: {wps:.1f} | Match: {similarity:.1%}",
                     "match_pct": similarity,
                     "output_text": transcription,
                     "vram_peak": utils.get_gpu_vram_usage()
                 })
             else:
-                res_obj.update({ "status": "FAILED", "duration": duration, "result": f"HTTP {response.status_code}" })
+                res_obj.update({ "status": "FAILED", "duration": duration_inf, "result": f"HTTP {response.status_code}" })
         except Exception as e:
             res_obj.update({ "status": "FAILED", "duration": 0, "result": str(e) })
         
