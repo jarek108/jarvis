@@ -49,7 +49,7 @@ system:
 # --- Reporting & Excel Layout ---
 reporting:
   excel:
-    loadout_width: 35
+    loadout_width: 50
     text_column_width: 50
     metric_column_width: 12
     media_column_width: 12

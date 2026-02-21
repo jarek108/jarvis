@@ -177,7 +177,7 @@ def generate_excel(upload=True, upload_outputs=False, session_dir=None):
                     elif domain == "STS":
                         m = s.get('metrics', {})
                         row.update({"Input": get_link(s.get('input_file'), inputs_id), "Output": get_link(s.get('output_file'), session_out_id), "Text": response, "TTFT": r3(s.get('ttft')), "STT Inf": r3(s.get('stt_inf') or m.get('stt', [0,0])[1]), "LLM Tot": r3(s.get('llm_tot') or (m.get('llm', [0,0])[1] - m.get('llm', [0,0])[0])), "TTS Inf": r3(s.get('tts_inf') or (m.get('tts', [0,0])[1] - m.get('tts', [0,0])[0]))})
-                    row.update({"Execution (s)": r3(s.get('duration')), "Setup (s)": r3(s.get('setup_time')), "Cleanup (s)": r3(s.get('cleanup_time')), "VRAM Peak": r3(s.get('vram_peak'))})
+                    row.update({"Exec": r3(s.get('duration')), "Setup": r3(s.get('setup_time')), "Cleanup": r3(s.get('cleanup_time')), "VRAM": r3(s.get('vram_peak'))})
                     rows.append(row)
             if rows:
                 sheets[domain] = pd.DataFrame(rows); has_any_data = True
@@ -227,7 +227,7 @@ def generate_excel(upload=True, upload_outputs=False, session_dir=None):
                     elif any(x in col.lower() for x in ["prompt", "response", "text", "result", "input"]):
                         width = report_cfg.get('text_column_width', 50)
                     # 5. Numeric / Metric Columns
-                    elif "(s)" in col or col in ["TTFT", "TPS", "RTF", "WPS", "CPS", "Match %"] or "VRAM" in col or "Inf" in col or "Tot" in col:
+                    elif col in ["Exec", "Setup", "Cleanup", "VRAM", "TTFT", "TPS", "RTF", "WPS", "CPS", "Match %"] or "Inf" in col or "Tot" in col:
                         width = report_cfg.get('metric_column_width', 12)
                         for row_idx in range(2, last_data_row + 1):
                             worksheet.cell(row=row_idx, column=idx+1).alignment = Alignment(horizontal='right', wrap_text=False)
@@ -245,18 +245,7 @@ def generate_excel(upload=True, upload_outputs=False, session_dir=None):
                         worksheet.conditional_formatting.add(range_str, FormulaRule(formula=[f'{col_letter}2="PASSED"'], stopIfTrue=True, fill=green_fill))
                         worksheet.conditional_formatting.add(range_str, FormulaRule(formula=[f'{col_letter}2="FAILED"'], stopIfTrue=True, fill=red_fill))
                         worksheet.conditional_formatting.add(range_str, FormulaRule(formula=[f'{col_letter}2="MISSING"'], stopIfTrue=True, fill=yellow_fill))
-                    elif "(s)" in col or col in ["TTFT", "TPS", "RTF", "WPS", "CPS"] or "VRAM" in col:
-                        rule = ColorScaleRule(start_type='min', start_color='C6EFCE', mid_type='percentile', mid_value=50, mid_color='FFEB9C', end_type='max', end_color='FFC7CE')
-                        if col in ["TPS", "WPS", "CPS"]: rule = ColorScaleRule(start_type='min', start_color='FFC7CE', mid_type='percentile', mid_value=50, mid_color='FFEB9C', end_type='max', end_color='C6EFCE')
-                        worksheet.conditional_formatting.add(range_str, rule)
-                green_fill = PatternFill(start_color="C6EFCE", end_color="C6EFCE", fill_type="solid"); red_fill = PatternFill(start_color="FFC7CE", end_color="FFC7CE", fill_type="solid"); yellow_fill = PatternFill(start_color="FFEB9C", end_color="FFEB9C", fill_type="solid")
-                for idx, col in enumerate(df.columns):
-                    col_letter = chr(65 + idx); range_str = f"{col_letter}2:{col_letter}{last_data_row}"
-                    if col == "Status":
-                        worksheet.conditional_formatting.add(range_str, FormulaRule(formula=[f'{col_letter}2="PASSED"'], stopIfTrue=True, fill=green_fill))
-                        worksheet.conditional_formatting.add(range_str, FormulaRule(formula=[f'{col_letter}2="FAILED"'], stopIfTrue=True, fill=red_fill))
-                        worksheet.conditional_formatting.add(range_str, FormulaRule(formula=[f'{col_letter}2="MISSING"'], stopIfTrue=True, fill=yellow_fill))
-                    elif "(s)" in col or col in ["TTFT", "TPS", "RTF", "WPS", "CPS"] or "VRAM" in col:
+                    elif col in ["Exec", "Setup", "Cleanup", "VRAM", "TTFT", "TPS", "RTF", "WPS", "CPS"]:
                         rule = ColorScaleRule(start_type='min', start_color='C6EFCE', mid_type='percentile', mid_value=50, mid_color='FFEB9C', end_type='max', end_color='FFC7CE')
                         if col in ["TPS", "WPS", "CPS"]: rule = ColorScaleRule(start_type='min', start_color='FFC7CE', mid_type='percentile', mid_value=50, mid_color='FFEB9C', end_type='max', end_color='C6EFCE')
                         worksheet.conditional_formatting.add(range_str, rule)
