@@ -1,4 +1,4 @@
-# Plan: Unified Calibration for Ollama
+# Plan: Unified Calibration for Ollama (STATUS: ✅ IMPLEMENTED)
 
 This document outlines the strategy for extending the `calibrate_vram.py` framework to support Ollama models. While Ollama cannot be configured as precisely as vLLM, measuring its physical constants enables **Hardware Guardrails** and **Performance Predictions**.
 

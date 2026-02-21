@@ -54,3 +54,18 @@ Contrary to intuition, changing parameters often shows **identical peak VRAM usa
 1.  **Tune Down `gpu_util`:** Set it just high enough to fit the weights + your desired context (e.g., `0.7`). This leaves VRAM free for the OS/Desktop.
 2.  **Tune Up `#ctx`:** Maximize this to fill the container. (e.g., if you have space for 45k tokens, set `#ctx=32768`).
 3.  **Ignore Concurrency:** As a single user, you don't need the surplus "idle" tokens meant for parallel requests.
+
+## 4. The Dual Calibration Strategy
+
+Jarvis uses a unified "Physics Database" (`model_calibrations/*.yaml`) but applies it differently depending on the engine.
+
+| Feature | vLLM (Docker) | Ollama (Native) |
+| :--- | :--- | :--- |
+| **Physics Source** | `calibrate_vram.py` (Log Parsing) | `calibrate_vram.py --engine ollama` (Log Parsing) |
+| **Primary Goal** | **Configuration** (Smart Allocator) | **Validation** (Hardware Guardrail) |
+| **Mechanism** | Calculates exact `gpu_memory_utilization` to fit `#ctx`. | Predicts VRAM usage. Warns user if `Required > Available`. |
+| **Behavior** | Deterministic. Reserves exactly what is needed. | Dynamic. Attempts to load; offloads layers to CPU if VRAM full. |
+
+### Why the difference?
+*   **vLLM** is a "Control Freak." It demands a rigid memory budget at startup. We use calibration to give it the *perfect* budget.
+*   **Ollama** is a "Lazy Loader." It manages its own memory dynamically. We use calibration to *predict* failures (CPU offloading) before they happen, but we don't enforce limits.

@@ -118,7 +118,7 @@ class LifecycleManager:
                     
                     # 2. Try to load calibration
                     safe_model_id = original_id.replace("/", "--").replace(":", "-").lower()
-                    cal_path = os.path.join(self.project_root, "models", "calibrations", f"ol_{safe_model_id}.yaml")
+                    cal_path = os.path.join(self.project_root, "model_calibrations", f"ol_{safe_model_id}.yaml")
                     
                     if os.path.exists(cal_path):
                         with open(cal_path, "r", encoding="utf-8") as f:
@@ -167,7 +167,7 @@ class LifecycleManager:
 
                 # 2. Try to load physical specs for utility calculation
                 safe_model_id = original_id.replace("/", "--").replace(":", "-").lower()
-                spec_path = os.path.join(self.project_root, "models", "calibrations", f"{safe_model_id}.yaml")
+                spec_path = os.path.join(self.project_root, "model_calibrations", f"vl_{safe_model_id}.yaml")
                 
                 if os.path.exists(spec_path):
                     try:

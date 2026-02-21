@@ -128,3 +128,24 @@ execution:
 ```
 
 For a deep dive on why these parameters matter (and why VRAM usage looks static), see **[VRAM Tuning](analysis/VRAM_TUNING.md)**.
+
+---
+
+## 7. Model Calibration
+
+To enable the **Smart Allocator** (vLLM) or **Hardware Guardrails** (Ollama), you must calibrate new models once. This generates a physics file in `model_calibrations/`.
+
+### vLLM Calibration
+Spawns a container, loads the model, and extracts exact memory constants from the logs.
+```powershell
+python utils/calibration/calibrate_vram.py QuantTrio/Qwen3-VL-30B-A3B-Instruct-AWQ
+```
+
+### Ollama Calibration
+Restarts the local server, forces a model load, and measures the VRAM delta.
+```powershell
+python utils/calibration/calibrate_vram.py gpt-oss:20b --engine ollama
+```
+
+**Output:**
+A YAML file (e.g., `vl_qwen3-vl-30b.yaml`) containing `base_vram_gb` and `kv_cache_gb_per_10k`.
