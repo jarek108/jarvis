@@ -185,6 +185,10 @@ def generate_excel(upload=True, upload_outputs=False, session_dir=None):
         if not has_any_data: return None
         from openpyxl.styles import Font, PatternFill, Alignment
         from openpyxl.formatting.rule import FormulaRule, ColorScaleRule
+        from utils import load_config
+        cfg = load_config()
+        report_cfg = cfg.get('reporting', {}).get('excel', {})
+
         with pd.ExcelWriter(output_path, engine='openpyxl') as writer:
             for name, df in sheets.items():
                 df.to_excel(writer, sheet_name=name, index=False)
@@ -193,26 +197,58 @@ def generate_excel(upload=True, upload_outputs=False, session_dir=None):
                 header_font = Font(bold=True, color="FFFFFF"); header_fill = PatternFill(start_color="4F81BD", end_color="4F81BD", fill_type="solid")
                 for cell in worksheet[1]: cell.font = header_font; cell.fill = header_fill
                 for row_idx in range(2, last_data_row + 1): worksheet.row_dimensions[row_idx].height = 15
+                
+                # Fetch domain-specific overrides
+                domain_overrides = report_cfg.get('domain_overrides', {}).get(name.lower(), {})
+
                 for idx, col in enumerate(df.columns):
                     col_letter = chr(65 + idx)
                     for row_idx in range(2, last_data_row + 1): worksheet.cell(row=row_idx, column=idx+1).alignment = Alignment(wrap_text=False, vertical='center')
+                    
                     if name == "Summary":
                         if col == "Category": worksheet.column_dimensions[col_letter].width = 15
                         elif col == "Metric": worksheet.column_dimensions[col_letter].width = 25
                         elif col == "Value": worksheet.column_dimensions[col_letter].width = 60
                         continue
-                    if col == "Loadout": worksheet.column_dimensions[col_letter].width = 35; continue
-                    if any(x in col.lower() for x in ["audio", "media", "input", "output", "link"]):
-                        worksheet.column_dimensions[col_letter].width = 12
-                        for row_idx in range(2, last_data_row + 1): worksheet.cell(row=row_idx, column=idx+1).alignment = Alignment(horizontal='center', wrap_text=False)
-                        continue
-                    if col in ["Prompt", "Response", "Text", "Result", "Input"]:
-                        worksheet.column_dimensions[col_letter].width = 45; continue
-                    is_numeric = "(s)" in col or col in ["TTFT", "TPS", "RTF", "WPS", "CPS", "Match %"] or "VRAM" in col or "Inf" in col or "Tot" in col
-                    series = df[col]; valid_values = series.dropna().astype(str); max_val_len = valid_values.map(len).max() if not valid_values.empty else 0
-                    max_len = max(max_val_len, len(str(series.name))) + 2; max_len = min(max_len, 15) if is_numeric else min(max_len, 80); worksheet.column_dimensions[col_letter].width = max_len
-                    if is_numeric:
-                        for row_idx in range(2, last_data_row + 1): worksheet.cell(row=row_idx, column=idx+1).alignment = Alignment(horizontal='right', wrap_text=False)
+
+                    # --- RESOLVE COLUMN WIDTH ---
+                    # 1. Domain Specific Override
+                    if col in domain_overrides:
+                        width = domain_overrides[col]
+                    # 2. Loadout Column
+                    elif col == "Loadout":
+                        width = report_cfg.get('loadout_width', 35)
+                    # 3. Media Columns
+                    elif any(x in col.lower() for x in ["audio", "media", "input", "output", "link"]):
+                        width = report_cfg.get('media_column_width', 12)
+                        for row_idx in range(2, last_data_row + 1):
+                            worksheet.cell(row=row_idx, column=idx+1).alignment = Alignment(horizontal='center', wrap_text=False)
+                    # 4. Text Columns
+                    elif any(x in col.lower() for x in ["prompt", "response", "text", "result", "input"]):
+                        width = report_cfg.get('text_column_width', 50)
+                    # 5. Numeric / Metric Columns
+                    elif "(s)" in col or col in ["TTFT", "TPS", "RTF", "WPS", "CPS", "Match %"] or "VRAM" in col or "Inf" in col or "Tot" in col:
+                        width = report_cfg.get('metric_column_width', 12)
+                        for row_idx in range(2, last_data_row + 1):
+                            worksheet.cell(row=row_idx, column=idx+1).alignment = Alignment(horizontal='right', wrap_text=False)
+                    # 6. Default fallback
+                    else:
+                        width = report_cfg.get('default_width', 15)
+                    
+                    worksheet.column_dimensions[col_letter].width = width
+                    # ----------------------------
+
+                green_fill = PatternFill(start_color="C6EFCE", end_color="C6EFCE", fill_type="solid"); red_fill = PatternFill(start_color="FFC7CE", end_color="FFC7CE", fill_type="solid"); yellow_fill = PatternFill(start_color="FFEB9C", end_color="FFEB9C", fill_type="solid")
+                for idx, col in enumerate(df.columns):
+                    col_letter = chr(65 + idx); range_str = f"{col_letter}2:{col_letter}{last_data_row}"
+                    if col == "Status":
+                        worksheet.conditional_formatting.add(range_str, FormulaRule(formula=[f'{col_letter}2="PASSED"'], stopIfTrue=True, fill=green_fill))
+                        worksheet.conditional_formatting.add(range_str, FormulaRule(formula=[f'{col_letter}2="FAILED"'], stopIfTrue=True, fill=red_fill))
+                        worksheet.conditional_formatting.add(range_str, FormulaRule(formula=[f'{col_letter}2="MISSING"'], stopIfTrue=True, fill=yellow_fill))
+                    elif "(s)" in col or col in ["TTFT", "TPS", "RTF", "WPS", "CPS"] or "VRAM" in col:
+                        rule = ColorScaleRule(start_type='min', start_color='C6EFCE', mid_type='percentile', mid_value=50, mid_color='FFEB9C', end_type='max', end_color='FFC7CE')
+                        if col in ["TPS", "WPS", "CPS"]: rule = ColorScaleRule(start_type='min', start_color='FFC7CE', mid_type='percentile', mid_value=50, mid_color='FFEB9C', end_type='max', end_color='C6EFCE')
+                        worksheet.conditional_formatting.add(range_str, rule)
                 green_fill = PatternFill(start_color="C6EFCE", end_color="C6EFCE", fill_type="solid"); red_fill = PatternFill(start_color="FFC7CE", end_color="FFC7CE", fill_type="solid"); yellow_fill = PatternFill(start_color="FFEB9C", end_color="FFEB9C", fill_type="solid")
                 for idx, col in enumerate(df.columns):
                     col_letter = chr(65 + idx); range_str = f"{col_letter}2:{col_letter}{last_data_row}"

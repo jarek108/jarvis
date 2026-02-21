@@ -46,6 +46,24 @@ vllm:
 system:
   health_check_interval: 1.0
 
+# --- Reporting & Excel Layout ---
+reporting:
+  excel:
+    loadout_width: 35
+    text_column_width: 50
+    metric_column_width: 12
+    media_column_width: 12
+    default_width: 15
+    # Overrides for specific columns in specific domains
+    domain_overrides:
+      stt:
+        "Result": 60
+      tts:
+        "Input": 60
+      vlm:
+        "Prompt": 60
+        "Response": 60
+
 # --- Mock Mode Settings ---
 mock:
   setup_range: [2.0, 5.0]
