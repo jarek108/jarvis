@@ -22,7 +22,7 @@ Jarvis is a low-latency, modular Speech-to-Speech (STS) and Vision-Language (VLM
 ## 🛠️ Quick Start
 
 ### 1. Installation
-See [docs/QUICKSTART.md](docs/QUICKSTART.md) for detailed environment setup.
+See [docs/TUTORIAL_QUICKSTART.md](docs/TUTORIAL_QUICKSTART.md) for detailed environment setup.
 ```powershell
 # Short version (if you have Python 3.10 + CUDA 12.8 ready)
 pip install -r requirements.txt 
@@ -38,37 +38,31 @@ python manage_loadout.py --apply base-qwen30-multi
 python manage_loadout.py --status
 ```
 
-### 3. Testing & Benchmarking
-Run the full-stack health check to ensure everything is working correctly.
-```powershell
-# Run the Refactor Guard (No GPU required)
-python tests/runner.py tests/plans/ALL_fast.yaml --plumbing
+## 📖 Documentation Index (Diátaxis)
 
-# Run real hardware benchmarks
-python tests/runner.py tests/plans/ALL_fast.yaml
-```
+### 🎓 Tutorials (Learning)
+- **[Quickstart](docs/TUTORIAL_QUICKSTART.md)**: Installation, dependencies, and Hello World.
+- **[Model Onboarding](docs/TUTORIAL_MODEL_ONBOARDING.md)**: Adding new models to the physics database.
+- **[Contributing](docs/TUTORIAL_CONTRIBUTING.md)**: Developer setup, commit hygiene, and refactor guards.
 
-## 📖 Documentation Index
+### 🛠️ How-to Guides (Tasks)
+- **[Benchmarking](docs/HOWTO_BENCHMARK.md)**: Running tests and generating performance reports.
+- **[Engine Management](docs/HOWTO_ENGINE_MANAGEMENT.md)**: Configuring Ollama and vLLM (Docker) lifecycles.
+- **[Troubleshooting](docs/HOWTO_TROUBLESHOOTING.md)**: Common errors, CUDA issues, and log analysis.
+- **[Using the GUI](docs/HOWTO_USING_THE_GUI.md)**: Interacting with the Speech-to-Speech assistant client.
 
-### 🚀 Phase 1: Getting Started
-- **[Quickstart](docs/QUICKSTART.md)**: Installation, dependencies, and Hello World.
+### 📚 Concepts (Understanding)
+- **[System Architecture](docs/CONCEPT_ARCHITECTURE.md)**: High-level component breakdown and data flow.
+- **[Model Physics](docs/CONCEPT_MODEL_PHYSICS.md)**: VRAM management, KV cache scaling, and calibration theory.
+- **[Streaming Strategy](docs/CONCEPT_STREAMING.md)**: Latency trade-offs between batch and streaming modes.
+- **[Vision Strategies](docs/CONCEPT_VLM_STRATEGIES.md)**: How Jarvis handles multi-image and video data.
+- **[Persona & Tone](docs/CONCEPT_PERSONA.md)**: Philosophical stance on assistant behavior and honesty.
 
-### ⚙️ Phase 2: Operations
-- **[Workflows & Testing](docs/WORKFLOWS.md)**: Running benchmarks, managing loadouts, and the testing hierarchy.
-- **[Model Integration](docs/MODEL_INTEGRATION.md)**: Deep dive on Ollama & vLLM lifecycle management.
-- **[Troubleshooting](docs/TROUBLESHOOTING.md)**: Common errors and solutions.
-
-### 🧠 Phase 3: Concepts
-- **[System Architecture](docs/ARCHITECTURE.md)**: High-level component breakdown.
-- **[Performance Analysis](docs/analysis/STREAMING_ANALYSIS.md)**: (Folder) Deep dives into latency, streaming, and startup optimizations.
-- **[Native Video Plan](docs/analysis/NATIVE_VIDEO_PLAN.md)**: Strategy for unlocking temporal embeddings in vLLM.
-- **[Ollama Calibration Plan](docs/analysis/OLLAMA_CALIBRATION_PLAN.md)**: Strategy for verifying hardware fit for Ollama models.
-- **[VRAM Tuning](docs/analysis/VRAM_TUNING.md)**: Guide to context sizes, multimodal limits, and concurrency trade-offs.
-
-### 📚 Phase 4: Reference
-- **[API Reference](docs/API_REFERENCE.md)**: HTTP endpoints and JSON schemas.
-- **[Configuration](docs/CONFIGURATION.md)**: `config.yaml` dictionary.
-- **[Hardware Matrix](docs/HARDWARE_MATRIX.md)**: GPU and library compatibility guide.
+### 📖 Reference (Information)
+- **[API Reference](docs/REFERENCE_API.md)**: HTTP endpoints and JSON schemas.
+- **[Configuration](docs/REFERENCE_CONFIG.md)**: `config.yaml` dictionary and environment variables.
+- **[Hardware Matrix](docs/REFERENCE_HARDWARE.md)**: GPU and library compatibility guide (RTX 5090).
+- **[Calibration Database](docs/REFERENCE_CALIBRATION.md)**: Physics YAML schemas and evidence store.
 
 ---
 *For AI-assisted development instructions, see [GEMINI.MD](GEMINI.MD).*
