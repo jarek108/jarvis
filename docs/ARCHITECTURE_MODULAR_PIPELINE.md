@@ -12,28 +12,21 @@
 
 ## 2. The Runtime Architecture
 
-The backend is organized into distinct layers to separate transport logic from cognitive processing.
+The system operates on a **Stateless Turn** logic, where the interaction context is fully re-composed for every inference cycle (see [CONCEPT_OPERATIONAL_CONCEPTS](CONCEPT_OPERATIONAL_CONCEPTS.md) for details).
 
 ### Module Layout
 *   `transport/`: WebSocket server, message schemas, and frame decoding.
-*   `session/`: In-memory session manager, context persistence (JSON), and state history.
-*   `pipeline/`: The execution engine and pipeline definitions (STS, Sentry, etc.).
-*   `models/`: Abstractions for STT (Whisper), TTS (Chatterbox), and LLM/VLM (vLLM/Ollama).
-*   `tools/`: Registry for external actions (Gemini CLI, Python scripts, Web Fetch).
+*   `session/`: In-memory session manager and context persistence.
+*   `pipeline/`: The execution engine and `operation_modes.yaml` definitions.
+*   `models/`: Abstractions for STT, TTS, and LLM/VLM.
+*   `tools/`: Registry and **Tool Queue** for environmental observations.
 
 ### The Pipeline Engine
-A Pipeline is a composed sequence of:
-1.  **Input Handler**:
-    *   *Stream*: Accumulates raw audio chunks (PCM).
-    *   *Frame*: Accepts MJPEG/Base64 video frames.
-    *   *Backpressure*: Drops non-critical video frames if compute lags, but buffers audio/control signals.
-2.  **Cognitive Logic**:
-    *   *STT*: Transcribes audio (VAD-gated).
-    *   *Inference*: Calls the loaded LLM/VLM.
-    *   *Tool Use*: Executes local functions.
-3.  **Output Generator**:
-    *   *TTS*: Synthesizes speech.
-    *   *Event*: Emits JSON control signals (`{"action": "lock_screen"}`).
+A Pipeline executes logic sequentially:
+1.  **Trigger**: Fire based on mode (Manual, Best-Effort Hz, or Event).
+2.  **Context Composition**: Flatten System Prompt + History ($H$) + Tool Queue.
+3.  **Inference**: Execute STT -> LLM -> TTS or VLM -> LLM -> TTS.
+4.  **Routing**: Emit binary/text events to output sinks.
 
 ---
 
