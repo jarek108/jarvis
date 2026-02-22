@@ -23,11 +23,17 @@ logging.basicConfig(
 logger = logging.getLogger("jarvis.backend")
 
 async def main():
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--stub", action="store_true", help="Use stub models for testing")
+    parser.add_argument("--port", type=int, default=8003)
+    args = parser.parse_args()
+
     # 1. Setup Infrastructure
     sessions_dir = os.path.join(project_root, "logs", "sessions")
     session_mgr = SessionManager(sessions_dir)
     resource_mgr = ResourceManager(project_root)
-    pipeline_mgr = PipelineManager(session_mgr, resource_mgr)
+    pipeline_mgr = PipelineManager(session_mgr, resource_mgr, stubs=args.stub)
     
     # 2. Register Pipelines
     # Mock pipeline for fast verification
@@ -48,9 +54,18 @@ async def main():
         models=["faster-whisper-tiny", "chatterbox-turbo", "OL_qwen2.5:0.5b"]
     )
     pipeline_mgr.register_pipeline(sts_config)
+    
+    text_config = PipelineConfig(
+        name="text",
+        description="Text-only chat",
+        input_mode="text_message",
+        trigger="manual",
+        models=["OL_qwen2.5:0.5b"]
+    )
+    pipeline_mgr.register_pipeline(text_config)
 
     # 3. Setup Server
-    server = JarvisServer(port=8003)
+    server = JarvisServer(port=args.port)
     
     # 4. Message Handler
     async def handle_message(msg_type, data):

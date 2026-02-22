@@ -14,7 +14,7 @@ from backend.models.llm_adapter import LLMAdapter
 logger = logging.getLogger("jarvis.pipeline")
 
 class PipelineManager:
-    def __init__(self, session_manager: SessionManager, resource_manager: ResourceManager):
+    def __init__(self, session_manager: SessionManager, resource_manager: ResourceManager, stubs: bool = False):
         self.session_manager = session_manager
         self.resource_manager = resource_manager
         self.context: Optional[PipelineContext] = None
@@ -22,10 +22,17 @@ class PipelineManager:
         self.pipelines: Dict[str, PipelineConfig] = {}
         self.output_queue: Optional[asyncio.Queue] = None
         
-        # Initialize Adapters
-        self.stt = STTAdapter(port=8101) # Default to base port
-        self.tts = TTSAdapter(port=8201) # Default to multilingual port
-        self.llm = LLMAdapter()
+        if stubs:
+            from backend.models.stub_adapter import StubAdapter
+            self.stt = StubAdapter("stt")
+            self.tts = StubAdapter("tts")
+            self.llm = StubAdapter("llm")
+            logger.info("🧪 Pipeline initialized with STUB adapters.")
+        else:
+            # Initialize Real Adapters
+            self.stt = STTAdapter(port=8101) 
+            self.tts = TTSAdapter(port=8201) 
+            self.llm = LLMAdapter()
 
     def register_pipeline(self, config: PipelineConfig):
         self.pipelines[config.name] = config
