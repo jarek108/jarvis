@@ -14,7 +14,7 @@ This file contains foundational mandates for the AI assistant (Jarvis). These in
 
 ## 🧪 Testing & Refactoring Directives
 *   **Refactor Guard**: Always run `python tests/runner_component.py tests/plans/ALL_fast.yaml --plumbing` after code changes.
-*   **Pipeline Logic**: Run `python tests/runner_modular_e2e.py --plumbing` to verify Orchestrator/Session logic.
+*   **Pipeline Logic**: Run `python tests/runner_integration.py tests/plans/MODULAR_fast.yaml --plumbing` to verify Orchestrator/Session logic.
 *   **Domain Testing**: `python tests/runner_component.py tests/plans/[DOMAIN]_fast.yaml` (Start here for features)
 *   **Calibrate on Success**: When adding a new model to a suite, you must generate its physics datasheet using `python utils/calibrate_models.py`.
 

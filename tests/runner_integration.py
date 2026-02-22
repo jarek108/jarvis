@@ -175,9 +175,9 @@ class ModularScenarioRunner:
             sys.exit(1)
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument("plan", type=str, nargs='?', default="tests/plans/MODULAR_fast.yaml")
-    parser.add_argument("--plumbing", action="store_true", help="Use stub models")
+    parser = argparse.ArgumentParser(description="Jarvis System Integration Runner")
+    parser.add_argument("plan", type=str, help="Path to a modular plan YAML (e.g., tests/plans/MODULAR_fast.yaml)")
+    parser.add_argument("--plumbing", action="store_true", help="Use stub models for logic verification")
     parser.add_argument("--port", type=int, default=8005)
     args = parser.parse_args()
 
