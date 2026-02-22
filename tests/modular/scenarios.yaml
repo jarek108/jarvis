@@ -1,0 +1,26 @@
+# Modular Interaction Scripts (System-Level Turns)
+basic_chat:
+  description: "Standard text message exchange"
+  turns:
+    - send: {"type": "message", "content": "Hello Jarvis"}
+      expect: 
+        - {"type": "log", "role": "assistant"}
+      wait_state: "READY"
+
+sts_voice:
+  description: "Voice-driven Speech-to-Speech"
+  turns:
+    - send_binary: "tests/stt/whisper/input_data/polish.wav"
+      expect:
+        - {"type": "status", "state": "THINKING"}
+        - {"type": "log", "role": "user"}
+        - {"type": "binary", "label": "TTS Output"}
+      wait_state: "READY"
+
+mode_swap:
+  description: "Switching between text and sts"
+  turns:
+    - send: {"type": "config", "mode": "text"}
+      expect: [{"type": "status", "state": "READY", "mode": "text"}]
+    - send: {"type": "config", "mode": "sts"}
+      expect: [{"type": "status", "state": "READY", "mode": "sts"}]

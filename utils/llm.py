@@ -1,6 +1,9 @@
 import requests
 import subprocess
 import os
+from .console import ensure_utf8_output
+
+ensure_utf8_output()
 
 def is_model_local(model_name):
     # 1. Try API first

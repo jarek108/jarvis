@@ -3,6 +3,7 @@ import logging
 import os
 import sys
 import time
+import json
 from typing import List, Dict, Set, Optional
 
 # Link to existing utils
@@ -21,6 +22,7 @@ class ResourceManager:
         """
         Determines which models need to be swapped based on VRAM constraints.
         """
+        if not required_models: return
         logger.info(f"⚖️ Balancing loadout for: {required_models}")
         
         # 1. Map IDs to Types
@@ -38,6 +40,7 @@ class ResourceManager:
         # 3. Start missing services
         for m_type, m_id in target_map.items():
             if m_type in self.active_loadout and self.active_loadout[m_type]["id"] == m_id:
+                # Already running
                 continue
             
             await self._spawn_model(m_type, m_id)
@@ -56,38 +59,73 @@ class ResourceManager:
         
         cmd = []
         port = 0
-        health_url = ""
+        is_docker = False
 
         if m_type == "stt":
             port = self.cfg['stt_loadout'].get(m_id, 8101)
             script = os.path.join(self.project_root, "servers", "stt_server.py")
-            cmd = [self.python_exe, script, "--port", str(port), "--model", m_id]
-            health_url = f"http://127.0.0.1:{port}/health"
+            cmd = [self.python_exe, script, "--port", str(port), "--model", m_id, "--benchmark-mode"]
         
         elif m_type == "tts":
             port = self.cfg['tts_loadout'].get(m_id, 8201)
             script = os.path.join(self.project_root, "servers", "tts_server.py")
-            cmd = [self.python_exe, script, "--port", str(port), "--variant", m_id]
-            health_url = f"http://127.0.0.1:{port}/health"
+            cmd = [self.python_exe, script, "--port", str(port), "--variant", m_id, "--benchmark-mode"]
             
         elif m_type == "llm":
             if m_id.startswith("OL_"):
-                # Ollama is handled as a singleton service
                 port = self.cfg['ports']['ollama']
                 cmd = ["ollama", "serve"]
-                health_url = f"http://127.0.0.1:{port}/api/tags"
-            else:
-                # vLLM Docker spawning logic would go here
-                # For V1, we assume Docker is already managed or use basic spawn
-                logger.warning("⚠️ vLLM spawning not fully implemented in modular resource manager yet.")
-                return
+            elif m_id.startswith("VL_"):
+                is_docker = True
+                port = self.cfg['ports'].get('vllm', 8300)
+                await self._spawn_vllm_docker(m_id, port)
 
         if cmd:
-            proc = utils.start_server(cmd)
-            # Wait for port
-            success = await asyncio.to_thread(utils.wait_for_port, port, timeout=60)
-            if success:
+            if not is_docker:
+                proc = utils.start_server(cmd)
                 self.active_loadout[m_type] = {"id": m_id, "proc": proc, "port": port}
+            
+            # Wait for port
+            success = await asyncio.to_thread(utils.wait_for_port, port, timeout=120)
+            if success:
                 logger.info(f"✅ {m_type} is ready on port {port}")
+                if m_type == "llm":
+                    # Perform warmup
+                    await asyncio.to_thread(utils.warmup_llm, m_id, visual=False, engine=("ollama" if m_id.startswith("OL_") else "vllm"))
             else:
                 logger.error(f"❌ Failed to start {m_type} on port {port}")
+
+    async def _spawn_vllm_docker(self, model_id: str, port: int):
+        """Hardened vLLM Docker spawning logic."""
+        # 1. Clean previous
+        utils.stop_vllm_docker()
+        
+        # 2. Resolve Model Name and Utilization
+        model_name = model_id[3:] # Strip VL_
+        total_vram = utils.get_gpu_total_vram()
+        
+        # Calculate Utilization (Simplified version of LifecycleManager logic)
+        base_gb, cost_10k = utils.get_model_calibration(model_name, engine="vllm")
+        if base_gb:
+            floor = self.cfg.get('vllm', {}).get('vram_static_floor', 1.0)
+            buffer = self.cfg.get('vllm', {}).get('vram_safety_buffer', 0.15)
+            # Use 4096 as default for E2E fast checks if not specified
+            required_gb = base_gb + ((4096 / 10000.0) * cost_10k) + floor
+            util = min(0.95, (required_gb / total_vram) + buffer)
+        else:
+            util = 0.5 # Conservative fallback
+            
+        hf_cache = os.getenv("HF_HOME")
+        vlm_data = os.path.join(self.project_root, "tests", "vlm", "input_data")
+        
+        cmd = [
+            "docker", "run", "--gpus", "all", "--rm", "--name", "vllm-server",
+            "-p", f"{port}:8000", "-v", f"{hf_cache}:/root/.cache/huggingface",
+            "-v", f"{vlm_data}:/data", "vllm/vllm-openai", model_name,
+            "--gpu-memory-utilization", str(util), "--max-model-len", "4096",
+            "--allowed-local-media-path", "/data"
+        ]
+        
+        logger.info(f"🐳 Starting vLLM Docker: {model_name} (Util: {util:.2f})")
+        utils.start_server(cmd)
+        self.active_loadout["llm"] = {"id": model_id, "proc": None, "port": port}

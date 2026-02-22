@@ -6,7 +6,7 @@
 ## 0. Migration & Compatibility Strategy
 
 *   **Side-by-Side Build**: The new `backend/` will be developed alongside the existing `servers/` directory.
-*   **Legacy Preservation**: `sts_server.py`, `stt_server.py`, and `tts_server.py` MUST remain operational to support the `tests/runner.py` suite. This test suite is our "Component QA" and ensures individual models work before they are integrated into the pipeline.
+*   **Legacy Preservation**: `sts_server.py`, `stt_server.py`, and `tts_server.py` MUST remain operational to support the `tests/runner.py` suite. This test suite is our **Component QA** (ingredients).
 *   **Code Reuse**: The new backend will import from `utils/` (config, infra, VRAM math) and wrapping logic from `tests/test_utils/lifecycle.py`, ensuring a single source of truth for "Model Physics."
 
 ---
@@ -75,7 +75,7 @@
 
 ## Phase 4: Verification & First Mode
 
-**Goal**: Prove the architecture with the standard Voice Chat scenario.
+**Goal**: Verify the system using the Two-Layer Testing Strategy.
 
 ### 4.1. STS Mode Configuration
 *   Define the `STS_PIPELINE` config:
@@ -83,14 +83,10 @@
     *   Trigger: `vad` (Server-side VAD for V1, or trust Client VAD flags)
     *   Action: `STT -> User_Prompt -> LLM -> TTS`
 
-### 4.2. Test Client (`tests/client_test.py`)
-*   Create a simple python script using `pyaudio` + `websockets`.
-*   **Flow**:
-    1.  Connect to WS.
-    2.  Send `{"type": "config", "mode": "sts"}`.
-    3.  Stream mic audio.
-    4.  Play received audio chunks.
-    5.  Print received logs.
+### 4.2. Integration Testing (`tests/runner_modular_e2e.py`)
+This is the **System QA** suite. It verifies the *application* built from the components.
+*   **Plumbing Mode (`--plumbing`)**: Spawns `backend/main.py --stub`. Verifies Transport, Session, and Pipeline Logic instantly.
+*   **Full Mode (Default)**: Spawns `backend/main.py` (real models). Verifies hardware integration and VRAM arbitration.
 
 ## Execution Order
 1.  **Phase 1**: Build the skeletal WS server and Session state.
