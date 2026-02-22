@@ -131,7 +131,7 @@ async def tts(request: Request):
             sr = 24000
             wav_numpy = np.zeros(sr, dtype=np.float32)
             out = io.BytesIO()
-            sf.write(out, wav_numpy, sr, format="WAV")
+            sf.write(out, wav_numpy, sr, format="WAV", subtype="PCM_16")
             processing_time = 0.01
         else:
             if app.state.benchmark_mode:
@@ -145,7 +145,7 @@ async def tts(request: Request):
             
             wav_numpy = wav.squeeze().cpu().numpy()
             out = io.BytesIO()
-            sf.write(out, wav_numpy, model.sr, format="WAV")
+            sf.write(out, wav_numpy, model.sr, format="WAV", subtype="PCM_16")
         
         return Response(
             content=out.getvalue(), 
