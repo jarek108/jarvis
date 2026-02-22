@@ -1,0 +1,10 @@
+name: "Modular Text Interaction Sweep"
+description: "Verify text-only performance across different LLM backends."
+execution:
+  - domain: modular
+    loadouts:
+      - ["OL_qwen2.5:0.5b"]
+      - ["VL_Qwen/Qwen2.5-0.5B-Instruct"]
+    scenarios:
+      - basic_chat
+      - long_chat

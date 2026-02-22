@@ -1,0 +1,10 @@
+name: "Modular STS Pipeline Sweep"
+description: "Verify different model combinations in STS mode."
+execution:
+  - domain: modular
+    loadouts:
+      - ["faster-whisper-tiny", "chatterbox-turbo", "OL_qwen2.5:0.5b"]
+      - ["faster-whisper-base", "chatterbox-multilingual", "OL_qwen2.5:0.5b"]
+    scenarios:
+      - sts_voice
+      - sts_french

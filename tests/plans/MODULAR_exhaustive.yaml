@@ -1,0 +1,12 @@
+name: "Modular System Exhaustive"
+description: "Full end-to-end verification of all interaction modes and state logic."
+execution:
+  - domain: modular
+    loadouts:
+      - ["faster-whisper-base", "chatterbox-multilingual", "OL_qwen2.5:0.5b"]
+    scenarios:
+      - ping_pong
+      - basic_chat
+      - sts_voice
+      - mode_swap
+      - long_chat

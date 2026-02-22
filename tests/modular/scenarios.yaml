@@ -1,4 +1,10 @@
 # Modular Interaction Scripts (System-Level Turns)
+ping_pong:
+  description: "Basic transport health check"
+  turns:
+    - send: {"type": "ping"}
+      expect: [{"type": "pong"}]
+
 basic_chat:
   description: "Standard text message exchange"
   turns:
@@ -7,10 +13,30 @@ basic_chat:
         - {"type": "log", "role": "assistant"}
       wait_state: "READY"
 
+long_chat:
+  description: "Multi-turn conversation to verify history persistence"
+  turns:
+    - send: {"type": "message", "content": "My name is Jarek."}
+      expect: [{"type": "log", "role": "assistant"}]
+      wait_state: "READY"
+    - send: {"type": "message", "content": "What is my name?"}
+      expect: [{"type": "log", "role": "assistant"}]
+      wait_state: "READY"
+
 sts_voice:
-  description: "Voice-driven Speech-to-Speech"
+  description: "Voice-driven Speech-to-Speech (Polish)"
   turns:
     - send_binary: "tests/stt/whisper/input_data/polish.wav"
+      expect:
+        - {"type": "status", "state": "THINKING"}
+        - {"type": "log", "role": "user"}
+        - {"type": "binary", "label": "TTS Output"}
+      wait_state: "READY"
+
+sts_french:
+  description: "Voice-driven Speech-to-Speech (French)"
+  turns:
+    - send_binary: "tests/stt/whisper/input_data/french.wav"
       expect:
         - {"type": "status", "state": "THINKING"}
         - {"type": "log", "role": "user"}
