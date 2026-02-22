@@ -49,6 +49,7 @@ vllm:
 
 system:
   health_check_interval: 1.0
+  llm_warmup_timeout: 500  # Max seconds to wait for model to hot-load into VRAM
 
 # --- Reporting & Excel Layout ---
 reporting:

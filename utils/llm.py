@@ -54,6 +54,10 @@ def check_and_pull_model(model_name, force_pull=False):
 def warmup_llm(model_name, visual=False, engine="ollama"):
     print(f"🔥 Warming up {model_name} (Hot-loading weights)...")
     
+    from .config import load_config
+    cfg = load_config()
+    timeout = cfg.get('system', {}).get('llm_warmup_timeout', 300)
+    
     if engine == "vllm":
         url = "http://127.0.0.1:8300/v1/chat/completions"
         payload = {
@@ -81,8 +85,8 @@ def warmup_llm(model_name, visual=False, engine="ollama"):
                 print("  ↳ ⚠️ Warmup image not found, skipping visual warmup.")
             
     try:
-        # Increased timeout for large 30B+ VLM models
-        resp = requests.post(url, json=payload, timeout=300)
+        # Dynamic timeout from config for large 30B+ VLM models
+        resp = requests.post(url, json=payload, timeout=timeout)
         if resp.status_code != 200:
             print(f"⚠️ Warmup failed with status {resp.status_code}: {resp.text}")
     except Exception as e:
