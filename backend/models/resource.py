@@ -12,8 +12,9 @@ import utils
 logger = logging.getLogger("jarvis.resource")
 
 class ResourceManager:
-    def __init__(self, project_root: str):
+    def __init__(self, project_root: str, stubs: bool = False):
         self.project_root = project_root
+        self.stubs = stubs
         self.cfg = utils.load_config()
         self.active_loadout: Dict[str, any] = {} # m_type -> {id, proc, port}
         self.python_exe = utils.resolve_path(self.cfg['paths']['venv_python'])
@@ -22,6 +23,10 @@ class ResourceManager:
         """
         Determines which models need to be swapped based on VRAM constraints.
         """
+        if self.stubs:
+            logger.info("🧪 Stub mode active. Skipping physical model loadout balancing.")
+            return
+            
         if not required_models: return
         logger.info(f"⚖️ Balancing loadout for: {required_models}")
         

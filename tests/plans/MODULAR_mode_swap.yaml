@@ -1,0 +1,14 @@
+name: "Modular Mode Swap Check"
+description: "Verify clean transitions between different operational modes."
+execution:
+  - operation_mode: "text_chat"
+    loadouts: [["OL_qwen2.5:0.5b"]]
+    scenarios: [basic_chat]
+  
+  - operation_mode: "sts_voice"
+    loadouts: [["faster-whisper-tiny", "chatterbox-turbo", "OL_qwen2.5:0.5b"]]
+    scenarios: [sts_voice]
+
+  - operation_mode: "text_chat"
+    loadouts: [["OL_qwen2.5:0.5b"]]
+    scenarios: [basic_chat]

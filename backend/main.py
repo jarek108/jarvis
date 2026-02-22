@@ -33,7 +33,7 @@ async def main():
     # 1. Setup Infrastructure
     sessions_dir = os.path.join(project_root, "logs", "sessions")
     session_mgr = SessionManager(sessions_dir)
-    resource_mgr = ResourceManager(project_root)
+    resource_mgr = ResourceManager(project_root, stubs=args.stub)
     pipeline_mgr = PipelineManager(session_mgr, resource_mgr, stubs=args.stub)
     
     # 2. Load and Register Operation Modes

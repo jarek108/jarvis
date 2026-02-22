@@ -42,11 +42,3 @@ sts_french:
         - {"type": "log", "role": "user"}
         - {"type": "binary", "label": "TTS Output"}
       wait_state: "READY"
-
-mode_swap:
-  description: "Switching between text and sts"
-  turns:
-    - send: {"type": "config", "mode": "text"}
-      expect: [{"type": "status", "state": "READY", "mode": "text"}]
-    - send: {"type": "config", "mode": "sts"}
-      expect: [{"type": "status", "state": "READY", "mode": "sts"}]

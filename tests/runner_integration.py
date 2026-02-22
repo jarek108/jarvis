@@ -102,6 +102,12 @@ class ModularScenarioRunner:
                     raise Exception(f"Timed out waiting for state: {target}")
 
     async def run_plan(self, plan_path):
+        # Initialize Session
+        from test_utils import init_session
+        session_dir, session_id = init_session(plan_path)
+        logger.info(f"📂 Session initialized: {session_id}")
+        logger.info(f"📁 Artifacts: {session_dir}")
+
         with open(plan_path, "r") as f:
             plan = yaml.safe_load(f)
         
@@ -115,7 +121,7 @@ class ModularScenarioRunner:
                 logger.info("✅ Connected to Backend.")
                 
                 # Global Init
-                await ws.send(json.dumps({"type": "session_init", "session_id": f"e2e_{int(time.time())}"}))
+                await ws.send(json.dumps({"type": "session_init", "session_id": session_id}))
                 await ws.recv() # Skip CONNECTED
 
                 blocks = plan.get('execution', [])
@@ -138,7 +144,8 @@ class ModularScenarioRunner:
                         ready = False
                         start_t = time.time()
                         while time.time() - start_t < 300: # Long wait for real models
-                            msg = json.loads(await asyncio.wait_for(ws.recv(), TIMEOUT))
+                            raw = await asyncio.wait_for(ws.recv(), TIMEOUT)
+                            msg = json.loads(raw)
                             if msg.get("type") == "status" and msg.get("state") == "READY":
                                 ready = True; break
                             elif msg.get("type") == "error":
