@@ -1,0 +1,38 @@
+# Jarvis Operation Modes (Behavioral Templates)
+
+text_chat:
+  description: "Standard text-based conversation"
+  input_modalities: ["text"]
+  trigger: "manual"
+  output_format: "text"
+  history_limit: 10
+  system_prompt: "You are Jarvis, a helpful local AI assistant. Respond concisely."
+  requirements: ["llm"]
+
+sts_voice:
+  description: "Hands-free voice to voice"
+  input_modalities: ["audio"]
+  trigger: "vad"
+  output_format: "audio"
+  history_limit: 5
+  system_prompt: "You are Jarvis. You are in a voice conversation. Keep answers short and natural."
+  requirements: ["stt", "llm", "tts"]
+
+visual_chat:
+  description: "Multimodal chat about images or screen"
+  input_modalities: ["text", "image"]
+  trigger: "manual"
+  output_format: "audio"
+  history_limit: 0 # Stateless by default for focused visual tasks
+  system_prompt: "Analyze the provided image and respond to the user's query verbally."
+  requirements: ["vlm", "tts"]
+
+sentry_mode:
+  description: "Continuous visual monitoring"
+  input_modalities: ["image"]
+  trigger: "continuous"
+  frequency_hz: 1.0
+  output_format: "event"
+  history_limit: 0
+  system_prompt: "You are a security monitor. Detect if a person is present. Respond with JSON only."
+  requirements: ["vlm"]

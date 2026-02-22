@@ -45,7 +45,6 @@ class ModularScenarioRunner:
             try: self.proc.wait(timeout=5)
             except: self.proc.kill()
             if not self.plumbing:
-                # Extra cleanup for real models
                 utils.kill_all_jarvis_services()
 
     async def execute_scenario(self, ws, name, data):
@@ -72,9 +71,7 @@ class ModularScenarioRunner:
                     raw = await asyncio.wait_for(ws.recv(), TIMEOUT)
                     if isinstance(raw, str):
                         msg = json.loads(raw)
-                        # Check if matches expected type and potentially other keys
                         if msg.get("type") == expected["type"]:
-                            # Shallow match other keys (role, state, etc.)
                             match = True
                             for k, v in expected.items():
                                 if k != "label" and msg.get(k) != v:
@@ -83,7 +80,6 @@ class ModularScenarioRunner:
                                 logger.info(f"   ✅ Received expected {expected['type']}" + (f" ({expected.get('role', '')})" if 'role' in expected else ""))
                                 received = True; break
                     else:
-                        # Binary response
                         if expected["type"] == "binary":
                             logger.info(f"   ✅ Received expected binary audio ({len(raw)} bytes)")
                             received = True; break
@@ -109,7 +105,6 @@ class ModularScenarioRunner:
         with open(plan_path, "r") as f:
             plan = yaml.safe_load(f)
         
-        # Load scenarios database
         scenario_db_path = os.path.join(project_root, "tests", "modular", "scenarios.yaml")
         with open(scenario_db_path, "r") as f:
             scenarios_db = yaml.safe_load(f)
@@ -125,48 +120,58 @@ class ModularScenarioRunner:
 
                 blocks = plan.get('execution', [])
                 for block in blocks:
-                    # For each loadout in block
-                    for loadout in block.get('loadouts', []):
-                        # Configure backend for this loadout
-                        # (Note: In V1, we assume 'sts' is the primary test mode)
-                        await ws.send(json.dumps({"type": "config", "mode": "sts"}))
+                    op_mode = block.get('operation_mode', 'text_chat')
+                    loadouts = block.get('loadouts', [[]])
+                    scenarios = block.get('scenarios', [])
+
+                    for loadout in loadouts:
+                        logger.info(f"🧬 Testing Mode: {op_mode} | Loadout: {loadout}")
                         
-                        # Wait for READY
+                        # 1. Configure backend for this specific 3-way pair
+                        await ws.send(json.dumps({
+                            "type": "config", 
+                            "mode": op_mode,
+                            "loadout": loadout
+                        }))
+                        
+                        # 2. Wait for READY (Handle Loading)
                         ready = False
                         start_t = time.time()
-                        while time.time() - start_t < 120: # Long wait for real models
+                        while time.time() - start_t < 300: # Long wait for real models
                             msg = json.loads(await asyncio.wait_for(ws.recv(), TIMEOUT))
                             if msg.get("type") == "status" and msg.get("state") == "READY":
                                 ready = True; break
+                            elif msg.get("type") == "error":
+                                raise Exception(f"Backend reported error: {msg.get('message')}")
                         
                         if not ready:
-                            results.append((f"Loadout {loadout}", False, "Backend failed to reach READY"))
+                            results.append((f"{op_mode} @ {loadout}", False, "Backend failed to reach READY"))
                             continue
 
-                        # Run requested scenarios
-                        for s_name in block.get('scenarios', []):
+                        # 3. Run requested scenarios
+                        for s_name in scenarios:
                             if s_name not in scenarios_db:
                                 logger.warning(f"⚠️ Scenario {s_name} not found in database.")
                                 continue
                             
                             try:
                                 await self.execute_scenario(ws, s_name, scenarios_db[s_name])
-                                results.append((s_name, True, None))
+                                results.append((f"{op_mode}:{s_name}", True, None))
                             except Exception as e:
-                                results.append((s_name, False, str(e)))
+                                results.append((f"{op_mode}:{s_name}", False, str(e)))
 
             # Summary
-            print("\n" + "="*50)
-            print(f"{'MODULAR SYSTEM BENCHMARK SUMMARY':^50}")
-            print("="*50)
+            print("\n" + "="*60)
+            print(f"{'JARVIS INTEGRATION TEST SUMMARY':^60}")
+            print("="*60)
             all_pass = True
             for name, success, err in results:
                 status = "✅ PASS" if success else "❌ FAIL"
-                print(f"{name:<30}: {status}")
+                print(f"{name:<40}: {status}")
                 if not success:
                     print(f"   ↳ Error: {err}")
                     all_pass = False
-            print("="*50)
+            print("="*60)
             
             if not all_pass: sys.exit(1)
 
@@ -176,7 +181,7 @@ class ModularScenarioRunner:
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Jarvis System Integration Runner")
-    parser.add_argument("plan", type=str, help="Path to a modular plan YAML (e.g., tests/plans/MODULAR_fast.yaml)")
+    parser.add_argument("plan", type=str, help="Path to a modular plan YAML")
     parser.add_argument("--plumbing", action="store_true", help="Use stub models for logic verification")
     parser.add_argument("--port", type=int, default=8005)
     args = parser.parse_args()

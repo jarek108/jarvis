@@ -2,13 +2,23 @@ from dataclasses import dataclass, field
 from typing import List, Optional, Dict, Any
 
 @dataclass
-class PipelineConfig:
+class OperationMode:
     name: str
-    input_mode: str  # 'audio_stream', 'text_message', 'frame_stream'
-    trigger: str     # 'vad', 'manual', 'continuous'
-    models: List[str] # List of model IDs required
+    input_modalities: List[str] # text, image, audio
+    trigger: str                # manual, vad, continuous
+    output_format: str          # text, audio, event
+    requirements: List[str]     # stt, tts, llm, vlm
+    history_limit: int = 5
+    system_prompt: str = ""
     description: str = ""
     settings: Dict[str, Any] = field(default_factory=dict)
+
+@dataclass
+class PipelineConfig:
+    name: str
+    mode: OperationMode
+    models: List[str] # Specific model loadout fulfilling mode requirements
+    description: str = ""
 
 @dataclass
 class PipelineContext:

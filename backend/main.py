@@ -2,6 +2,7 @@ import asyncio
 import logging
 import os
 import sys
+import yaml
 
 # Ensure root is in path for imports
 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -11,7 +12,7 @@ if project_root not in sys.path:
 from backend.transport.server import JarvisServer
 from backend.session.manager import SessionManager
 from backend.pipeline.orchestrator import PipelineManager
-from backend.pipeline.definitions import PipelineConfig
+from backend.pipeline.definitions import OperationMode
 from backend.models.resource import ResourceManager
 
 # Configure Logging
@@ -35,34 +36,22 @@ async def main():
     resource_mgr = ResourceManager(project_root)
     pipeline_mgr = PipelineManager(session_mgr, resource_mgr, stubs=args.stub)
     
-    # 2. Register Pipelines
-    # Mock pipeline for fast verification
-    mock_config = PipelineConfig(
-        name="mock",
-        description="Non-model test pipeline",
-        input_mode="text_message",
-        trigger="manual",
-        models=[]
-    )
-    pipeline_mgr.register_pipeline(mock_config)
-
-    sts_config = PipelineConfig(
-        name="sts",
-        description="Full Speech-to-Speech interaction",
-        input_mode="audio_stream",
-        trigger="vad",
-        models=["faster-whisper-tiny", "chatterbox-turbo", "OL_qwen2.5:0.5b"]
-    )
-    pipeline_mgr.register_pipeline(sts_config)
-    
-    text_config = PipelineConfig(
-        name="text",
-        description="Text-only chat",
-        input_mode="text_message",
-        trigger="manual",
-        models=["OL_qwen2.5:0.5b"]
-    )
-    pipeline_mgr.register_pipeline(text_config)
+    # 2. Load and Register Operation Modes
+    modes_path = os.path.join(project_root, "backend", "pipeline", "operation_modes.yaml")
+    with open(modes_path, "r", encoding="utf-8") as f:
+        modes_data = yaml.safe_load(f)
+        for name, data in modes_data.items():
+            mode = OperationMode(
+                name=name,
+                input_modalities=data["input_modalities"],
+                trigger=data["trigger"],
+                output_format=data["output_format"],
+                requirements=data["requirements"],
+                history_limit=data.get("history_limit", 5),
+                system_prompt=data.get("system_prompt", ""),
+                description=data.get("description", "")
+            )
+            pipeline_mgr.register_operation_mode(mode)
 
     # 3. Setup Server
     server = JarvisServer(port=args.port)
@@ -78,8 +67,9 @@ async def main():
                 await server.push_output("text", {"type": "status", "state": "CONNECTED"})
                 
             elif cmd == "config":
-                mode = data.get("mode", "mock")
-                success = await pipeline_mgr.switch_mode(mode)
+                mode = data.get("mode")
+                loadout = data.get("loadout", [])
+                success = await pipeline_mgr.switch_mode(mode, loadout)
                 if not success:
                     await server.push_output("text", {"type": "error", "message": f"Failed to switch to {mode}"})
             

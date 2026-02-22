@@ -1,11 +1,15 @@
-name: "Modular System Fast Check"
-description: "Quick verification of Orchestrator and Transport."
-settings:
-  llm_warmup_timeout: 60
+name: "Modular Integrated Fast Check"
+description: "End-to-end verification using Operation Modes."
 execution:
-  - domain: modular
+  - operation_mode: "text_chat"
+    loadouts:
+      - ["OL_qwen2.5:0.5b"]
+    scenarios:
+      - basic_chat
+      - long_chat
+
+  - operation_mode: "sts_voice"
     loadouts:
       - ["faster-whisper-tiny", "chatterbox-turbo", "OL_qwen2.5:0.5b"]
     scenarios:
-      - basic_chat
-      - mode_swap
+      - sts_voice
