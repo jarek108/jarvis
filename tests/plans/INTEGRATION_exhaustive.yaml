@@ -1,4 +1,4 @@
-name: "Modular System Exhaustive"
+name: "Integration System Exhaustive"
 description: "Full end-to-end verification of all interaction modes and state logic."
 execution:
   - operation_mode: "text_chat"

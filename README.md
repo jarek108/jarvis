@@ -1,6 +1,6 @@
 # Jarvis Assistant: High-Performance STS & VLM Infrastructure
 
-Jarvis is a low-latency, modular Speech-to-Speech (STS) and Vision-Language (VLM) assistant framework optimized for the **NVIDIA RTX 5090 (Blackwell)**. It orchestrates cutting-edge AI models into a unified pipeline capable of real-time voice interaction and visual analysis.
+Jarvis is a low-latency, integration-based Speech-to-Speech (STS) and Vision-Language (VLM) assistant framework optimized for the **NVIDIA RTX 5090 (Blackwell)**. It orchestrates cutting-edge AI models into a unified pipeline capable of real-time voice interaction and visual analysis.
 
 ## 🚀 Key Features
 
@@ -10,6 +10,20 @@ Jarvis is a low-latency, modular Speech-to-Speech (STS) and Vision-Language (VLM
 - **Hierarchical Dashboard**: Real-time TUI dashboard for monitoring benchmarks, logs, and VRAM usage.
 - **Benchmarking Suite**: Comprehensive test runner with automated Google Drive reporting and session-based artifact persistence.
 - **Refactor Guard**: A high-fidelity "Plumbing Mode" to verify code integrity without requiring GPU resources.
+
+### 🚀 Core Capabilities Matrix
+Jarvis interacts with your environment through prioritized data channels, focusing on tactile productivity first.
+
+| Channel | Type | Priority | Usage Example |
+| :--- | :--- | :---: | :--- |
+| **Microphone** | `aud` | **P0** | Capture "Summarize this" voice command. |
+| **Selection** | `txt` | **P0** | Read highlighted code for refactoring. |
+| **Clipboard** | `txt` | **P0** | Paste result directly back into a draft. |
+| **Text File** | `txt` | **P0** | Read/write long-form documents or logs. |
+| **Chat UI** | `txt` | **P1** | Monitor real-time logs and history. |
+| **Speaker** | `aud` | **P1** | Verbal responses for hands-free mode. |
+| **Notification** | `txt` | **P1** | Show "Clipboard Updated" toast after a task. |
+| **Screenshot** | `img` | **P2** | Analyze a static error or UI element. |
 
 ## 📂 Project Structure
 
@@ -47,7 +61,7 @@ python manage_loadout.py --status
 
 ### 🛠️ How-to Guides (Tasks)
 - **[Benchmarking](docs/HOWTO_BENCHMARK.md)**: Running component tests and performance reports.
-- **[Integration Testing](docs/PLAN_E2E_MODULAR.md)**: Verifying the modular system logic and state machine.
+- **[Integration Testing](docs/PLAN_E2E_INTEGRATION.md)**: Verifying the integration system logic and state machine.
 - **[Reporting](docs/HOWTO_REPORTING.md)**: Regenerating and synchronizing benchmark data.
 - **[Engine Management](docs/HOWTO_ENGINE_MANAGEMENT.md)**: Configuring Ollama and vLLM (Docker) lifecycles.
 - **[Troubleshooting](docs/HOWTO_TROUBLESHOOTING.md)**: Common errors, CUDA issues, and log analysis.
@@ -55,7 +69,7 @@ python manage_loadout.py --status
 
 ### 📚 Concepts (Understanding)
 - **[System Architecture](docs/CONCEPT_ARCHITECTURE.md)**: High-level component breakdown and data flow.
-- **[Modular Interaction Pipeline](docs/ARCHITECTURE_MODULAR_PIPELINE.md)**: Configurable interaction flows and WebSocket transport.
+- **[Integration Interaction Pipeline](docs/ARCHITECTURE_INTEGRATION_PIPELINE.md)**: Configurable interaction flows and WebSocket transport.
 - **[Operational Concepts](docs/CONCEPT_OPERATIONAL_CONCEPTS.md)**: Behavioral templates, triggers, and stateless turn logic.
 - **[Model Physics](docs/CONCEPT_MODEL_PHYSICS.md)**: VRAM management, KV cache scaling, and calibration theory.
 - **[Reporting Architecture](docs/CONCEPT_REPORTING.md)**: Artifact lifecycles and the "Turbo Sync" engine.

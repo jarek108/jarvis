@@ -1,5 +1,32 @@
 # Jarvis Operation Modes (Behavioral Templates)
 
+sts_touch:
+  description: "Touch-to-Speak conversational mode"
+  input_modalities: ["audio"]
+  trigger: "manual"
+  output_format: "audio"
+  history_limit: 5
+  system_prompt: "You are Jarvis. Standard voice conversation. Respond naturally and concisely."
+  requirements: ["stt", "llm", "tts"]
+
+dictation_touch:
+  description: "Tactile voice-to-text (Pure Transcription)"
+  input_modalities: ["audio"]
+  trigger: "manual"
+  output_format: "text"
+  history_limit: 0
+  system_prompt: "Transcription mode. Output the verbatim text spoken, formatted with proper punctuation. No conversational meta-talk."
+  requirements: ["stt"]
+
+super_whisper:
+  description: "Contextual Transformation (Selection + Voice Command)"
+  input_modalities: ["audio", "text"]
+  trigger: "manual"
+  output_format: "text"
+  history_limit: 0
+  system_prompt: "You are a text transformation engine. You will receive a SELECTION and a VOICE COMMAND. Apply the command to the selection (summarize, rephrase, reply, etc.) and output ONLY the resulting text for clipboard injection."
+  requirements: ["stt", "llm"]
+
 text_chat:
   description: "Standard text-based conversation"
   input_modalities: ["text"]

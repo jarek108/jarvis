@@ -1,0 +1,20 @@
+name: "Integration Tactile Suite"
+description: "Verification of Touch-to-Speak and SuperWhisper workflows"
+execution:
+  - operation_mode: "super_whisper"
+    loadouts:
+      - ["faster-whisper-tiny", "OL_qwen2.5:0.5b"]
+    scenarios:
+      - super_whisper_action
+
+  - operation_mode: "dictation_touch"
+    loadouts:
+      - ["faster-whisper-base"]
+    scenarios:
+      - dictation_test
+
+  - operation_mode: "sts_touch"
+    loadouts:
+      - ["faster-whisper-tiny", "chatterbox-turbo", "OL_qwen2.5:0.5b"]
+    scenarios:
+      - touch_sts_basic

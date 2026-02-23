@@ -17,11 +17,11 @@ if project_root not in sys.path:
 import utils
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
-logger = logging.getLogger("modular_e2e")
+logger = logging.getLogger("integration_e2e")
 
 TIMEOUT = 15.0 # Increased for real-model responses
 
-class ModularScenarioRunner:
+class IntegrationScenarioRunner:
     def __init__(self, port=8005, plumbing=True):
         self.port = port
         self.plumbing = plumbing
@@ -34,7 +34,7 @@ class ModularScenarioRunner:
         if self.plumbing: cmd.append("--stub")
         
         # Use a log file for the backend
-        with open("tests/modular_backend.log", "w", encoding="utf-8") as f:
+        with open("tests/integration_backend.log", "w", encoding="utf-8") as f:
             self.proc = subprocess.Popen(cmd, cwd=project_root, stdout=f, stderr=f)
         time.sleep(3) # Initial boot
 
@@ -111,7 +111,7 @@ class ModularScenarioRunner:
         with open(plan_path, "r") as f:
             plan = yaml.safe_load(f)
         
-        scenario_db_path = os.path.join(project_root, "tests", "modular", "scenarios.yaml")
+        scenario_db_path = os.path.join(project_root, "tests", "integration", "scenarios.yaml")
         with open(scenario_db_path, "r") as f:
             scenarios_db = yaml.safe_load(f)
 
@@ -188,12 +188,12 @@ class ModularScenarioRunner:
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Jarvis System Integration Runner")
-    parser.add_argument("plan", type=str, help="Path to a modular plan YAML")
+    parser.add_argument("plan", type=str, help="Path to an integration plan YAML")
     parser.add_argument("--plumbing", action="store_true", help="Use stub models for logic verification")
     parser.add_argument("--port", type=int, default=8005)
     args = parser.parse_args()
 
-    runner = ModularScenarioRunner(port=args.port, plumbing=args.plumbing)
+    runner = IntegrationScenarioRunner(port=args.port, plumbing=args.plumbing)
     try:
         runner.start_backend()
         asyncio.run(runner.run_plan(args.plan))

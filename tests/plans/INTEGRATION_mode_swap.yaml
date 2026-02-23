@@ -1,4 +1,4 @@
-name: "Modular Mode Swap Check"
+name: "Integration Mode Swap Check"
 description: "Verify clean transitions between different operational modes."
 execution:
   - operation_mode: "text_chat"

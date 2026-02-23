@@ -8,7 +8,7 @@ Below is a draft “Design \& Decisions” section for the architecture/SE/tech 
 
 ## Architectural overview
 
-The system is a single-node, local-first multimodal assistant running on an RTX 5090 class machine, exposing a unified WebSocket API to a single client. The backend is a monolithic Python service embedding STT, TTS, LLM, VLM, and agentic tools, orchestrated by a modular pipeline engine that runs exactly one active pipeline at a time. All conversational, visual, and agentic modes are expressed as concrete pipeline configurations over shared primitives rather than separate services.[^1]
+The system is a single-node, local-first multimodal assistant running on an RTX 5090 class machine, exposing a unified WebSocket API to a single client. The backend is a monolithic Python service embedding STT, TTS, LLM, VLM, and agentic tools, orchestrated by an integration pipeline engine that runs exactly one active pipeline at a time. All conversational, visual, and agentic modes are expressed as concrete pipeline configurations over shared primitives rather than separate services.[^1]
 
 ### Key design principles
 

@@ -1,7 +1,7 @@
-name: "Modular STS Pipeline Sweep"
+name: "Integration STS Pipeline Sweep"
 description: "Verify different model combinations in STS mode."
 execution:
-  - domain: modular
+  - domain: integration
     loadouts:
       - ["faster-whisper-tiny", "chatterbox-turbo", "OL_qwen2.5:0.5b"]
       - ["faster-whisper-base", "chatterbox-multilingual", "OL_qwen2.5:0.5b"]

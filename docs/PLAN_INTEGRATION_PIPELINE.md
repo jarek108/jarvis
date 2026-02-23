@@ -1,7 +1,7 @@
-# Implementation Plan: Modular Interaction Pipeline
+# Implementation Plan: Integration Interaction Pipeline
 
-> **Objective**: Transform the Jarvis backend from a fixed STS script into a modular, event-driven Pipeline Engine capable of multimodal interaction.
-> **Reference**: `docs/ARCHITECTURE_MODULAR_PIPELINE.md`
+> **Objective**: Transform the Jarvis backend from a fixed STS script into a integration, event-driven Pipeline Engine capable of multimodal interaction.
+> **Reference**: `docs/ARCHITECTURE_INTEGRATION_PIPELINE.md`
 
 ## 0. Migration & Compatibility Strategy
 
@@ -83,7 +83,7 @@
     *   Trigger: `vad` (Server-side VAD for V1, or trust Client VAD flags)
     *   Action: `STT -> User_Prompt -> LLM -> TTS`
 
-### 4.2. Integration Testing (`tests/runner_modular_e2e.py`)
+### 4.2. Integration Testing (`tests/runner_integration.py`)
 This is the **System QA** suite. It verifies the *application* built from the components.
 *   **Plumbing Mode (`--plumbing`)**: Spawns `backend/main.py --stub`. Verifies Transport, Session, and Pipeline Logic instantly.
 *   **Full Mode (Default)**: Spawns `backend/main.py` (real models). Verifies hardware integration and VRAM arbitration.

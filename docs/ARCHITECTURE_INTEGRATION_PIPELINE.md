@@ -1,4 +1,4 @@
-# Architecture: Modular Interaction Pipeline
+# Architecture: Integration Interaction Pipeline
 
 > **Context**: This architecture defines the backend for "Jarvis," a local, high-performance AI assistant running on NVIDIA RTX 5090 hardware. It replaces fixed endpoints with a flexible, stateful pipeline capable of multimodal interaction (Voice, Vision, Agents).
 

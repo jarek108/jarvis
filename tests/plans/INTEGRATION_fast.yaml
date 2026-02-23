@@ -1,4 +1,4 @@
-name: "Modular Integrated Fast Check"
+name: "Integration Integrated Fast Check"
 description: "End-to-end verification using Operation Modes."
 execution:
   - operation_mode: "text_chat"

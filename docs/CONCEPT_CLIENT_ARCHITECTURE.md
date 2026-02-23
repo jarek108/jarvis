@@ -1,4 +1,4 @@
-# Concept: Modular Interaction Pipeline Architecture
+# Concept: Integration Interaction Pipeline Architecture
 
 > **Context**: "Jarvis" is a local, high-performance multimodal AI assistant designed for NVIDIA RTX 5090 hardware. It integrates Speech-to-Text (STT), Text-to-Speech (TTS), Large Language Models (LLM), and Vision Language Models (VLM). This document outlines the architecture for a flexible, configurable backend pipeline capable of supporting diverse interaction modes (voice chat, visual monitoring, agentic routing).
 
@@ -62,7 +62,7 @@ The backend must support distinct "Modes of Operation." Each mode is a specific 
 
 ## 3. The Backend Pipeline Architecture
 
-To support these diverse modes, we need to move from a hardcoded `sts_server` to a **Modular Pipeline Engine**.
+To support these diverse modes, we need to move from a hardcoded `sts_server` to an **Integration Pipeline Engine**.
 
 ### The "Pipeline" Configuration
 The backend will expose an API to load/unload specific pipelines. A pipeline is defined by:

@@ -2,7 +2,7 @@
 
 # I have prepared a feature request doc for my local conversational agent. I want to introduce a flexible, customizable architecture as described in the doc.  we want to create a design section with decisions about architectural, SE and tech stack choices.  for now do not write  yet or do external research, just analyze the doc and ask critical clarification questions to me needed before a deep search
 
-Based on your `CONCEPT_CLIENT_ARCHITECTURE.md`, I have analyzed the proposed "Modular Interaction Pipeline" and identified several critical architectural and technical decisions that need clarification before we can draft the design section.
+Based on your `CONCEPT_CLIENT_ARCHITECTURE.md`, I have analyzed the proposed "Integration Interaction Pipeline" and identified several critical architectural and technical decisions that need clarification before we can draft the design section.
 
 Here are the key questions grouped by domain:
 

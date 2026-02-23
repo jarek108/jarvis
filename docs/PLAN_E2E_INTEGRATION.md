@@ -1,6 +1,6 @@
-# Plan: E2E Testing for Modular Pipeline
+# Plan: E2E Testing for Integration Pipeline
 
-> **Objective**: Verify the behavioral integrity of the modular interaction pipeline, transport layer, and session persistence using a unified runner.
+> **Objective**: Verify the behavioral integrity of the integration interaction pipeline, transport layer, and session persistence using a unified runner.
 
 ## 1. Testing Strategy: Two-Layer QA
 
@@ -12,14 +12,14 @@ We distinguish between testing the *ingredients* (Component QA) and the *cake* (
 *   **Goal**: Ensure models load and infer correctly via HTTP APIs.
 *   **Status**: Existing and stable.
 
-### B. System QA (Modular Runner)
-*   **Tool**: `tests/runner_modular_e2e.py`
+### B. System QA (Integration Runner)
+*   **Tool**: `tests/runner_integration.py`
 *   **Scope**: Orchestrator, Session Manager, Transport.
 *   **Goal**: Ensure the application logic (State Machine, Hot-Swap, Event Routing) works as a cohesive unit.
 
 ---
 
-## 2. The Unified Runner (`tests/runner_modular_e2e.py`)
+## 2. The Unified Runner (`tests/runner_integration.py`)
 
 This script supports two modes controlled by CLI flags:
 
