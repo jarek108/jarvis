@@ -11,6 +11,20 @@ Jarvis is a high-performance Speech-to-Speech (STS) and Vision-Language (VLM) as
     - **vLLM**: High-throughput Dockerized serving on port `8300`.
 - **STS Pipeline**: The central orchestrator (`sts_server.py`) that manages the STT -> LLM -> TTS flow.
 
+## The Processing Graph
+
+The system architecture treats "Pipelines" (like STS or Visual Sentry) as directed acyclic graphs (DAGs) composed of atomic **Processing Nodes**. Each node performs a specific transformation on data.
+
+| Processing Node | Definition | Example Models (Supported/Planned) |
+| :--- | :--- | :--- |
+| **`s -> t`** | **Speech-to-Text** (Audio $\to$ Text) | `faster-whisper` (via `stt_server`) |
+| **`t -> t`** | **Text-to-Text** (Text $\to$ Text) | `Qwen2.5-Instruct`, `DeepSeek-R1`, `Mistral-Nemo` |
+| **`it -> t`** | **Image-to-Text** (Image + Text $\to$ Text) | `Moondream2`, `Qwen2-VL`, `Qwen2.5-VL` |
+| **`vt -> t`** | **Video-to-Text** (Video + Text $\to$ Text) | `Qwen2-VL` (7B/72B), `Qwen2.5-VL` |
+| **`t -> s`** | **Text-to-Speech** (Text $\to$ Audio) | `Chatterbox` (Kokoro / F5-TTS) |
+| **`s -> s`** | **Speech-to-Speech** (Audio $\to$ Audio) | *None* (Currently handled via Pipeline composition) |
+| **`t -> i`** | **Text-to-Image** (Text $\to$ Image) | *None* (Future: Flux, SDXL) |
+
 ## Directory Structure
 
 ```text
