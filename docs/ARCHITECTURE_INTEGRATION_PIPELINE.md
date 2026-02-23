@@ -46,6 +46,11 @@ The Client and Server communicate via a **Unified WebSocket**.
 *   **I/O Layer (`asyncio`)**: Handles the WebSocket heartbeat and message routing. Allows the user to send an "Interrupt" signal even while the LLM is generating.
 *   **Compute Layer**: Heavy inference runs in separate processes/threads. The Orchestrator awaits their result (sequential logic) but remains responsive to the network.
 
+> **Routing Strategy**: The Orchestrator utilizes a priority-weighted event loop.
+> *   **P0 (Critical Path)**: Channels like Microphone and Clipboard bypass standard queueing to minimize TTFT (Time to First Token) for tactile tasks.
+> *   **P1-P2 (Contextual Path)**: Ingested on-demand or as feedback.
+> *   **P3 (Ambient Path)**: Handled via background sampling to prevent VRAM/CPU starvation during active P0 tasks.
+
 ---
 
 ## 4. Resource Management (VRAM)

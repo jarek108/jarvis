@@ -2,6 +2,24 @@
 
 This document details the HTTP endpoints exposed by the internal Jarvis servers. These APIs are used for inter-service communication (STS Pipeline) and can be used to build custom clients.
 
+## Data IO Ontology
+The system categorizes all inputs and outputs into specific "Channels." These names are used in `OperationMode` definitions and Client/Server message schemas.
+
+| Channel Name | Type | Input | Output | Priority | Usage Example |
+| :--- | :--- | :---: | :---: | :--- | :--- |
+| **Microphone** | `aud` | ✔ | | **P0** | Voice commands/dictation. |
+| **Selection** | `txt` | ✔ | | **P0** | Active window text context. |
+| **Clipboard** | `txt` | ✔ | ✔ | **P0** | Direct OS-level read/write. |
+| **Text File** | `txt` | ✔ | ✔ | **P0** | Local document manipulation. |
+| **Chat UI** | `txt` | ✔ | ✔ | **P1** | Internal application state. |
+| **Speaker** | `aud` | | ✔ | **P1** | Hardware audio output. |
+| **Notification** | `txt` | | ✔ | **P1** | System toast/tray alerts. |
+| **Screenshot** | `img` | ✔ | | **P2** | Static desktop capture. |
+| **Image File** | `img` | ✔ | | **P2** | Static media ingestion. |
+| **Video File** | `vid` | ✔ | | **P2** | Pre-recorded clip analysis. |
+| **Camera** | `vid` | ✔ | | **P3** | Live webcam stream. |
+| **Screen** | `vid` | ✔ | | **P3** | Live display monitoring. |
+
 ## 1. Speech-to-Text (STT) Server
 **Default Port:** `8100` (Tiny), `8101` (Base), etc. (See `config.yaml`)
 

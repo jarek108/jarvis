@@ -19,10 +19,8 @@ Jarvis interacts with your environment through prioritized data channels, focusi
 | **Microphone** | `aud` | **P0** | Capture "Summarize this" voice command. |
 | **Selection** | `txt` | **P0** | Read highlighted code for refactoring. |
 | **Clipboard** | `txt` | **P0** | Paste result directly back into a draft. |
-| **Text File** | `txt` | **P0** | Read/write long-form documents or logs. |
 | **Chat UI** | `txt` | **P1** | Monitor real-time logs and history. |
 | **Speaker** | `aud` | **P1** | Verbal responses for hands-free mode. |
-| **Notification** | `txt` | **P1** | Show "Clipboard Updated" toast after a task. |
 | **Screenshot** | `img` | **P2** | Analyze a static error or UI element. |
 
 ## 📂 Project Structure

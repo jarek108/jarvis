@@ -88,8 +88,9 @@ This is the **System QA** suite. It verifies the *application* built from the co
 *   **Plumbing Mode (`--plumbing`)**: Spawns `backend/main.py --stub`. Verifies Transport, Session, and Pipeline Logic instantly.
 *   **Full Mode (Default)**: Spawns `backend/main.py` (real models). Verifies hardware integration and VRAM arbitration.
 
-## Execution Order
-1.  **Phase 1**: Build the skeletal WS server and Session state.
-2.  **Phase 3**: Create the Model Adapters (reuse existing logic).
-3.  **Phase 2**: Connect the pieces with the Orchestrator.
-4.  **Phase 4**: Configure STS and Run the Test Client.
+## Revised Roadmap Structure
+
+*   **Phase 1: P0 Tactile Core**: Implementation of Microphone, Selection, and Clipboard IO Adapters.
+*   **Phase 2: P1 Feedback Loop**: Integration of Speaker (TTS) and Notification systems.
+*   **Phase 3: P2 Visual Foundation**: On-demand Screenshot and File ingestion.
+*   **Phase 4: P3 Ambient Awareness**: Continuous Video/Camera stream optimization.
