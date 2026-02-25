@@ -1,0 +1,13 @@
+scenarios:
+  - id: "v2v_high_quality"
+    pipeline: "voice_to_voice"
+    mapping: "high_quality"
+    loadout: "base-gpt20-multi"
+    inputs:
+      input_mic: "MANUAL_UPLOAD_TEST.txt" # Mocking audio with a txt for path test
+
+  - id: "v2v_auto_mapping"
+    pipeline: "voice_to_voice"
+    loadout: "base-gpt20-multi"
+    inputs:
+      input_mic: "MANUAL_UPLOAD_TEST.txt"
