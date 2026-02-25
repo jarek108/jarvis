@@ -7,6 +7,6 @@ settings:
 execution:
   - domain: vlm
     loadouts:
-      - ["OL_moondream#stream"]
+      # - ["OL_moondream#stream"]
       - ["VL_Qwen/Qwen2-VL-2B-Instruct#stream"]
       - ["VL_QuantTrio/Qwen3-VL-30B-A3B-Instruct-AWQ#stream"]

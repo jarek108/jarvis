@@ -41,6 +41,7 @@ class LifecycleManager:
         self.display_name = self.format_models_for_display() # Formatted ONCE
         self.owned_processes = []
         self.missing_models = []
+        self.uncalibrated_models = []
 
     def _parse_flags(self, entry):
         """Parses a model string like 'model_id#flag1#flag2' into a flags_dict."""
@@ -85,17 +86,26 @@ class LifecycleManager:
 
     def check_availability(self):
         self.missing_models = []
+        self.uncalibrated_models = []
         if self.cat['llm']:
             engine = self.cat['llm']['engine']
             model = self.cat['llm']['model']
+            
+            # 1. Check Filesystem Presence
             if engine == "ollama":
                 if not utils.is_model_local(model) and not self.force_download:
                     self.missing_models.append(self.cat['llm']['original'])
             elif engine == "vllm":
                 if not utils.is_vllm_model_local(model) and not self.force_download:
                     self.missing_models.append(self.cat['llm']['original'])
+            
+            # 2. Check Calibration (Mandatory for vLLM)
+            if not self.stub_mode and engine == "vllm":
+                base_gb, _ = utils.get_model_calibration(model, engine="vllm")
+                if base_gb is None:
+                    self.uncalibrated_models.append(self.cat['llm']['original'])
         
-        return len(self.missing_models) == 0
+        return len(self.missing_models) == 0 and len(self.uncalibrated_models) == 0
 
     def get_required_services(self, domain=None):
         required = []
@@ -175,12 +185,7 @@ class LifecycleManager:
                     vllm_util = (required_gb / total_vram) + buffer_pct
                     print(f"  [SmartAllocator] Physics: {base_gb}GB base + {max_len} ctx + {floor_gb}GB floor. Buffer: {buffer_pct*100}%. Util: {round(vllm_util, 3)}")
                 else:
-                    # SAFETY NET for uncalibrated models
-                    max_len = self.cfg.get('vllm', {}).get('uncalibrated_safe_ctx', 8192)
-                    safe_vram = self.cfg.get('vllm', {}).get('uncalibrated_safe_vram_gb', 4.0)
-                    vllm_util = (safe_vram / total_vram)
-                    print(f"\n⚠️  [SmartAllocator] WARNING: No calibration found for {model}.")
-                    print(f"⚠️  [SmartAllocator] Falling back to SAFETY NET: {max_len} ctx @ {safe_vram}GB VRAM.\n")
+                    raise RuntimeError(f"UNCALIBRATED: Model {model} has no calibration. vLLM requires exact physics to start safely.")
 
                 # 4. Final Clamping
                 vllm_util = min(0.95, max(0.1, vllm_util))
@@ -424,8 +429,15 @@ def run_test_lifecycle(domain, setup_name, models, purge_on_entry, purge_on_exit
             if on_phase: on_phase("setup")
             setup_time, prior_vram = manager.reconcile(domain)
             if setup_time == -1:
-                err_msg = f"Missing models: {', '.join(manager.missing_models)}"
-                res_obj = {"name": "SETUP", "status": "MISSING", "duration": 0, "result": err_msg, "mode": domain.upper(), "vram_prior": prior_vram, "llm_model": model_display, "stt_model": model_display, "tts_model": model_display}
+                # Distinguish between missing local files vs missing calibration
+                if manager.uncalibrated_models:
+                    err_msg = f"Skipped: Missing calibration for vLLM models: {', '.join(manager.uncalibrated_models)}. Run 'python utils/calibrate_models.py' first."
+                    status = "UNCALIBRATED"
+                else:
+                    err_msg = f"Missing model files: {', '.join(manager.missing_models)}"
+                    status = "MISSING"
+                
+                res_obj = {"name": "SETUP", "status": status, "duration": 0, "result": err_msg, "mode": domain.upper(), "vram_prior": prior_vram, "llm_model": model_display, "stt_model": model_display, "tts_model": model_display}
                 if reporter: reporter.report(res_obj)
                 else: 
                     from .reporting import report_scenario_result

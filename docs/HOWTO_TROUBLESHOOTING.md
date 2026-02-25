@@ -33,6 +33,17 @@ Common issues and solutions for the Jarvis infrastructure.
     python tests/runner.py tests/plans/ALL_fast.yaml --force-download
     ```
 
+### "Status: UNCALIBRATED"
+*   **Symptom:** Test setup is skipped. The log or console reports `Skipped: Missing calibration for vLLM models`.
+*   **Cause:** vLLM requires exact physical measurements to start safely. You are trying to run a model that has no datasheet in `model_calibrations/`.
+*   **Fix:**
+    1.  Start the model once manually (using `ollama run` or a direct docker command) to generate an initialization log.
+    2.  Capture that log.
+    3.  Run the calibration tool:
+        ```powershell
+        python utils/calibrate_models.py path/to/log
+        ```
+
 ### "OOM" (Out of Memory)
 *   **Symptom:** `svc_*.log` shows CUDA OOM error.
 *   **Fix:**
