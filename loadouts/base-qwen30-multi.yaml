@@ -1,5 +1,18 @@
-description: "Standard English loadout, balanced for speed, using Qwen 30B and multilingual TTS"
-vision: true
-stt: ["faster-whisper-base"]
-tts: ["chatterbox-multilingual"]
-llm: "qwen3-vl:30b-a3b-instruct"
+name: "base-qwen30-multi"
+description: "High-performance vision-capable loadout using Qwen 30B."
+services:
+  - id: "qwen3-vl:30b-a3b-instruct"
+    engine: "ollama"
+    params:
+      num_ctx: 32768
+
+  - id: "faster-whisper-base"
+    engine: "native"
+    params:
+      device: "cuda"
+      compute_type: "float16"
+
+  - id: "chatterbox-multilingual"
+    engine: "native"
+    params:
+      device: "cuda"

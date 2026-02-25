@@ -1,0 +1,8 @@
+id: faster-whisper-tiny
+engine: native
+capabilities: [audio_in, text_out]
+constants:
+  base_vram_gb: 0.2
+  kv_cache_gb_per_10k: 0.0
+metadata:
+  type: stt

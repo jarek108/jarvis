@@ -1,4 +1,18 @@
+name: "base-gpt20-multi"
 description: "Standard English loadout, balanced for speed, using Qwen 30B and multilingual TTS"
-stt: "faster-whisper-base"
-tts: "chatterbox-multilingual"
-llm: "gpt-oss:20b"
+services:
+  - id: "gpt-oss:20b"
+    engine: "ollama"
+    params:
+      num_ctx: 32768
+
+  - id: "faster-whisper-base"
+    engine: "native"
+    params:
+      device: "cuda"
+      compute_type: "float16"
+
+  - id: "chatterbox-multilingual"
+    engine: "native"
+    params:
+      device: "cuda"

@@ -1,0 +1,30 @@
+{
+  "active_loadout": [
+    {
+      "id": "gpt-oss:20b",
+      "engine": "ollama",
+      "port": 11434,
+      "params": {
+        "num_ctx": 32768
+      }
+    },
+    {
+      "id": "faster-whisper-base",
+      "engine": "native",
+      "port": 8101,
+      "params": {
+        "device": "cuda",
+        "compute_type": "float16"
+      }
+    },
+    {
+      "id": "chatterbox-multilingual",
+      "engine": "native",
+      "port": 8201,
+      "params": {
+        "device": "cuda"
+      }
+    }
+  ],
+  "last_updated": "2026-02-25 14:27:25"
+}

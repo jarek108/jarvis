@@ -1,5 +1,6 @@
-id: Qwen2.5 0.5B Instruct
+id: qwen2.5-0.5b-instruct
 engine: ollama
+capabilities: [text_in, text_out]
 constants:
   base_vram_gb: 1.325
   kv_cache_gb_per_10k: 0.114441

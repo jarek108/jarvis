@@ -1,10 +1,11 @@
 id: moondream2
 engine: ollama
+capabilities: [text_in, image_in, text_out]
 constants:
-  base_vram_gb: 0.825
-  kv_cache_gb_per_10k: 1.831055
+  base_vram_gb: 0.8161
+  kv_cache_gb_per_10k: 0.114441
 metadata:
-  calibrated_at: '2026-02-21 09:26:42'
+  calibrated_at: '2026-02-21 03:41:00'
   gpu_vram_total_gb: 31.84
-  source_tokens: 2048
+  source_tokens: 32768
   source_cache_gb: 0.375

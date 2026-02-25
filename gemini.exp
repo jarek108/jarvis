@@ -1,0 +1,22 @@
+#!/usr/bin/expect
+
+# Disable output to stdout (terminal)
+log_user 0
+
+# Save all output (send/expect) to a file
+log_file "gemini_session.log"
+
+set timeout -1
+
+spawn gemini -y
+
+interact {
+    -o -re "(?i)keep trying" {
+        # Log to file only, not stdout
+        send_log "\n*** Auto-Reply: Saw 'keep trying', sending 1... ***\n"
+        
+        send "1\r"
+        sleep 0.5
+    }
+}
+

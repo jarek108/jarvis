@@ -1,0 +1,18 @@
+id: high_quality
+description: "Prioritizes accuracy and reasoning depth using heavy models."
+bindings:
+  proc_stt:
+    candidates:
+      - faster-whisper-large-v3
+      - faster-whisper-base
+  proc_llm:
+    candidates:
+      - gpt-oss:20b
+      - qwen3-vl:30b-a3b-instruct
+  proc_vlm:
+    candidates:
+      - qwen3-vl:30b-a3b-instruct
+      - VL_QuantTrio/Qwen3-VL-30B-A3B-Instruct-AWQ
+  proc_tts:
+    candidates:
+      - chatterbox-multilingual

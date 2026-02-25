@@ -1,0 +1,8 @@
+id: chatterbox-turbo
+engine: native
+capabilities: [text_in, audio_out]
+constants:
+  base_vram_gb: 1.2
+  kv_cache_gb_per_10k: 0.0
+metadata:
+  type: tts

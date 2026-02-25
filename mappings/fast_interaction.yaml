@@ -1,0 +1,17 @@
+id: fast_interaction
+description: "Optimized for sub-second latency using tiny models."
+bindings:
+  proc_stt:
+    candidates:
+      - faster-whisper-tiny
+      - faster-whisper-base
+  proc_llm:
+    candidates:
+      - qwen2.5-0.5b-instruct
+      - Qwen/Qwen2.5-0.5B-Instruct
+  proc_vlm:
+    candidates:
+      - moondream2
+  proc_tts:
+    candidates:
+      - chatterbox-turbo

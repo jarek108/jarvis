@@ -1,30 +1,23 @@
-# Planned Work & Analysis
+# Jarvis Architectural Roadmap: The "Strategy" Model
 
-This document serves as a scratchpad for future architectural improvements, known technical debt, and analyzing proposed features.
+This document outlines the migration to a dynamic, graph-based pipeline architecture with explicit state management.
 
-## 1. Backlog
+## Phase 1: Standardization & State (Loadout 2.0)
+*   [ ] **Redefine Loadout Schema**: Convert `loadouts/*.yaml` to a flat list of `services` with explicit `params`. Remove role keys (`stt`, `llm`).
+*   [ ] **Refactor `manage_loadout.py`**: Implement `runtime_registry.json` generation. The manager becomes the "Writer" of system state.
+*   [ ] **Update Test Runners**: Ensure test plans align with the new schema.
 
-### Documentation
-- [ ] **User Guide**: `docs/USER_GUIDE.md` needs to be created to document client keybindings and UI.
+## Phase 2: Capability Registry (The Knowledge Base)
+*   [ ] **Extend Calibration Schema**: Add `capabilities: [text_in, audio_out, vision, ...]` to `model_calibrations/*.yaml`.
+*   [ ] **Static Calibrations**: Generate calibration files for STT (Whisper) and TTS (Chatterbox) engines to standardize them as "Models."
+*   [ ] **Auto-Detection**: Update `calibrate_models.py` to infer capabilities from logs where possible.
 
-### Testing
-- [ ] **Mock Mode V2**: Decouple logic simulation from the `runner.py` to allow testing the dashboard UI without spawning processes.
+## Phase 3: The Pipeline Engine (The Logic)
+*   [ ] **Create `mappings/`**: Define Strategy YAMLs mapping abstract nodes to candidate model lists.
+*   [ ] **Implement `PipelineResolver`**: The logic core that binds `Pipeline + Mapping + Registry + Calibration` into an executable graph.
+*   [ ] **Refactor Orchestrator**: Replace hardcoded loops with graph traversal.
 
-### Infrastructure
-- [ ] **Ollama Unified Calibration**: Implement calibration logic for Ollama models to enable hardware guardrails. Plan: `docs/analysis/OLLAMA_CALIBRATION_PLAN.md`.
-- [ ] **Dynamic Port Allocation**: Currently ports are hardcoded in `config.yaml`. Moving to dynamic allocation would allow parallel test runs.
-
-## 2. Active Analysis
-
-### TTS Streaming
-*   **Status**: Decision made to keep TTS atomic.
-*   **Reasoning**: See `docs/analysis/STREAMING_ANALYSIS.md`. Server-side chunking adds protocol complexity with minimal gain for conversational STS.
-
-### vLLM Multi-Tenant VRAM
-*   **Issue**: vLLM grabs 90% VRAM by default.
-*   **Status**: IMPLEMENTED. The "Smart Allocator" logic in `lifecycle.py` uses high-precision physical constants from `models/calibrations/` to calculate the exact `gpu_memory_utilization` needed for the requested `#ctx`.
-
-### Native Video (vLLM)
-*   **Goal**: Unlock Temporal Positional Embeddings in Qwen3-VL.
-*   **Plan**: See `docs/analysis/NATIVE_VIDEO_PLAN.md`.
-*   **Status**: VERIFIED. Supported both standalone (`#nativevideo`) and combined with streaming (`#nativevideo#stream`).
+## Phase 4: Documentation & Polish
+*   [ ] Update Architecture concepts.
+*   [ ] Create Pipeline reference guides.
+*   [ ] Deprecate legacy config maps.
