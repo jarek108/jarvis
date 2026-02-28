@@ -1,5 +1,6 @@
 id: Qwen/Qwen2-VL-2B-Instruct
 engine: vllm
+capabilities: [text_in, text_out, image_in, video_in]
 constants:
   base_vram_gb: 5.15
   kv_cache_gb_per_10k: 0.267154

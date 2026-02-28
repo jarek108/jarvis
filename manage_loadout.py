@@ -33,6 +33,7 @@ def print_status():
     print("-" * LINE_LEN)
     
     for port, info in health.items():
+        if info['label'] == "sts": continue # Hide legacy orchestrator
         status = info['status']
         name = info['label']
         detail_val = info['info']

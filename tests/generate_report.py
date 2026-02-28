@@ -120,7 +120,6 @@ def generate_excel(upload=True, upload_outputs=False, session_dir=None):
             if not data: continue
             print(f"📊 Processing {domain} sheet...")
             
-            # Identify all node metric columns dynamically
             node_columns = []
             for entry in data:
                 for s in entry.get('scenarios', []):
@@ -153,9 +152,19 @@ def generate_excel(upload=True, upload_outputs=False, session_dir=None):
                         val = s.get('node_metrics', {}).get(nid, {}).get(m_key, "")
                         row[col] = r3(val) if isinstance(val, (int, float)) else val
 
+                    # Fuzzy match for log link
+                    log_link = "N/A"
+                    role_map = {"stt": "stt", "tts": "tts", "llm": "llm", "sts_voice": "llm", "hybrid_chat": "llm", "vlm": "llm"}
+                    target_role = role_map.get(domain_raw, "llm")
+                    log_files = [f for f in os.listdir(artifacts_dir) if f.startswith(f"svc_{target_role}") and f.endswith(".log")]
+                    match_found = next((lf for lf in log_files if entry.get('loadout_id', '').lower() in lf.lower()), None)
+                    if not match_found and log_files: match_found = log_files[0]
+                    if match_found: log_link = get_link(os.path.join(artifacts_dir, match_found), session_out_id)
+
                     row.update({
                         "Input": get_link(s.get('input_file'), inputs_id),
                         "Output": get_link(s.get('output_file'), session_out_id),
+                        "Logs": log_link,
                         "Prompt": str(s.get('input_text', "N/A"))[:500],
                         "Response": str(s.get('llm_text', "N/A"))[:1000]
                     })
@@ -163,9 +172,9 @@ def generate_excel(upload=True, upload_outputs=False, session_dir=None):
             if rows: sheets[domain] = pd.DataFrame(rows)
 
         # 3. Write Excel
-        from openpyxl.styles import Font, PatternFill, Alignment
-        from openpyxl.formatting.rule import FormulaRule, ColorScaleRule
-        from openpyxl.comments import Comment
+        from openpyxl.styles import Font, PatternFill
+        from openpyxl.formatting.rule import FormulaRule
+        from openpyxl.utils import get_column_letter
 
         with pd.ExcelWriter(output_path, engine='openpyxl') as writer:
             for name, df in sheets.items():
@@ -173,24 +182,18 @@ def generate_excel(upload=True, upload_outputs=False, session_dir=None):
                 worksheet = writer.sheets[name]; last_row = len(df) + 1
                 header_fill = PatternFill(start_color="4F81BD", end_color="4F81BD", fill_type="solid")
                 header_font = Font(bold=True, color="FFFFFF")
-                
                 for idx, col in enumerate(df.columns):
                     cell = worksheet.cell(row=1, column=idx+1)
                     cell.fill = header_fill; cell.font = header_font
-                    col_letter = chr(65 + idx)
-                    
-                    # Formatting
+                    col_letter = get_column_letter(idx + 1)
                     if col == "Loadout": width = 40
-                    elif any(x in col.lower() for x in ["input", "output"]): width = 12
+                    elif any(x in col.lower() for x in ["input", "output", "logs"]): width = 12
                     elif any(x in col.lower() for x in ["prompt", "response"]): width = 50
                     else: width = 15
                     worksheet.column_dimensions[col_letter].width = width
-                    
-                    # Conditional Formatting for Metrics
                     if col in ["Status"]:
                         worksheet.conditional_formatting.add(f"{col_letter}2:{col_letter}{last_row}", FormulaRule(formula=[f'{col_letter}2="PASSED"'], fill=PatternFill(start_color="C6EFCE", end_color="C6EFCE", fill_type="solid")))
                         worksheet.conditional_formatting.add(f"{col_letter}2:{col_letter}{last_row}", FormulaRule(formula=[f'{col_letter}2="FAILED"'], fill=PatternFill(start_color="FFC7CE", end_color="FFC7CE", fill_type="solid")))
-
         print(f"📊 Excel Report Generated: {output_path}"); return output_path
     except Exception as e:
         print(f"❌ Excel Error: {e}"); traceback.print_exc(); return None

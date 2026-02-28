@@ -2,6 +2,7 @@ from .stt import STTAdapter
 from .llm import LLMAdapter
 from .tts import TTSAdapter
 from .utility import UtilityAdapter
+from .memory import MemoryAdapter
 
 def get_adapter(role, project_root):
     """Factory to return the correct adapter based on node role."""
@@ -9,7 +10,8 @@ def get_adapter(role, project_root):
         "stt": STTAdapter,
         "llm": LLMAdapter,
         "tts": TTSAdapter,
-        "utility": UtilityAdapter
+        "utility": UtilityAdapter,
+        "memory": MemoryAdapter
     }
     
     adapter_class = adapters.get(role.lower())
