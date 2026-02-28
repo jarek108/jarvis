@@ -39,15 +39,20 @@ def get_service_status(port: int):
         response = requests.get(url, timeout=2)
         if response.status_code == 200:
             data = response.json()
+            # Check for Stub Signature
+            is_stub = "stub" in str(data.get("service", "")).lower() or data.get("stub") is True
+            
             # Special parsing for LLM engines
             if port == cfg['ports']['ollama']:
-                return "ON", "Ollama"
+                return "ON", ("Stub" if is_stub else "Ollama")
             if port == cfg['ports'].get('vllm'):
+                if is_stub: return "ON", "Stub"
                 models = data.get("data", [])
                 return "ON", (models[0]["id"] if models else "vLLM")
             
             # Standard Jarvis service status
-            name = data.get("model") or data.get("variant") or data.get("service") or "Ready"
+            raw_name = data.get("model") or data.get("variant") or data.get("service") or "Ready"
+            name = f"{raw_name} (Stub)" if is_stub and "stub" not in raw_name.lower() else raw_name
             return ("BUSY" if data.get("status") == "busy" else "ON"), name
         elif response.status_code == 503 and response.json().get("status") == "STARTUP":
             return "STARTUP", "Loading..."
@@ -92,12 +97,18 @@ async def get_service_status_async(session, port: int):
         async with session.get(url, timeout=1.0) as response:
             if response.status == 200:
                 data = await response.json()
-                if port == cfg['ports']['ollama']: return port, "ON", "Ollama"
+                # Check for Stub Signature
+                is_stub = "stub" in str(data.get("service", "")).lower() or data.get("stub") is True
+                
+                if port == cfg['ports']['ollama']: 
+                    return port, "ON", ("Stub" if is_stub else "Ollama")
                 if port == cfg['ports'].get('vllm'): 
+                    if is_stub: return port, "ON", "Stub"
                     models = data.get("data", [])
                     return port, "ON", (models[0]["id"] if models else "vLLM")
                 
-                name = data.get("model") or data.get("variant") or data.get("service") or "Ready"
+                raw_name = data.get("model") or data.get("variant") or data.get("service") or "Ready"
+                name = f"{raw_name} (Stub)" if is_stub and "stub" not in raw_name.lower() else raw_name
                 return port, ("BUSY" if data.get("status") == "busy" else "ON"), name
             elif response.status == 503:
                 data = await response.json()
@@ -114,14 +125,24 @@ async def get_system_health_async():
         results = await asyncio.gather(*tasks)
     return {r[0]: {"status": r[1], "info": r[2]} for r in results}
 
-async def wait_for_ports_parallel(ports, timeout):
+async def wait_for_ports_parallel(ports, timeout, require_stub=False):
     if not ports: return True
     start_time = time.time()
     async with aiohttp.ClientSession() as session:
         while time.time() - start_time < timeout:
             tasks = [get_service_status_async(session, p) for p in ports]
             results = await asyncio.gather(*tasks)
-            if all(r[1] == "ON" for r in results): return True
+            # results is list of (port, status, info)
+            
+            all_on = True
+            for r in results:
+                p_port, status, info = r
+                if status != "ON": 
+                    all_on = False; break
+                if require_stub and "stub" not in str(info).lower():
+                    all_on = False; break
+            
+            if all_on: return True
             await asyncio.sleep(0.5)
     return False
 

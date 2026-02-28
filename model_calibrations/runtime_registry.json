@@ -1,11 +1,23 @@
 {
   "active_loadout": [
     {
-      "id": "faster-whisper-base",
+      "id": "OL_QWEN2.5:0.5B#CTX=4096",
+      "engine": "ollama",
+      "port": 11434,
+      "params": {}
+    },
+    {
+      "id": "faster-whisper-tiny",
       "engine": "native",
-      "port": 8101,
+      "port": 8100,
+      "params": {}
+    },
+    {
+      "id": "chatterbox-turbo",
+      "engine": "native",
+      "port": 8202,
       "params": {}
     }
   ],
-  "last_updated": "2026-02-28 21:03:27"
+  "last_updated": "2026-02-28 22:16:10"
 }
