@@ -41,4 +41,12 @@ execution:
     pipeline: "hybrid_chat"
     loadouts:
       - ["faster-whisper-tiny", "OL_qwen2.5:0.5b"]
-    scenarios: [all]
+    scenarios: [super_whisper_action, vlm_bunny, vlm_jarvis_logo]
+
+  # 6. End-to-End Voice (Complex)
+  - domain: "sts_voice"
+    pipeline: "voice_to_voice"
+    loadouts:
+      - ["faster-whisper-tiny", "chatterbox-turbo", "OL_qwen2.5:0.5b"]
+      - ["faster-whisper-base", "chatterbox-multilingual", "VL_QuantTrio/Qwen3-VL-30B-A3B-Instruct-AWQ#stream"]
+    scenarios: [sts_voice, token_explosion]
