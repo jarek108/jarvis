@@ -49,6 +49,38 @@ def get_model_calibration(model_id, engine="vllm"):
     
     return None, None
 
+def resolve_canonical_id(model_id, engine):
+    """
+    Translates an internal sanitized model ID (e.g., qwen--2b) 
+    into its canonical engine ID (e.g., Qwen/Qwen2-2B or qwen:2b).
+    Source of truth: model_calibrations/*.yaml 'id' field.
+    """
+    project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    cal_dir = os.path.join(project_root, "model_calibrations")
+    
+    prefix = "vl_" if engine == "vllm" else "ol_"
+    # Sanitize incoming to find the calibration file
+    lookup_id = model_id.lower().replace(" ", "-").replace("/", "--").replace(":", "-").split('#')[0]
+    if lookup_id.startswith(prefix): lookup_id = lookup_id[len(prefix):]
+    
+    cal_path = os.path.join(cal_dir, f"{prefix}{lookup_id}.yaml")
+    
+    # 1. Metadata Lookup (Source of Truth)
+    if os.path.exists(cal_path):
+        with open(cal_path, "r", encoding="utf-8") as f:
+            data = yaml.safe_load(f)
+            if data.get("id"): return data["id"]
+
+    # 2. Heuristic Fallback (For uncalibrated models)
+    clean_id = model_id.split('#')[0]
+    if clean_id.startswith(prefix): clean_id = clean_id[len(prefix):]
+    
+    if engine == "vllm":
+        return clean_id.replace("--", "/") # Restore slashes
+    elif engine == "ollama":
+        return clean_id.replace("--", ":") # Restore colons
+    return clean_id
+
 def resolve_path(path_str):
     """Expands ~ and resolves relative paths against project root."""
     if not path_str: return None

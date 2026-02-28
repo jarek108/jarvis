@@ -1,0 +1,26 @@
+id: atomic_vlm
+description: "Single-node VLM pipeline for visual component testing."
+nodes:
+  - id: input_instruction
+    type: source
+    role: chat_box
+    capabilities: [text_out]
+
+  - id: input_media
+    type: source
+    role: screen_capture
+    capabilities: [image_out]
+
+  - id: proc_vlm
+    type: processing
+    role: llm
+    capabilities: [text_in, image_in, text_out]
+    inputs: 
+      - input_instruction
+      - input_media
+    context_layout: |
+      [INSTRUCTION]
+      {{ input_instruction }}
+      
+      [MEDIA_CONTEXT]
+      {{ input_media }}

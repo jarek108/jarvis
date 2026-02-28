@@ -114,7 +114,7 @@ class PipelineResolver:
                         matches.append(m)
                 if len(matches) == 1: bound_model = matches[0]
                 elif len(matches) > 1: raise ValueError(f"Ambiguity for {node_id}: Multiple matches { [m['id'] for m in matches] }.")
-                else: raise ValueError(f"No live model satisfies {required_caps} for '{node_id}'.")
+                else: raise ValueError(f"ARCH_MISMATCH: No model satisfies {required_caps} for node '{node_id}'.")
 
             if not bound_model: raise ValueError(f"Resolution failed for node '{node_id}'.")
             

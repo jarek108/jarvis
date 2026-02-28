@@ -61,23 +61,24 @@ class LifecycleManager:
         categorized = {"stt": None, "tts": None, "llm": None}
         for m in self.models:
             clean_id = m.split('#')[0]
+            m_upper = m.upper()
             flags = self._parse_flags(m)
             
             if clean_id in self.cfg['stt_loadout']:
                 categorized['stt'] = {"id": clean_id, "flags": flags}
             elif clean_id in self.cfg['tts_loadout']:
                 categorized['tts'] = {"id": clean_id, "flags": flags}
-            elif m.startswith("OL_") or m.startswith("VL_") or m.startswith("vllm:"):
-                # Explicit LLM Prefixes
+            elif m_upper.startswith("OL_") or m_upper.startswith("VL_") or m_upper.startswith("VLLM:"):
+                # Explicit LLM Prefixes (Case Insensitive)
                 engine = "ollama"
                 model_id = clean_id
-                if clean_id.startswith("VL_"):
+                if m_upper.startswith("VL_"):
                     engine = "vllm"
                     model_id = clean_id[3:]
-                elif clean_id.startswith("vllm:"):
+                elif m_upper.startswith("VLLM:"):
                     engine = "vllm"
                     model_id = clean_id[5:]
-                elif clean_id.startswith("OL_"):
+                elif m_upper.startswith("OL_"):
                     engine = "ollama"
                     model_id = clean_id[3:]
                 
@@ -124,6 +125,9 @@ class LifecycleManager:
                 health = f"http://127.0.0.1:{llm_port}/health"
                 required.append({"type": "llm", "id": f"STUB-{original_id}", "port": llm_port, "cmd": cmd, "health": health})
             elif engine == "ollama":
+                # Resolve canonical ID for external command
+                canonical_id = utils.resolve_canonical_id(model, engine="ollama")
+                
                 # --- START OLLAMA GUARDRAIL ---
                 try:
                     # 1. Resolve context length
@@ -162,6 +166,9 @@ class LifecycleManager:
 
                 vllm_port = self.cfg['ports'].get('vllm', 8300)
                 total_vram = utils.get_gpu_total_vram()
+                
+                # Resolve canonical ID for external command
+                canonical_id = utils.resolve_canonical_id(model, engine="vllm")
                 
                 # --- START SMART ALLOCATOR ---
                 vllm_util = None
@@ -222,7 +229,7 @@ class LifecycleManager:
                     "-v", f"{hf_cache}:/root/.cache/huggingface", 
                     "-v", f"{vlm_input_dir}:/data",
                     "vllm/vllm-openai", 
-                    model,
+                    canonical_id,
                     "--gpu-memory-utilization", str(vllm_util),
                     "--max-model-len", str(max_len),
                     "--limit-mm-per-prompt", mm_limit_json,
@@ -261,8 +268,9 @@ class LifecycleManager:
             if self.cat['stt']: cmd.extend(["--stt", self.cat['stt']['id']])
             if self.cat['tts']: cmd.extend(["--tts", self.cat['tts']['id']])
             if self.cat['llm']: 
-                llm_val = self.cat['llm']['original']
-                cmd.extend(["--llm", llm_val])
+                # Use canonical ID for external orchestrator call
+                can_id = utils.resolve_canonical_id(self.cat['llm']['original'], engine=self.cat['llm']['engine'])
+                cmd.extend(["--llm", can_id])
             if self.benchmark_mode: cmd.append("--benchmark-mode")
             if self.stub_mode: cmd.append("--stub")
             

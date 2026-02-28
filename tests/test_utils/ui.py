@@ -234,7 +234,7 @@ class RichDashboard:
         if d_data['status'] != "failed":
             d_data['status'] = status
 
-    def update_scenario(self, domain, loadout, scenario_name, status):
+    def update_scenario(self, domain, loadout, scenario_name, status, result=""):
         d_data = self.test_data.get(domain.lower())
         l_data = d_data['loadouts'].get(loadout)
         l_data['done'] += 1
@@ -243,6 +243,9 @@ class RichDashboard:
             l_data['errors'] += 1
             l_data['status'] = "failed"
             d_data['status'] = "failed"
+            # Capture first failure message for display
+            if not l_data.get('error_message'):
+                l_data['error_message'] = result
         
         total_done = sum(d['done'] for d in self.test_data.values())
         total_all = sum(d['total'] for d in self.test_data.values())

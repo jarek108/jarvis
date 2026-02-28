@@ -1,41 +1,37 @@
-# Vision: Unified Flow-Graph Orchestration
+# Future Vision: Pluggable Transport Topology
 
-## Goal
-To replace all hardcoded domain-specific test runners (`tests/stt/test.py`, etc.) and hardcoded production servers (`servers/sts_server.py`) with a single, declarative **Flow-Graph Engine**. This unified architecture ensures that benchmarks measure the exact same logic paths used in production while maintaining domain-specific evaluation expertise in isolated modules.
+## The Concept: "Library-First, Service-Optional"
+Jarvis is currently architected as a pure, embedded Python library (the `PipelineExecutor`). This provides the absolute lowest latency by executing the entire flow graph—from physical edge sensors to AI models to edge actuators—within a single memory space. 
 
-## Architectural Principles
-1. **Declarative Topology**: All logic (streaming, chunking, routing) must be visible in the `pipelines/*.yaml` flow graphs, not hidden in Python code.
-2. **Simple Executor**: The `PipelineExecutor` must remain a lean "Traffic Cop" (Dispatcher). It should not contain domain-specific knowledge (no "if LLM" or "if STT").
-3. **Logic Nodes**: Complex behaviors like "token-to-sentence buffering" are implemented as simple, reusable utility nodes within the graph.
-4. **Trace-Based Evaluation**: Metrics (TTFT, Similarity, CPS) are calculated post-hoc by analyzing an "Event Trace" (log of all inputs/outputs with timestamps) generated during the run.
-5. **Entry-Point Injection**: Any node in a graph can serve as an entry point for a test, enabling "Component Testing" to be a subset of "System Testing."
+However, to support future use cases (like a lightweight web client, a browser extension, or a remote Raspberry Pi smart speaker), the pipeline must be capable of "Split Execution" across a network boundary.
 
----
+## The Design: Runtime Context Resolution
+We will achieve this *without* changing the declarative YAML pipelines. Instead, we will introduce a `RuntimeContext` to the `PipelineResolver`.
 
-## Execution Plan
+When a graph is resolved, the nodes are bound to different adapters based on the context:
 
-### Phase 1: Logic Nodes & Reactive Flow
-*   **Utility Adapters**: Create a `utils/transformers.py` containing simple logic like `chunk_by_delimiter`.
-*   **Generator Support**: Update `PipelineExecutor` to treat every node as a potential generator. If a node yields data, the executor immediately pushes it to downstream nodes.
-*   **Streaming YAML**: Update `voice_to_voice.yaml` to include a `text_chunker` node between `proc_llm` and `proc_tts`.
+### 1. Context: `LOCAL` (Current Architecture)
+The pipeline runs entirely embedded in the host application (e.g., `jarvis_client.py` or `tests/runner.py`).
+*   `source: microphone` ➔ Binds to `LocalAudioSensor` (PyAudio).
+*   `processing: llm` ➔ Binds to `LLMAdapter` (HTTP call to local vLLM).
+*   `sink: speaker` ➔ Binds to `LocalAudioActuator` (SoundDevice).
+*   *Data flows in-memory via Python AsyncQueues.*
 
-### Phase 2: Trace-Based Instrumentation
-*   **The Observer**: Add an instrumentation layer to the `PipelineExecutor` that records every packet of data moving between nodes, tagged with high-resolution timestamps.
-*   **Trace Artifact**: Save this `trace.json` into the session log folder.
-*   **Domain Evaluators**: Update `tests/[domain]/evaluator.py` to accept a `trace.json` and calculate its specific metrics (RTF, CPS, etc.) from the event history.
+### 2. Context: `SERVER_HOST` (The Exposed API)
+The pipeline runs in a headless server wrapper (`jarvis_server.py`), exposing the processing logic to the outside world.
+*   `source: *` ➔ Binds to a `NetworkReceiverAdapter`. It waits for incoming packets on the websocket/API endpoint.
+*   `processing: *` ➔ Binds normally.
+*   `sink: *` ➔ Binds to a `NetworkSenderAdapter`. It streams resulting packets back down the websocket.
 
-### Phase 3: Transition & Retirement
-*   **Atomic Pipelines**: Create 1-node pipelines for STT, TTS, and LLM to replace the old component-level tests.
-*   **Scenario Translation**: Update `runner_pipeline.py` to map legacy flat-YAML scenarios into the unified graph runner.
-*   **Production Parity**: Refactor `sts_server.py` to be a thin FastAPI wrapper that simply hosts the `voice_to_voice.yaml` graph using the shared executor.
-*   **Test Composition**: Finalize a suite of `fast` and `exhaustive` test plans (`ALL_fast.yaml`, `ALL_exhaustive.yaml`) that use the new pipeline runner to cover all core capabilities (STT, LLM, TTS, VLM, Multi-Input) with varied data scenarios.
+### 3. Context: `EDGE_CLIENT` (The Remote Sensor)
+A lightweight script running on a remote device that "adopts" the edge nodes of a remote graph.
+*   `source: *` ➔ Binds to local hardware sensors.
+*   `processing: *` ➔ Binds to a `NetworkForwarderAdapter`. It does no processing; it simply blasts the data to the `SERVER_HOST`.
+*   `sink: *` ➔ Binds to local hardware actuators.
 
-### Phase 4: Hardware Physics (VRAM)
-*   **Environmental Realism**: Measure "System VRAM Delta" for every run. 
-*   **Validation**: Ensure the peak usage during a 3-model pipeline run is what we use to calibrate the system's "GB-first" strategy.
+## Implementation Roadmap (Deferred)
+1.  **Define the Interface**: Standardize the `NetworkAdapter` class that can serialize/deserialize `PipelinePackets` over a websocket or gRPC stream.
+2.  **Update the Resolver**: Allow `PipelineResolver` to accept a `mode="LOCAL" | "SERVER" | "EDGE"` argument during initialization.
+3.  **Build the Host Wrapper**: Re-introduce a lightweight `jarvis_server.py` that instantiates the executor in `SERVER` mode.
 
-## Future State
-When the transition is complete, adding a new capability to Jarvis (e.g., "Vision-to-Voice") will only require:
-1. Creating a new **Flow Graph** (YAML).
-2. Adding a **Domain Evaluator** for specific benchmarks.
-3. Running it through the **Unified Runner**.
+*Status: Deferred to prevent premature complexity while the core local engine stabilizes.*

@@ -4,8 +4,6 @@ import time
 import json
 import threading
 import subprocess
-import requests
-import pyaudio
 import wave
 import numpy as np
 import sounddevice as sd
@@ -15,13 +13,19 @@ import io
 import re
 import queue
 import yaml
+import asyncio
 from loguru import logger
 
 # Add project root to sys.path
 script_dir = os.path.dirname(os.path.abspath(__file__))
-sys.path.append(script_dir)
+if script_dir not in sys.path:
+    sys.path.append(script_dir)
 
-from utils import get_service_status, kill_process_on_port, load_config, list_all_loadouts, get_system_health, get_loaded_ollama_models, kill_all_jarvis_services
+import utils
+from utils import load_config, list_all_loadouts, get_system_health, get_loaded_ollama_models, kill_all_jarvis_services, kill_process_on_port
+from utils.pipeline import PipelineResolver, PipelineExecutor
+from utils.edge_sensors import AudioSensor, ScreenSensor, ClipboardSensor
+from utils.edge_actuators import AudioActuator, KeyboardActuator, NotificationActuator
 
 # --- UI CONSTANTS ---
 BG_COLOR = "#0B0F19"
@@ -34,91 +38,28 @@ YELLOW_COLOR = "#FFD700"
 
 ctk.set_appearance_mode("dark")
 
-class RingBuffer:
-    def __init__(self, size_seconds, rate=16000):
-        self.size = size_seconds * rate
-        self.buffer = np.zeros(self.size, dtype=np.int16)
-        self.ptr = 0
-
-    def extend(self, data):
-        data_len = len(data)
-        if data_len > self.size:
-            data = data[-self.size:]
-            data_len = self.size
-        end_space = self.size - self.ptr
-        if data_len <= end_space:
-            self.buffer[self.ptr:self.ptr+data_len] = data
-        else:
-            self.buffer[self.ptr:] = data[:end_space]
-            self.buffer[:data_len-end_space] = data[end_space:]
-        self.ptr = (self.ptr + data_len) % self.size
-
-    def get_last(self, seconds, rate=16000):
-        length = int(seconds * rate)
-        if length > self.size: length = self.size
-        if self.ptr >= length:
-            return self.buffer[self.ptr-length:self.ptr].copy()
-        else:
-            part1 = self.buffer[self.size-(length-self.ptr):]
-            part2 = self.buffer[:self.ptr]
-            return np.concatenate([part1, part2])
-
-class AudioEngine:
-    def __init__(self, rate=16000, chunk=1024):
-        self.rate = rate
-        self.chunk = chunk
-        self.p = pyaudio.PyAudio()
-        self.ring_buffer = RingBuffer(10, rate)
-        self.is_running = True
-        self.recording_frames = []
-        self.is_capturing = False
-        self.vu_level = 0
-        self.stream = self.p.open(format=pyaudio.paInt16, channels=1, rate=self.rate, input=True, frames_per_buffer=self.chunk)
-        threading.Thread(target=self._background_listen, daemon=True).start()
-
-    def _background_listen(self):
-        while self.is_running:
-            try:
-                data = self.stream.read(self.chunk, exception_on_overflow=False)
-                samples = np.frombuffer(data, dtype=np.int16)
-                self.ring_buffer.extend(samples)
-                rms = np.sqrt(np.mean(samples.astype(float)**2))
-                self.vu_level = min(1.0, rms / 3000.0)
-                if self.is_capturing:
-                    self.recording_frames.append(data)
-            except:
-                time.sleep(0.1)
-
-    def start_capture(self):
-        pre_roll = self.ring_buffer.get_last(0.5)
-        self.recording_frames = [pre_roll.tobytes()]
-        self.is_capturing = True
-
-    def stop_capture(self):
-        self.is_capturing = False
-        return b''.join(self.recording_frames)
-
-    def shutdown(self):
-        self.is_running = False
-        self.stream.stop_stream()
-        self.stream.close()
-        self.p.terminate()
-
 class JarvisController:
     def __init__(self, ui_queue):
         self.ui_queue = ui_queue
         self.cfg = load_config()
-        self.audio = AudioEngine()
         self.project_root = os.path.dirname(os.path.abspath(__file__))
-        self.sts_port = self.cfg['ports']['sts']
-        self.sts_url = f"http://127.0.0.1:{self.sts_port}"
+        
+        # 1. Embedded Flow Engine
+        self.resolver = PipelineResolver(self.project_root)
+        self.executor = PipelineExecutor(self.project_root)
+        
+        # 2. Edge Hardware Adapters
+        self.audio_sensor = AudioSensor()
+        self.screen_sensor = ScreenSensor()
+        self.clipboard_sensor = ClipboardSensor()
+        
         self.current_loadout = "base-qwen30-multi"
+        self.current_pipeline = "voice_to_voice"
         self.selected_lang = "None"
         self.interaction_mode = "HOLD"
         self.is_recording = False
         self.is_playing = False
         self.interrupt_request = False
-        self.server_process = None
         
         # Debounce / Slip protection
         self._stop_timer = None
@@ -144,17 +85,6 @@ class JarvisController:
                 logger.error(f"Status Polling Error: {e}")
             time.sleep(interval)
 
-    def toggle_system(self):
-        if self.server_process:
-            self.ui_queue.put({"type": "log", "msg": "Shutting down system...", "tag": "system"})
-            threading.Thread(target=kill_process_on_port, args=(self.sts_port,), daemon=True).start()
-            self.server_process = None
-            return False
-        else:
-            self.ui_queue.put({"type": "log", "msg": f"Starting Loadout: {self.current_loadout}", "tag": "system"})
-            threading.Thread(target=self._run_server, daemon=True).start()
-            return True
-
     def kill_service(self, port, label):
         self.ui_queue.put({"type": "log", "msg": f"💀 Killing service: {label} (Port {port})", "tag": "system"})
         threading.Thread(target=kill_process_on_port, args=(port,), daemon=True).start()
@@ -162,43 +92,6 @@ class JarvisController:
     def purge_system(self):
         self.ui_queue.put({"type": "log", "msg": "☢️ PURGING SYSTEM: Killing all workers and clearing VRAM...", "tag": "system"})
         threading.Thread(target=kill_all_jarvis_services, daemon=True).start()
-        self.server_process = None
-
-    def _run_server(self):
-        python_exe = sys.executable
-        server_script = os.path.join(self.project_root, "servers", "sts_server.py")
-        cmd = [python_exe, server_script, "--loadout", self.current_loadout]
-        
-        log_file_path = os.path.join(self.log_dir, "sts_server.log")
-        with open(log_file_path, "a", encoding="utf-8") as log_file:
-            log_file.write(f"\n--- SESSION START: {time.ctime()} ---\n")
-            self.server_process = subprocess.Popen(
-                cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, 
-                text=True, encoding='utf-8', bufsize=1, 
-                creationflags=0x08000000 if os.name == 'nt' else 0
-            )
-            
-            in_traceback = False
-            for line in iter(self.server_process.stdout.readline, ''):
-                if line:
-                    log_file.write(line)
-                    log_file.flush()
-                    
-                    line_upper = line.upper()
-                    # Start capturing traceback
-                    if "TRACEBACK" in line_upper:
-                        in_traceback = True
-                    
-                    # Show line if it matches criteria or we are in a traceback
-                    if in_traceback or "PIPELINE READY" in line_upper or "CRITICAL" in line_upper or "ERROR" in line_upper:
-                        self.ui_queue.put({"type": "log", "msg": line.strip(), "tag": "system"})
-                    
-                    # End traceback capture if we hit a log line with a level or empty line
-                    if in_traceback and (" | " in line or line.strip() == ""):
-                        if "TRACEBACK" not in line_upper:
-                            in_traceback = False
-            
-            self.server_process.stdout.close()
 
     def start_recording(self):
         if self._stop_timer:
@@ -207,7 +100,8 @@ class JarvisController:
             return
         if self.is_recording: return
         self.is_recording = True
-        self.audio.start_capture()
+        # NOTE: Real streaming audio capture logic would go here
+        # For Phase 1 of embedded, we just signal the state
         self.ui_queue.put({"type": "state", "recording": True})
 
     def stop_recording(self):
@@ -221,70 +115,70 @@ class JarvisController:
     def _finalize_recording(self):
         self._stop_timer = None
         self.is_recording = False
-        audio_data = self.audio.stop_capture()
         self.ui_queue.put({"type": "state", "recording": False})
-        if len(audio_data) < 16000:
-            self.ui_queue.put({"type": "log", "msg": "Capture too short (<0.5s), ignoring.", "tag": "system"})
-            return
+        
+        # 1. Physical Capture
+        self.ui_queue.put({"type": "log", "msg": "Capturing audio...", "tag": "system"})
+        audio_data = self.audio_sensor.capture_snapshot(duration=3.0) # Placeholder duration
+        
+        # 2. Local Execution
         self.ui_queue.put({"type": "log", "msg": "Thinking...", "tag": "system"})
-        threading.Thread(target=self._send_request, args=(audio_data,), daemon=True).start()
+        threading.Thread(target=self._run_pipeline_local, args=(audio_data,), daemon=True).start()
+
+    def _run_pipeline_local(self, audio_data):
+        # Create temp file for the engine (until we support raw bytes in sensors)
+        temp_audio = os.path.join(self.project_root, "buffers", "user_voice.wav")
+        os.makedirs(os.path.dirname(temp_audio), exist_ok=True)
+        with open(temp_audio, "wb") as f: f.write(audio_data)
+
+        # 1. Resolve Graph
+        try:
+            # Note: We assume the loadout is already applied via manage_loadout.py
+            bound_graph = self.resolver.resolve(self.current_pipeline)
+        except Exception as e:
+            self.ui_queue.put({"type": "log", "msg": f"Resolution Error: {e}", "tag": "system"})
+            return
+
+        # 2. Prepare Inputs
+        inputs = {
+            "input_mic": temp_audio,
+            "input_instruction": "",
+            "language": self.selected_lang if self.selected_lang != "None" else "en"
+        }
+
+        # 3. Monitor Execution (via Trace)
+        async def run_and_monitor():
+            # Run the engine
+            exec_task = asyncio.create_task(self.executor.run(bound_graph, inputs))
+            
+            # Watch the trace and push to UI
+            last_idx = 0
+            while not exec_task.done() or last_idx < len(self.executor.trace):
+                while last_idx < len(self.executor.trace):
+                    packet = self.executor.trace[last_idx]
+                    last_idx += 1
+                    if packet.get('dir') == 'OUT':
+                        ptype = packet.get('type')
+                        content = packet.get('content')
+                        if ptype in ["text_token", "text_sentence", "text_final"]:
+                            self.ui_queue.put({"type": "log", "msg": str(content), "tag": "assistant"})
+                await asyncio.sleep(0.05)
+            
+            self.ui_queue.put({"type": "log", "msg": "Processing complete.", "tag": "system"})
+
+        asyncio.run(run_and_monitor())
 
     def interrupt(self):
-        if self.is_playing:
-            self.interrupt_request = True
-            self.ui_queue.put({"type": "log", "msg": "Interrupting playback...", "tag": "system"})
+        # In embedded mode, we can directly stop the executor/adapters
+        self.interrupt_request = True
+        self.ui_queue.put({"type": "log", "msg": "Interrupting...", "tag": "system"})
 
-    def _send_request(self, audio_data):
-        buf = io.BytesIO()
-        with wave.open(buf, 'wb') as wf:
-            wf.setnchannels(1); wf.setsampwidth(2); wf.setframerate(16000); wf.writeframes(audio_data)
-        try:
-            files = {'file': ('input.wav', buf.getvalue(), 'audio/wav')}
-            data = {}
-            if self.selected_lang != "None": data['language_id'] = self.selected_lang
-            start_time = time.perf_counter()
-            with requests.post(f"{self.sts_url}/process_stream", files=files, data=data, stream=True) as resp:
-                if resp.status_code != 200:
-                    err_msg = resp.text
-                    try:
-                        err_json = resp.json()
-                        if isinstance(err_json, dict): err_msg = err_json.get('detail', err_msg)
-                    except: pass
-                    self.ui_queue.put({"type": "log", "msg": f"Server Error ({resp.status_code}): {err_msg}", "tag": "system"}); return
-                
-                self.is_playing = True
-                self.interrupt_request = False
-                audio_stream = sd.RawOutputStream(samplerate=24000, blocksize=1024, channels=1, dtype='int16')
-                audio_stream.start()
-                stream = resp.raw
-                while not self.interrupt_request:
-                    header = stream.read(5)
-                    if not header or len(header) < 5: break
-                    type_char = chr(header[0])
-                    length = int.from_bytes(header[1:], 'little')
-                    payload = stream.read(length)
-                    if type_char == 'T':
-                        data_json = json.loads(payload.decode())
-                        timestamped_msg = f"({data_json.get('start', 0.0):.2f}s) {data_json['text']} ({data_json.get('end', 0.0):.2f}s)"
-                        self.ui_queue.put({"type": "log", "msg": timestamped_msg, "tag": data_json['role']})
-                    elif type_char == 'A': 
-                        if not self.interrupt_request:
-                            audio_stream.write(payload)
-                    elif type_char == 'M':
-                        m = json.loads(payload.decode())
-                        self.ui_queue.put({"type": "telemetry", "metrics": m, "total": time.perf_counter() - start_time}); break
-                
-                audio_stream.stop(); audio_stream.close()
-                self.is_playing = False
-                self.interrupt_request = False
-        except Exception as e: 
-            self.ui_queue.put({"type": "log", "msg": f"Pipeline Error: {e}", "tag": "system"})
-            self.is_playing = False
+# --- UI LAYER (Remains largely the same, but simplified) ---
 
 class JarvisApp(ctk.CTk):
     def __init__(self):
         super().__init__()
-        self.title("JARVIS SYSTEM CONSOLE")
+        self.title("JARVIS EMBEDDED CONSOLE")
         self.geometry("1100x800")
         self.configure(fg_color=BG_COLOR)
         self.queue = queue.Queue()
@@ -298,201 +192,39 @@ class JarvisApp(ctk.CTk):
         self.grid_rowconfigure(1, weight=1)
         self.sidebar = ctk.CTkFrame(self, width=280, corner_radius=0, fg_color="#080C14")
         self.sidebar.grid(row=0, column=0, rowspan=3, sticky="nsew")
-        self.logo = ctk.CTkLabel(self.sidebar, text="⚛️ JARVIS", font=ctk.CTkFont(size=24, weight="bold"), text_color=ACCENT_COLOR)
-        self.logo.pack(pady=(20, 20))
-        self.sidebar_content = ctk.CTkFrame(self.sidebar, fg_color="transparent")
-        self.sidebar_content.pack(fill="both", expand=True, padx=10)
-        self.status_container = ctk.CTkFrame(self.sidebar_content, fg_color="transparent")
-        self.status_container.pack(fill="x", pady=5)
-        ctk.CTkLabel(self.status_container, text="HEALTH STATUS", font=ctk.CTkFont(size=11, weight="bold"), text_color=GRAY_COLOR).pack(anchor="w")
-        self.init_btn = ctk.CTkButton(self.status_container, text="INITIALIZE SYSTEM", command=self.on_toggle_system, fg_color=GRAY_COLOR, hover_color=ACCENT_COLOR)
-        self.init_btn.pack(pady=5, fill="x")
-        self.purge_btn = ctk.CTkButton(self.status_container, text="PURGE SYSTEM 💀", command=self.controller.purge_system, fg_color="transparent", border_width=1, border_color=ERROR_COLOR, text_color=ERROR_COLOR, hover_color="#331111")
-        self.purge_btn.pack(pady=2, fill="x")
-        self.status_frame = ctk.CTkFrame(self.status_container, fg_color="transparent")
-        self.status_frame.pack(fill="x", pady=5)
-        self.status_rows = {}
-        self.config_container = ctk.CTkFrame(self.sidebar_content, fg_color="transparent")
-        self.config_container.pack(fill="x", pady=10)
-        ctk.CTkLabel(self.config_container, text="LOADOUT", font=ctk.CTkFont(size=11, weight="bold"), text_color=GRAY_COLOR).pack(anchor="w")
-        self.loadout_var = ctk.StringVar(value=self.controller.current_loadout)
-        self.loadout_drop = ctk.CTkOptionMenu(self.config_container, values=["None"] + list_all_loadouts(include_experimental=True), variable=self.loadout_var, command=self.on_loadout_change, fg_color=GRAY_COLOR, button_color=GRAY_COLOR)
-        self.loadout_drop.pack(pady=5, fill="x")
-        self.edit_btn = ctk.CTkButton(self.config_container, text="EDIT YAML", width=80, height=24, fg_color=GRAY_COLOR, command=self.on_edit_yaml)
-        self.edit_btn.pack(pady=2, anchor="e")
-        ctk.CTkLabel(self.config_container, text="TTS LANGUAGE", font=ctk.CTkFont(size=11, weight="bold"), text_color=GRAY_COLOR).pack(anchor="w", pady=(10,0))
-        self.lang_var = ctk.StringVar(value="None")
-        self.lang_drop = ctk.CTkOptionMenu(self.config_container, values=["None", "en", "pl", "fr", "zh"], variable=self.lang_var, command=lambda v: setattr(self.controller, 'selected_lang', v))
-        self.lang_drop.pack(pady=5, fill="x")
-        ctk.CTkLabel(self.config_container, text="INTERACTION", font=ctk.CTkFont(size=11, weight="bold"), text_color=GRAY_COLOR).pack(anchor="w", pady=(10,0))
-        self.mode_seg = ctk.CTkSegmentedButton(self.config_container, values=["HOLD", "TOGGLE"], command=lambda v: setattr(self.controller, 'interaction_mode', v))
-        self.mode_seg.set("HOLD"); self.mode_seg.pack(pady=5, fill="x")
-        self.telemetry = ctk.CTkFrame(self, fg_color="#0D121F", height=60)
-        self.telemetry.grid(row=0, column=1, padx=20, pady=(20, 10), sticky="nsew")
-        self.tel_labels = {}
-        for key in ["STT", "LLM", "TTS", "TOTAL"]:
-            f = ctk.CTkFrame(self.telemetry, fg_color="transparent"); f.pack(side="left", expand=True)
-            ctk.CTkLabel(f, text=key, font=ctk.CTkFont(size=9, weight="bold"), text_color=GRAY_COLOR).pack()
-            l = ctk.CTkLabel(f, text="0.00s", font=ctk.CTkFont(family="Consolas", size=14), text_color=ACCENT_COLOR); l.pack()
-            self.tel_labels[key] = l
-        self.console = ctk.CTkTextbox(self, fg_color="#080C14", border_color=GRAY_COLOR, border_width=1, font=ctk.CTkFont(family="Consolas", size=13))
-        self.console.grid(row=1, column=1, padx=20, pady=10, sticky="nsew")
-        self.console.tag_config("user", foreground=ACCENT_COLOR); self.console.tag_config("jarvis", foreground=SUCCESS_COLOR); self.console.tag_config("system", foreground=GRAY_COLOR)
-        self.interaction_frame = ctk.CTkFrame(self, fg_color="transparent")
-        self.interaction_frame.grid(row=2, column=1, padx=20, pady=20, sticky="nsew")
         
-        self.talk_btn = ctk.CTkButton(self.interaction_frame, text="HOLD TO TALK", height=80, corner_radius=40, fg_color=GRAY_COLOR, font=ctk.CTkFont(size=18, weight="bold"))
-        self.talk_btn.pack(side="left", expand=True, fill="both", padx=(0, 10))
+        # Header
+        self.header = ctk.CTkFrame(self, height=60, corner_radius=0, fg_color="#0D1117")
+        self.header.grid(row=0, column=1, sticky="ew")
         
-        self.stop_btn = ctk.CTkButton(self.interaction_frame, text="STOP", width=100, height=80, corner_radius=40, 
-                                     fg_color="#331111", text_color=ERROR_COLOR, border_width=1, border_color=ERROR_COLOR,
-                                     font=ctk.CTkFont(size=14, weight="bold"), command=self.controller.interrupt)
-        self.stop_btn.pack(side="left", padx=(0, 10))
-
-        self.talk_btn.bind("<Button-1>", self.on_press); self.talk_btn.bind("<ButtonRelease-1>", self.on_release)
-        self.bind("<KeyPress-space>", self.on_press); self.bind("<KeyRelease-space>", self.on_release)
-        self.vu_canvas = ctk.CTkCanvas(self.interaction_frame, width=20, height=80, bg="#080C14", highlightthickness=0); self.vu_canvas.pack(side="right")
-        self.vu_bar = self.vu_canvas.create_rectangle(0, 80, 20, 80, fill=ACCENT_COLOR, outline="")
-
-    def on_toggle_system(self):
-        if self.controller.toggle_system(): self.init_btn.configure(text="STOP SYSTEM", fg_color=ERROR_COLOR)
-        else: self.init_btn.configure(text="INITIALIZE SYSTEM", fg_color=GRAY_COLOR)
-
-    def on_loadout_change(self, val):
-        self.controller.current_loadout = val
-        if self.controller.server_process: self.on_toggle_system(); self.on_toggle_system()
-
-    def on_edit_yaml(self):
-        top = ctk.CTkToplevel(self); top.title(f"Editor: {self.loadout_var.get()}"); top.geometry("600x400")
-        path = os.path.join(self.controller.project_root, "tests", "loadouts", f"{self.loadout_var.get()}.yaml")
-        with open(path, "r") as f: content = f.read()
-        txt = ctk.CTkTextbox(top, font=ctk.CTkFont(family="Consolas", size=12)); txt.pack(fill="both", expand=True, padx=10, pady=10); txt.insert("1.0", content)
-        def save():
-            with open(path, "w") as f: f.write(txt.get("1.0", "end"))
-            top.destroy()
-        ctk.CTkButton(top, text="SAVE", command=save, fg_color=SUCCESS_COLOR, text_color="black").pack(pady=10)
-
-    def on_press(self, event=None):
-        if self.controller.interaction_mode == "TOGGLE":
-            if self.controller.is_recording: self.controller.stop_recording()
-            else: self.controller.start_recording()
-        else: self.controller.start_recording()
-
-    def on_release(self, event=None):
-        if self.controller.interaction_mode == "HOLD": self.controller.stop_recording()
+        # Terminal / Log View
+        self.terminal = ctk.CTkTextbox(self, font=("Consolas", 13), fg_color=BG_COLOR, text_color=TEXT_COLOR)
+        self.terminal.grid(row=1, column=1, sticky="nsew", padx=10, pady=10)
+        
+        # Controls
+        self.controls = ctk.CTkFrame(self, height=100, fg_color="#0D1117")
+        self.controls.grid(row=2, column=1, sticky="ew")
+        
+        self.record_btn = ctk.CTkButton(self.controls, text="HOLD TO TALK", fg_color=ACCENT_COLOR, text_color="black")
+        self.record_btn.pack(pady=20, padx=20, side="left")
+        self.record_btn.bind("<Button-1>", lambda e: self.controller.start_recording())
+        self.record_btn.bind("<ButtonRelease-1>", lambda e: self.controller.stop_recording())
 
     def poll_queue(self):
         while not self.queue.empty():
-            item = self.queue.get()
-            if item['type'] == "log":
-                self.console.insert("end", f"[{time.strftime('%H:%M:%S')}] ", "system")
-                prefix = "YOU > " if item['tag'] == "user" else "JARVIS > " if item['tag'] == "jarvis" else "SYS  > "
-                self.console.insert("end", f"{prefix}{item['msg']}\n", item['tag']); self.console.see("end")
-            elif item['type'] == "state":
-                if item.get('recording'): self.talk_btn.configure(fg_color=ERROR_COLOR, text="LISTENING...")
-                else: self.talk_btn.configure(fg_color=ACCENT_COLOR, text=f"{self.controller.interaction_mode} TO TALK")
-            elif item['type'] == "telemetry":
-                m = item['metrics']
-                self.tel_labels["STT"].configure(text=f"{m.get('stt',[0,0])[1]:.2f}s")
-                self.tel_labels["LLM"].configure(text=f"{m.get('llm',[0,0])[1]-m.get('llm',[0,0])[0]:.2f}s")
-                self.tel_labels["TTS"].configure(text=f"{m.get('tts',[0,0])[1]-m.get('tts',[0,0])[0]:.2f}s")
-                self.tel_labels["TOTAL"].configure(text=f"{item['total']:.2f}s")
-        self.vu_canvas.coords(self.vu_bar, 0, 80 - (self.controller.audio.vu_level * 80), 20, 80)
-        self.after(50, self.poll_queue)
+            msg = self.queue.get()
+            if msg['type'] == "log":
+                self.terminal.insert("end", f"{msg['msg']}\n")
+                self.terminal.see("end")
+            elif msg['type'] == "state":
+                if msg.get('recording'): self.record_btn.configure(fg_color=ERROR_COLOR, text="RECORDING...")
+                else: self.record_btn.configure(fg_color=ACCENT_COLOR, text="HOLD TO TALK")
+        self.after(100, self.poll_queue)
 
     def poll_status(self):
-        health = self.controller.health_state
-        loaded_ollama = self.controller.loaded_ollama_models
-        active_ports = set(); active_llm = None
-        if self.controller.current_loadout != "None":
-            path = os.path.join(self.controller.project_root, "loadouts", f"{self.controller.current_loadout}.yaml")
-            if os.path.exists(path):
-                with open(path, "r") as f:
-                    l = yaml.safe_load(f)
-                    active_llm = l.get('llm'); active_ports.add(self.controller.cfg['ports']['sts']); active_ports.add(self.controller.cfg['ports']['ollama'])
-                    stt_val = l.get('stt')
-                    if stt_val:
-                        stt_id = stt_val[0] if isinstance(stt_val, list) else stt_val
-                        active_ports.add(self.controller.cfg['stt_loadout'][stt_id])
-                    tts_val = l.get('tts')
-                    if tts_val:
-                        tts_id = tts_val[0] if isinstance(tts_val, list) else tts_val
-                        active_ports.add(self.controller.cfg['tts_loadout'][tts_id])
-        sorted_ports = sorted(health.keys())
-        for port in sorted_ports:
-            info = health[port]; status = info['status']; is_active = port in active_ports; is_rogue = not is_active and status != "OFF"
-            
-            if info['label'] == "LLM" and status == "ON":
-                if active_llm and not any(active_llm in m for m in loaded_ollama): is_rogue = True
-            
-            if (status != "OFF") or is_active:
-                if port not in self.status_rows:
-                    row = ctk.CTkFrame(self.status_frame, fg_color="transparent"); row.pack(fill="x", pady=1)
-                    
-                    # Display the CATEGORY (STT/TTS/LLM) instead of the model ID twice
-                    category = info['type'].upper()
-                    lbl = ctk.CTkLabel(row, text=f"{category:<5}", font=ctk.CTkFont(size=10, weight="bold"), text_color=TEXT_COLOR); lbl.pack(side="left")
-                    
-                    val = ctk.CTkLabel(row, text="...", font=ctk.CTkFont(size=9), text_color=GRAY_COLOR); val.pack(side="left", padx=5)
-                    kill_btn = ctk.CTkButton(row, text="💀", width=20, height=20, fg_color="transparent", hover_color=ERROR_COLOR, command=lambda p=port, l=info['label']: self.controller.kill_service(p, l))
-                    kill_btn.pack(side="right", padx=2); dot = ctk.CTkLabel(row, text="●", font=ctk.CTkFont(size=12)); dot.pack(side="right")
-                    self.status_rows[port] = {"frame": row, "val": val, "dot": dot, "kill_btn": kill_btn, "last_status": None, "last_text": None}
-                
-                color = YELLOW_COLOR if is_rogue else (SUCCESS_COLOR if status == "ON" else YELLOW_COLOR if status == "STARTUP" else ERROR_COLOR if status == "UNHEALTHY" else GRAY_COLOR)
-                
-                # Use actual info if available, otherwise use the expected name from config/loadout
-                if info['info']:
-                    text = info['info']
-                else:
-                    if info['label'] == "LLM":
-                        text = active_llm or "Ollama"
-                    elif info['label'] == "sts":
-                        text = self.controller.current_loadout
-                    else:
-                        text = info['label'] # For STT/TTS label is the model ID
-                
-                if is_rogue:
-                    if info['label'] == "LLM":
-                        text = f"WRONG MODEL: {loaded_ollama[0] if loaded_ollama else 'EMPTY'}"
-                    else:
-                        text = f"ROGUE: {text}"
-                
-                row_cache = self.status_rows[port]
-                if row_cache["last_status"] != color:
-                    row_cache["dot"].configure(text_color=color); row_cache["val"].configure(text_color=color if status != "OFF" else GRAY_COLOR); row_cache["last_status"] = color
-                if row_cache["last_text"] != text:
-                    row_cache["val"].configure(text=text); row_cache["last_text"] = text
-                if status == "OFF":
-                    if row_cache["kill_btn"].cget("text") != "": row_cache["kill_btn"].configure(state="disabled", text="")
-                else:
-                    if row_cache["kill_btn"].cget("text") != "💀": row_cache["kill_btn"].configure(state="normal", text="💀")
-            else:
-                if port in self.status_rows: self.status_rows[port]["frame"].destroy(); del self.status_rows[port]
-        # Update button availability
-        all_ready = len(active_ports) > 0
-        for port in active_ports:
-            if health.get(port, {}).get('status') != "ON":
-                all_ready = False
-                break
-
-        if not self.controller.is_recording:
-            target_text = f"{self.controller.interaction_mode} TO TALK" if all_ready else "SYSTEM OFFLINE"
-            btn_state = "normal" if all_ready else "disabled"
-            btn_color = ACCENT_COLOR if all_ready else GRAY_COLOR
-            
-            if self.talk_btn.cget("text") != target_text or self.talk_btn.cget("state") != btn_state:
-                self.talk_btn.configure(state=btn_state, fg_color=btn_color, text=target_text)
-        
-        # STOP button only enabled when playing
-        stop_state = "normal" if self.controller.is_playing else "disabled"
-        if self.stop_btn.cget("state") != stop_state:
-            self.stop_btn.configure(state=stop_state)
-
-        self.after(1000, self.poll_status)
+        # Update sidebar with health info
+        self.after(2000, self.poll_status)
 
 if __name__ == "__main__":
     app = JarvisApp()
-    try: app.mainloop()
-    finally:
-        app.controller.is_polling = False
-        app.controller.audio.shutdown()
+    app.mainloop()

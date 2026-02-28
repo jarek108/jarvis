@@ -132,9 +132,26 @@ def generate_excel(upload=True, upload_outputs=False, session_dir=None):
             rows = []
             for entry in data:
                 loadout_name = entry.get('loadout', 'N/A')
-                for s in entry.get('scenarios', []):
-                    if s.get('name') in ["SETUP", "LIFECYCLE"]: continue
-                    
+                # If there are NO successful scenarios, we still want to show the Lifecycle failure
+                scenarios = entry.get('scenarios', [])
+                valid_scenarios = [s for s in scenarios if s.get('name') not in ["SETUP", "LIFECYCLE"]]
+                
+                if not valid_scenarios:
+                    # Look for the failure message in the LIFECYCLE entry
+                    lc = next((s for s in scenarios if s.get('name') == "LIFECYCLE"), None)
+                    if lc:
+                        rows.append({
+                            "Loadout": infer_detailed_name(lc.get('detailed_model') or loadout_name),
+                            "Scenario": "CRITICAL_FAILURE",
+                            "Status": "FAILED",
+                            "Exec": 0,
+                            "Setup": r3(lc.get('setup_time', 0)),
+                            "Cleanup": r3(lc.get('cleanup_time', 0)),
+                            "V_BG": 0, "V_Static": 0, "V_Peak": 0,
+                            "Response": f"LIFECYCLE ERROR: {lc.get('result', 'Unknown error')}"
+                        })
+
+                for s in valid_scenarios:
                     row = {
                         "Loadout": infer_detailed_name(s.get('detailed_model') or loadout_name),
                         "Scenario": s.get('name'),

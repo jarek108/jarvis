@@ -12,7 +12,7 @@ nodes:
     role: microphone
     capabilities: [audio_out]
 
-  - id: input_desktop
+  - id: input_media
     type: source
     role: screen_capture
     capabilities: [image_out]
@@ -31,10 +31,10 @@ nodes:
     system_prompt: sys_prompt
     inputs: 
       - proc_stt
-      - input_desktop
+      - input_media
     context_layout: |
       [VISUAL_CONTEXT]
-      <image_path>{{ input_desktop }}</image_path>
+      <image_path>{{ input_media }}</image_path>
       
       [USER_QUERY]
       {{ proc_stt }}

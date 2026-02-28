@@ -33,7 +33,7 @@ def print_status():
     print("-" * LINE_LEN)
     
     for port, info in health.items():
-        if info['label'] == "sts": continue # Hide legacy orchestrator
+        if info['type'] == "broker": continue # Hide orchestrator from model cluster
         status = info['status']
         name = info['label']
         detail_val = info['info']
@@ -105,6 +105,10 @@ def apply_loadout(name, loud=False, soft=False):
             port = cfg['ports'].get('vllm', 8300)
             total_vram = get_gpu_total_vram()
             
+            # Resolve canonical ID for external command
+            from utils.config import resolve_canonical_id
+            canonical_id = resolve_canonical_id(sid, engine="vllm")
+            
             # Smart Allocator
             num_ctx = params.get('num_ctx') or params.get('max_model_len') or 16384
             base_gb, cost_10k = get_model_calibration(sid, engine="vllm")
@@ -130,7 +134,7 @@ def apply_loadout(name, loud=False, soft=False):
                 "-p", f"{port}:8000",
                 "-v", f"{hf_cache}:/root/.cache/huggingface",
                 "vllm/vllm-openai",
-                "--model", sid,
+                "--model", canonical_id,
                 "--gpu-memory-utilization", str(round(vllm_util, 3)),
                 "--max-model-len", str(num_ctx)
             ]

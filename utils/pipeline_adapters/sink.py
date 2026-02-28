@@ -39,5 +39,9 @@ class SinkAdapter(NodeAdapter):
                     notifier = NotificationActuator()
                     notifier.notify("Jarvis", str(content))
 
+                # 4. CHAT BOX (UI Terminal)
+                elif role == "chat_box":
+                    logger.info(f"💬 [UI Chat] Jarvis: {content}")
+
                 # Still put in output queue for tracing
                 await output_queue.put(packet)

@@ -32,7 +32,7 @@ execution:
 
   # VLM: Vision support
   - domain: "vlm"
-    pipeline: "atomic_llm"
+    pipeline: "atomic_vlm"
     loadouts:
       - ["vl_qwen--qwen2-vl-2b-instruct#stream"]
     scenarios: [vlm_jarvis_logo, vlm_bunny]

@@ -1,9 +1,12 @@
 import subprocess
 import requests
-from .infra import is_port_in_use
-from .config import load_config
+import os
+
+# NOTE: This module now focused strictly on hardware-level metrics and model physics.
+# System status and port utilities have moved to utils/infra.py.
 
 def get_vram_estimation(label, model_name):
+    """Provides rough VRAM cost estimates for known model variants."""
     m = model_name.lower()
     if "whisper" in m:
         if "tiny" in m: return 0.8
@@ -17,101 +20,8 @@ def get_vram_estimation(label, model_name):
         if "eng" in m: return 4.0
     return 0.0
 
-def get_ollama_vram():
-    try:
-        resp = requests.get("http://127.0.0.1:11434/api/ps", timeout=1)
-        if resp.status_code == 200:
-            models = resp.json().get('models', [])
-            if models:
-                return sum(m.get('size_vram', 0) for m in models) / (1024**3)
-    except:
-        pass
-    return 0.0
-
-def get_loaded_ollama_models():
-    try:
-        resp = requests.get("http://127.0.0.1:11434/api/ps", timeout=2)
-        if resp.status_code == 200:
-            return [m['name'] for m in resp.json().get('models', [])]
-    except:
-        pass
-    return []
-
-def get_service_status(port: int):
-    if not is_port_in_use(port): return "OFF", None
-    cfg = load_config()
-    try:
-        url = f"http://127.0.0.1:{port}/health"
-        if port == cfg['ports']['ollama']: url = f"http://127.0.0.1:{port}/api/tags"
-        elif port == cfg['ports'].get('vllm'): url = f"http://127.0.0.1:{port}/v1/models"
-        
-        response = requests.get(url, timeout=2)
-        
-        if response.status_code == 200:
-            data = response.json()
-            if port == cfg['ports']['ollama']:
-                vram = get_ollama_vram()
-                loaded = get_loaded_ollama_models()
-                model_info = loaded[0] if loaded else "Ollama Core"
-                v_str = f"({vram:.1f}GB)" if vram > 0 else ""
-                return "ON", f"{model_info} {v_str}".strip()
-            
-            if port == cfg['ports'].get('vllm'):
-                models = data.get("data", [])
-                if not models:
-                    return "STARTUP", "Initializing..."
-                model_name = models[0]["id"] if models else "vLLM Core"
-                return "ON", f"{model_name}"
-
-            name = data.get("model") or data.get("variant") or "Ready"
-            vram = get_vram_estimation(data.get("type", ""), name)
-            v_str = f"({vram:.1f}GB)" if vram > 0 else ""
-            return ("BUSY" if data.get("status") == "busy" else "ON"), f"{name} {v_str}".strip()
-        elif response.status_code == 503 and response.json().get("status") == "STARTUP":
-            return "STARTUP", "Loading..."
-        return "UNHEALTHY", None
-    except requests.exceptions.ConnectionError:
-        # If it's an LLM port, treat connection error as STARTUP (container might be booting)
-        if port == cfg['ports']['ollama'] or port == cfg['ports'].get('vllm'):
-            return "STARTUP", "Connecting..."
-        return "OFF", None
-    except:
-        return "UNHEALTHY", None
-
-import asyncio
-
-def get_system_health():
-    """Polls all Jarvis services in parallel (Synchronous wrapper)."""
-    from .infra import get_system_health_async
-    health_raw = asyncio.run(get_system_health_async())
-    
-    cfg = load_config()
-    health = {}
-    
-    # Map raw results to the expected UI format
-    port_map = {
-        cfg['ports']['sts']: {"label": "sts", "type": "sts"},
-        cfg['ports']['ollama']: {"label": "Ollama", "type": "llm"},
-    }
-    if 'vllm' in cfg['ports']:
-        port_map[cfg['ports']['vllm']] = {"label": "vLLM", "type": "llm"}
-    
-    for name, port in cfg['stt_loadout'].items():
-        port_map[port] = {"label": name, "type": "stt"}
-    for name, port in cfg['tts_loadout'].items():
-        port_map[port] = {"label": name, "type": "tts"}
-
-    for port, meta in port_map.items():
-        res = health_raw.get(port, {"status": "OFF", "info": None})
-        health[port] = {
-            "status": res['status'],
-            "info": res['info'],
-            "label": meta['label'],
-            "type": meta['type']
-        }
-    return health
-
 def get_gpu_vram_usage():
+    """Returns current GPU VRAM usage in GB."""
     try:
         cmd = ["nvidia-smi", "--query-gpu=memory.used", "--format=csv,nounits,noheader"]
         output = subprocess.check_output(cmd, text=True).strip()
@@ -135,7 +45,30 @@ def get_gpu_total_vram():
     except:
         return 32.0 # Fallback for RTX 5090 if command fails
 
+def get_ollama_vram():
+    """Requests VRAM usage from Ollama's active model API."""
+    try:
+        resp = requests.get("http://127.0.0.1:11434/api/ps", timeout=1)
+        if resp.status_code == 200:
+            models = resp.json().get('models', [])
+            if models:
+                return sum(m.get('size_vram', 0) for m in models) / (1024**3)
+    except:
+        pass
+    return 0.0
+
+def get_loaded_ollama_models():
+    """Lists names of models currently hot in VRAM according to Ollama."""
+    try:
+        resp = requests.get("http://127.0.0.1:11434/api/ps", timeout=2)
+        if resp.status_code == 200:
+            return [m['name'] for m in resp.json().get('models', [])]
+    except:
+        pass
+    return []
+
 def check_ollama_offload(model_name):
+    """Checks if a specific Ollama model is fully offloaded to GPU."""
     try:
         resp = requests.get("http://127.0.0.1:11434/api/ps", timeout=2)
         if resp.status_code == 200:

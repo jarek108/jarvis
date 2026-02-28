@@ -63,16 +63,33 @@ class PipelineTestRunner:
                     if media: inputs['input_media'] = media
                 elif s_type == 'message':
                     if pid == 'atomic_tts': inputs['input_text'] = content
-                    elif pid == 'atomic_llm': inputs['input_instruction'] = content
+                    elif pid == 'atomic_llm' or pid == 'atomic_vlm': inputs['input_instruction'] = content
                     else: inputs['input_instruction'] = content
+                    if media: inputs['input_media'] = media # ROUTING FIX: Ensure media reaches VLM
                 elif content: 
                     inputs['input_instruction'] = content
+                    if media: inputs['input_media'] = media
 
         start_time = time.perf_counter()
         import asyncio
-        # Use the instance resolver (self.resolver) instead of creating a new one
-        bound_graph = self.resolver.resolve(pid, mid)
-        success = asyncio.run(self.executor.run(bound_graph, inputs))
+        try:
+            # Use the instance resolver (self.resolver) instead of creating a new one
+            bound_graph = self.resolver.resolve(pid, mid)
+            success = asyncio.run(self.executor.run(bound_graph, inputs))
+        except Exception as e:
+            self.log(f"❌ Resolution/Execution Error: {e}")
+            success = False
+            # Create dummy metrics for failed resolution
+            node_metrics = {"SYSTEM": {"error": str(e)}}
+            res_obj = {
+                "name": sid, "status": "FAILED", "duration": 0,
+                "pipeline": pid, "domain": domain, "loadout_id": l_id,
+                "node_metrics": node_metrics, "vram_peak": 0,
+                "result": f"ARCH_MISMATCH: {e}"
+            }
+            if self.reporter: self.reporter.report(res_obj)
+            return False
+
         duration = time.perf_counter() - start_time
         
         # Save trace artifact for post-hoc analysis
@@ -250,7 +267,7 @@ def main():
         def dashboard_capture(res):
             if not isinstance(res, dict): return
             domain, l_id = res.get('domain'), res.get('loadout_id')
-            if domain and l_id: dashboard.update_scenario(domain, l_id, res['name'], res['status'])
+            if domain and l_id: dashboard.update_scenario(domain, l_id, res['name'], res['status'], result=res.get('result', ''))
 
         reporter = AccumulatingReporter(callback=dashboard_capture)
         runner = PipelineTestRunner(plan_path, dashboard=dashboard, session_dir=session_dir, reporter=reporter)

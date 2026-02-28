@@ -21,7 +21,6 @@ tts_loadout:
 ports:
   ollama: 11434
   vllm: 8300
-  sts: 8002
 
 # --- vLLM Optimization Settings ---
 vllm:
