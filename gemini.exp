@@ -4,12 +4,13 @@
 log_user 0
 
 # Save all output (send/expect) to a file
-log_file "gemini_session.log"
+log_file "./gemini_session_log/gemini_session.log"
 
 set timeout -1
 
 spawn gemini -y
 
+# To be moved to python logic so that we do not have any hardcoded logic there
 interact {
     -o -re "(?i)keep trying" {
         # Log to file only, not stdout
@@ -19,4 +20,3 @@ interact {
         sleep 0.5
     }
 }
-

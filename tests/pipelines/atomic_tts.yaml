@@ -1,0 +1,15 @@
+id: atomic_tts
+description: "Single-node TTS pipeline for component testing."
+nodes:
+  - id: input_text
+    type: input
+    source: user_interface
+    buffer: "buffers/instruction.txt"
+
+  - id: proc_tts
+    type: processing
+    role: tts
+    capabilities: [text_in, audio_out]
+    inputs: 
+      - input_text
+    output: "buffers/tts_component_test.wav"

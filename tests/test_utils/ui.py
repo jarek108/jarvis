@@ -136,8 +136,14 @@ class RichDashboard:
         lines.append(Text(f"RAM: {self.ram_usage:.1f}/{self.ram_total:.1f} GB ({ram_pct:.1f}%)"))
         lines.append(Text(f"VRAM: {self.vram_usage:.1f}/{self.vram_total:.1f} GB ({vram_pct:.1f}%)"))
         
+        env = self.system_info.get('environment', {})
+        lines.append(Text(f"HF Path: {env.get('HF_HOME', 'N/A')}"))
+        lines.append(Text(f"OL Path: {env.get('OLLAMA_MODELS', 'N/A')}"))
+
         d = self.system_info.get('host', {}).get('docker', {})
         lines.append(Text(f"Docker: [{d.get('status', 'Missing')}], {d.get('version', 'N/A')}"))
+        if d.get('root_dir') and d.get('root_dir') != 'N/A':
+            lines.append(Text(f"  ↳ VL Docker Location: {d['root_dir']}"))
         
         o = self.system_info.get('host', {}).get('ollama', {})
         lines.append(Text(f"Ollama: [{o.get('status', 'Missing')}], {o.get('version', 'N/A')}"))
@@ -385,7 +391,18 @@ class RichDashboard:
             (f"CPU: ", "bold white"), (f"{self.cpu_info}\n"),
             (f"RAM: ", "bold green"), (f"{self.ram_usage:.1f}/{self.ram_total:.1f} GB ({ram_pct:.1f}%)\n")
         )
+        
+        env = self.system_info.get('environment', {})
+        specs_text.append(f"HF Path: ", style="bold magenta")
+        specs_text.append(f"{env.get('HF_HOME', 'N/A')}\n")
+        specs_text.append(f"OL Path: ", style="bold magenta")
+        specs_text.append(f"{env.get('OLLAMA_MODELS', 'N/A')}\n")
+
         specs_text.append(fmt_svc("Docker", host.get('docker', {})))
+        if host.get('docker', {}).get('root_dir') and host.get('docker', {}).get('root_dir') != 'N/A':
+            specs_text.append(f"\n   ↳ VL Docker Location: ", style="gray70")
+            specs_text.append(f"{host['docker']['root_dir']}", style="gray50")
+        
         specs_text.append("\n")
         specs_text.append(fmt_svc("Ollama", host.get('ollama', {})))
 

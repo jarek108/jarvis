@@ -1,0 +1,13 @@
+name: "Voice-to-Voice Exhaustive Audit"
+description: "Pipelined latency and stability benchmark."
+settings:
+  purge_on_entry: true
+  purge_on_exit: true
+  track_prior_vram: true
+execution:
+  - domain: "sts_voice"
+    pipeline: "voice_to_voice"
+    loadouts:
+      - ["faster-whisper-tiny", "chatterbox-turbo", "OL_qwen2.5:0.5b"]
+      - ["faster-whisper-base", "chatterbox-multilingual", "OL_qwen2.5:0.5b"]
+    scenarios: [sts_voice, token_explosion]

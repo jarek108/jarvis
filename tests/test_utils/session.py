@@ -91,23 +91,25 @@ def get_cpu_info():
     return _cpu_info_cache
 
 def get_docker_info():
-    """Returns (status, version) for Docker."""
+    """Returns (status, version, root_dir) for Docker."""
     version = "N/A"
+    root_dir = "N/A"
     try:
         res = subprocess.run(["docker", "--version"], capture_output=True, text=True, check=True)
         version = res.stdout.strip().replace("Docker version ", "")
     except:
-        return "Missing", "N/A"
+        return "Missing", "N/A", "N/A"
     
     try:
-        # Check if daemon is responsive
-        res = subprocess.run(["docker", "info"], capture_output=True, text=True, timeout=2)
+        # Check if daemon is responsive and get Root Dir
+        res = subprocess.run(["docker", "info", "--format", "{{.DockerRootDir}}"], capture_output=True, text=True, timeout=5)
         if res.returncode == 0:
-            return "On", version
+            root_dir = res.stdout.strip()
+            return "On", version, root_dir
         else:
-            return "Off", version
+            return "Off", version, "N/A"
     except:
-        return "Off", version
+        return "Off", version, "N/A"
 
 def get_ollama_info():
     """Returns (status, version) for Ollama."""
@@ -182,7 +184,7 @@ def gather_system_info(plan_path):
         
     used_vram = round(utils.vram.get_gpu_vram_usage(), 2)
 
-    d_status, d_ver = get_docker_info()
+    d_status, d_ver, d_root = get_docker_info()
     o_status, o_ver = get_ollama_info()
 
     info = {
@@ -196,7 +198,7 @@ def gather_system_info(plan_path):
             "gpu": get_gpu_info(),
             "vram_total_gb": total_vram,
             "vram_used_gb": used_vram,
-            "docker": {"status": d_status, "version": d_ver},
+            "docker": {"status": d_status, "version": d_ver, "root_dir": d_root},
             "ollama": {"status": o_status, "version": o_ver},
         },
         "environment": {

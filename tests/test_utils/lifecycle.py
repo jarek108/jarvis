@@ -213,7 +213,7 @@ class LifecycleManager:
                 # ---------------------------------
 
                 hf_cache = utils.get_hf_home(silent=True)
-                vlm_input_dir = os.path.join(self.project_root, "tests", "vlm", "input_data")
+                vlm_input_dir = os.path.join(self.project_root, "tests", "data")
                 
                 cmd = [
                     "docker", "run", "--gpus", "all", "--rm",
@@ -311,6 +311,7 @@ class LifecycleManager:
 
     def reconcile(self, domain):
         ensure_utf8_output()
+        vram_background = utils.get_gpu_vram_usage()
         prior_vram = 0.0
         
         # 1. Bulk health check (ONCE)
@@ -321,6 +322,8 @@ class LifecycleManager:
                 utils.kill_all_jarvis_services()
                 prior_vram = utils.get_gpu_vram_usage()
                 health_snapshot = asyncio.run(utils.get_system_health_async())
+            else:
+                prior_vram = vram_background
 
         required_services = self.get_required_services(domain)
         required_ports = {s['port'] for s in required_services}
@@ -333,20 +336,14 @@ class LifecycleManager:
         
         for s in required_services:
             svc = health_snapshot.get(s['port'], {"status": "OFF", "info": None})
-            # If not ON/OFF, it's unhealthy or starting -> Kill it
             if svc['status'] not in ["ON", "OFF"]:
                 ports_to_kill.add(s['port'])
-            # If we need a STUB but the port is occupied (by ANYTHING) -> Kill it
             elif self.stub_mode and svc['status'] == "ON":
                 if s['type'] in ["llm", "vlm"]: 
                     ports_to_kill.add(s['port'])
-            # If we are doing a REAL run and the port is occupied -> Kill it
-            # (Ensures we don't reuse a port running the WRONG model)
             elif not self.stub_mode and svc['status'] == "ON":
-                # Always kill vLLM to ensure fresh model load
                 if s['type'] == "llm" and self.cat['llm']['engine'] == "vllm":
                     ports_to_kill.add(s['port'])
-                # Always kill STT/TTS servers to ensure they are using the right model/variant
                 if s['type'] in ["stt", "tts"]:
                     ports_to_kill.add(s['port'])
         
@@ -356,8 +353,7 @@ class LifecycleManager:
                 if p in health_snapshot: health_snapshot[p]['status'] = 'OFF'
 
         setup_start = time.perf_counter()
-        
-        if not self.stub_mode and not self.check_availability(): return -1, prior_vram
+        if not self.stub_mode and not self.check_availability(): return -1, prior_vram, vram_background, 0.0
 
         log_dir = self.session_dir if self.session_dir else os.path.join(self.project_root, "tests", "artifacts", "logs")
         os.makedirs(log_dir, exist_ok=True)
@@ -365,7 +361,6 @@ class LifecycleManager:
         # 3. Parallel Spawning
         services_to_start = [s for s in required_services if health_snapshot.get(s['port'], {}).get('status') != "ON"]
         for s in services_to_start:
-            # Add microsecond-precision or unique enough timestamp to prevent collisions
             spawn_ts = time.strftime("%H%M%S")
             log_path = os.path.join(log_dir, f"svc_{s['type']}_{s['id'].replace(':', '-').replace('/', '--')}_{spawn_ts}.log")
             if self.on_phase: self.on_phase(f"log_path:{s['type']}:{log_path}")
@@ -376,21 +371,19 @@ class LifecycleManager:
         # 4. Parallel Wait
         if services_to_start:
             ports_to_wait = [s['port'] for s in services_to_start]
-            if self.stub_mode and domain == "sts":
-                ports_to_wait = [s['port'] for s in services_to_start if s['type'] == "sts"]
-            
             timeout = self.cfg.get('vllm', {}).get('model_startup_timeout', 120)
             if not asyncio.run(utils.wait_for_ports_parallel(ports_to_wait, timeout=timeout, require_stub=self.stub_mode)):
                 raise RuntimeError(f"Parallel startup timeout after {timeout}s")
         
-        # 5. Warmup (Real mode only)
+        # 5. Warmup
         if not self.stub_mode and (domain in ["llm", "vlm", "sts"] or self.full):
             if self.cat['llm']:
                 engine = self.cat['llm']['engine']; model = self.cat['llm']['model']
                 if engine == "ollama": utils.check_and_pull_model(model, force_pull=self.force_download)
                 utils.warmup_llm(model, visual=(domain == "vlm"), engine=engine)
         
-        return time.perf_counter() - setup_start, prior_vram
+        vram_static = utils.get_gpu_vram_usage()
+        return time.perf_counter() - setup_start, prior_vram, vram_background, vram_static
 
     def cleanup(self):
         start_c = time.perf_counter()
@@ -403,8 +396,6 @@ class LifecycleManager:
         for port, proc in self.owned_processes:
             if port:
                 utils.kill_process_on_port(port)
-            
-            # Explicitly kill the process object if it's still alive
             if proc and proc.poll() is None:
                 try:
                     proc.terminate()
@@ -414,7 +405,22 @@ class LifecycleManager:
                     except: pass
         return time.perf_counter() - start_c
 
-def run_test_lifecycle(domain, setup_name, models, purge_on_entry, purge_on_exit, full, test_func, benchmark_mode=False, force_download=False, track_prior_vram=True, session_dir=None, on_phase=None, stub_mode=False, reporter=None, **kwargs):
+    def get_registry_entries(self, domain=None):
+        required = self.get_required_services(domain)
+        entries = []
+        for s in required:
+            engine = s['type']
+            if engine == "llm":
+                engine = self.cat['llm']['engine'] if self.cat['llm'] else "ollama"
+            elif engine in ["stt", "tts"]:
+                engine = "native"
+            entries.append({
+                "id": s['id'], "engine": engine, "port": s['port'],
+                "params": self.cat.get(s['type'], {}).get('flags', {}) if s['type'] in self.cat and self.cat[s['type']] else {}
+            })
+        return entries
+
+def run_test_lifecycle(domain, setup_name, models, purge_on_entry, purge_on_exit, full, test_func, benchmark_mode=False, force_download=False, track_prior_vram=True, session_dir=None, on_phase=None, stub_mode=False, reporter=None, on_ready=None, **kwargs):
     ensure_utf8_output()
     manager = LifecycleManager(setup_name, models=models, purge_on_entry=purge_on_entry, purge_on_exit=purge_on_exit, full=full, benchmark_mode=benchmark_mode, force_download=force_download, track_prior_vram=track_prior_vram, session_dir=session_dir, on_phase=on_phase, stub_mode=stub_mode, **kwargs)
     model_display = manager.format_models_for_display()
@@ -427,9 +433,13 @@ def run_test_lifecycle(domain, setup_name, models, purge_on_entry, purge_on_exit
     with redirect_stdout(f):
         try:
             if on_phase: on_phase("setup")
-            setup_time, prior_vram = manager.reconcile(domain)
+            setup_time, prior_vram, vram_background, vram_static = manager.reconcile(domain)
+            
+            if on_ready: 
+                try: on_ready(manager)
+                except: pass
+
             if setup_time == -1:
-                # Distinguish between missing local files vs missing calibration
                 if manager.uncalibrated_models:
                     err_msg = f"Skipped: Missing calibration for vLLM models: {', '.join(manager.uncalibrated_models)}. Run 'python utils/calibrate_models.py' first."
                     status = "UNCALIBRATED"
@@ -437,31 +447,28 @@ def run_test_lifecycle(domain, setup_name, models, purge_on_entry, purge_on_exit
                     err_msg = f"Missing model files: {', '.join(manager.missing_models)}"
                     status = "MISSING"
                 
-                res_obj = {"name": "SETUP", "status": status, "duration": 0, "result": err_msg, "mode": domain.upper(), "vram_prior": prior_vram, "llm_model": model_display, "stt_model": model_display, "tts_model": model_display}
+                res_obj = {"name": "SETUP", "status": status, "duration": 0, "result": err_msg, "mode": domain.upper(), "vram_prior": prior_vram, "vram_background": vram_background, "vram_static": vram_static, "llm_model": model_display, "stt_model": model_display, "tts_model": model_display}
                 if reporter: reporter.report(res_obj)
                 else: 
                     from .reporting import report_scenario_result
                     report_scenario_result(res_obj)
-                return 0, 0, prior_vram, model_display
+                return 0, 0, prior_vram, model_display, vram_background, vram_static
             
             if on_phase: on_phase("execution")
-            proc_start = time.perf_counter()
             test_func()
-            proc_time = time.perf_counter() - proc_start
             
             if on_phase: on_phase("cleanup")
             cleanup_time = manager.cleanup()
             
-            # Save successful log too for traceability
             with open(debug_log_path, "w", encoding="utf-8") as lf:
                 lf.write(f.getvalue())
                 
-            return setup_time, cleanup_time, prior_vram, model_display
+            return setup_time, cleanup_time, prior_vram, model_display, vram_background, vram_static
         except Exception as e:
             err_msg = str(e); status = "FAILED"
             if "NO-DOCKER" in err_msg: status = "NO-DOCKER"
             elif "NO-OLLAMA" in err_msg: status = "NO-OLLAMA"
-            res_obj = {"name": "LIFECYCLE", "status": status, "duration": 0, "result": err_msg, "mode": domain.upper(), "vram_prior": 0.0, "llm_model": model_display, "stt_model": model_display, "tts_model": model_display}
+            res_obj = {"name": "LIFECYCLE", "status": status, "duration": 0, "result": err_msg, "mode": domain.upper(), "vram_prior": 0.0, "vram_background": 0.0, "vram_static": 0.0, "llm_model": model_display, "stt_model": model_display, "tts_model": model_display}
             
             if reporter: reporter.report(res_obj)
             else:
@@ -469,12 +476,10 @@ def run_test_lifecycle(domain, setup_name, models, purge_on_entry, purge_on_exit
                 report_scenario_result(res_obj)
             
             cleanup_time = manager.cleanup()
-            
-            # CRITICAL: Save the buffer so we can see what went wrong!
             with open(debug_log_path, "w", encoding="utf-8") as lf:
                 lf.write(f.getvalue())
                 lf.write(f"\nFATAL EXCEPTION: {err_msg}\n")
                 import traceback
                 traceback.print_exc(file=lf)
                 
-            return 0, cleanup_time, 0.0, model_display
+            return 0, cleanup_time, 0.0, model_display, 0.0, 0.0

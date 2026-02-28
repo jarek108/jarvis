@@ -57,7 +57,10 @@ else:
 
 @app.get("/health")
 async def health():
-    return {"status": "ready", "model": model_id, "port": args.port, "benchmark_mode": args.benchmark_mode, "stub": args.stub}
+    res = {"status": "ready", "model": model_id, "port": args.port, "benchmark_mode": args.benchmark_mode, "stub": args.stub}
+    if args.stub:
+        res["service"] = "stt_stub"
+    return res
 
 @app.post("/transcribe")
 async def transcribe(

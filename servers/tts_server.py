@@ -107,7 +107,10 @@ app.state.is_ready = False
 async def health():
     if not app.state.is_ready:
         return JSONResponse(status_code=503, content={"status": "STARTUP", "variant": VARIANT_ID})
-    return {"status": "ON", "variant": VARIANT_ID, "port": args.port, "benchmark_mode": app.state.benchmark_mode}
+    res = {"status": "ON", "variant": VARIANT_ID, "port": args.port, "benchmark_mode": app.state.benchmark_mode}
+    if args.stub:
+        res["service"] = "tts_stub"
+    return res
 
 @app.post("/tts")
 async def tts(request: Request):

@@ -1,0 +1,13 @@
+name: "Atomic TTS Exhaustive Audit"
+description: "Comprehensive synthesis quality and speed benchmark."
+settings:
+  purge_on_entry: true
+  purge_on_exit: true
+  track_prior_vram: true
+execution:
+  - domain: "tts"
+    pipeline: "atomic_tts"
+    loadouts:
+      - ["chatterbox-turbo"]
+      - ["chatterbox-multilingual"]
+    scenarios: [tts_standard, tts_polish, tts_implicit_excited, complex_punctuation]

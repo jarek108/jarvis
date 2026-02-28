@@ -1,0 +1,10 @@
+name: "Atomic LLM Fast Check"
+description: "Quick smoke test for text inference engine."
+settings:
+  purge_on_entry: true
+  purge_on_exit: true
+execution:
+  - domain: "llm"
+    pipeline: "atomic_llm"
+    loadouts: [["OL_qwen2.5:0.5b"]]
+    scenarios: [llm_basic_chat, empty_instruction]

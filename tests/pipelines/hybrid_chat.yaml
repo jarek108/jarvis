@@ -1,0 +1,45 @@
+id: hybrid_chat
+description: "Voice and Text merged context."
+nodes:
+  - id: input_mic
+    type: input
+    source: device_stream
+    device: microphone
+    buffer: "buffers/user_voice.wav"
+
+  - id: input_text
+    type: input
+    source: user_interface
+    widget: selection_buffer
+    buffer: "buffers/selection.txt"
+
+  - id: input_instruction
+    type: input
+    source: user_interface
+    widget: chat_box
+    buffer: "buffers/instruction.txt"
+
+  - id: proc_stt
+    type: processing
+    role: stt
+    capabilities: [audio_in, text_out]
+    inputs: 
+      - input_mic
+
+  - id: proc_llm
+    type: processing
+    role: llm
+    capabilities: [text_in, text_out]
+    inputs: 
+      - proc_stt
+      - input_text
+      - input_instruction
+    context_layout: |
+      CONTEXT FROM SCREEN:
+      {{ input_text }}
+      
+      USER VOICE COMMAND:
+      {{ proc_stt }}
+      
+      ADDITIONAL INSTRUCTIONS:
+      {{ input_instruction }}

@@ -27,8 +27,8 @@ async def get_service_status_async(session, port: int):
             if response.status == 200:
                 data = await response.json()
                 
-                # Check for Stub Signature
-                is_stub = data.get("service") == "llm_stub"
+                # Check for Stub Signature (Any service type)
+                is_stub = "stub" in str(data.get("service", "")).lower() or data.get("stub") is True
                 
                 if port == cfg['ports']['ollama']: 
                     return port, "ON", "Stub" if is_stub else "Ollama"
@@ -37,7 +37,9 @@ async def get_service_status_async(session, port: int):
                     models = data.get("data", [])
                     return port, "ON", (models[0]["id"] if models else "vLLM")
                 
-                name = data.get("model") or data.get("variant") or data.get("service") or "Ready"
+                raw_name = data.get("model") or data.get("variant") or data.get("service") or "Ready"
+                name = f"{raw_name} (Stub)" if is_stub and "stub" not in raw_name.lower() else raw_name
+                
                 return port, ("BUSY" if data.get("status") == "busy" else "ON"), name
             elif response.status == 503:
                 data = await response.json()
@@ -71,7 +73,7 @@ async def wait_for_ports_parallel(ports, timeout, require_stub=False):
                 port, status, info = r
                 if status != "ON": 
                     all_on = False; break
-                if require_stub and "Stub" not in str(info):
+                if require_stub and "stub" not in str(info).lower():
                     all_on = False; break
             
             if all_on:

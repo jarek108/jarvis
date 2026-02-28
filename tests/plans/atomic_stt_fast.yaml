@@ -1,0 +1,10 @@
+name: "Atomic STT Fast Check"
+description: "Quick smoke test for the STT reactive engine."
+settings:
+  purge_on_entry: true
+  purge_on_exit: true
+execution:
+  - domain: "stt"
+    pipeline: "atomic_stt"
+    loadouts: [["faster-whisper-tiny"]]
+    scenarios: [stt_polish_std, stt_french_std]

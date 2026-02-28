@@ -1,0 +1,10 @@
+name: "Hybrid Chat Fast Check"
+description: "Multi-input resolution smoke test."
+settings:
+  purge_on_entry: true
+  purge_on_exit: true
+execution:
+  - domain: "hybrid_chat"
+    pipeline: "hybrid_chat"
+    loadouts: [["faster-whisper-tiny", "OL_qwen2.5:0.5b"]]
+    scenarios: [super_whisper_action]

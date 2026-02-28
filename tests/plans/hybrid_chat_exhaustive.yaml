@@ -1,0 +1,13 @@
+name: "Hybrid Chat Exhaustive Audit"
+description: "Comprehensive multi-modal context resolution benchmark."
+settings:
+  purge_on_entry: true
+  purge_on_exit: true
+  track_prior_vram: true
+execution:
+  - domain: "hybrid_chat"
+    pipeline: "hybrid_chat"
+    loadouts:
+      - ["faster-whisper-tiny", "OL_qwen2.5:0.5b"]
+      - ["faster-whisper-base", "OL_gpt-oss-20b"]
+    scenarios: [super_whisper_action, vlm_bunny, vlm_jarvis_logo]

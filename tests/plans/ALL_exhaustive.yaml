@@ -1,47 +1,44 @@
-name: "Exhaustive Global Comparison"
-description: "Full sweep of all engines and model sizes."
-
+name: "Jarvis Exhaustive Capability Audit"
+description: "Comprehensive verification of all logic paths and model variants."
 settings:
   purge_on_entry: true
   purge_on_exit: true
-  track_prior_vram: true
+  force_download: true
 
 execution:
-  - domain: llm
-    loadouts:
-      - ["OL_qwen2.5:0.5b"]
-      - ["OL_qwen2.5:0.5b#stream"]
-      - ["VL_Qwen/Qwen2.5-0.5B-Instruct"]
-      - ["VL_Qwen/Qwen2.5-0.5B-Instruct#stream"]
-      - ["VL_Qwen/Qwen2.5-0.5B-Instruct#stream#ctx=32768"]
-
-  - domain: vlm
-    loadouts:
-      - ["OL_moondream#stream"]
-      - ["OL_qwen3-vl:30b-a3b-instruct#stream"]
-      - ["VL_QuantTrio/Qwen3-VL-30B-A3B-Instruct-AWQ"]
-      - ["VL_QuantTrio/Qwen3-VL-30B-A3B-Instruct-AWQ#stream"]
-      - ["VL_QuantTrio/Qwen3-VL-30B-A3B-Instruct-AWQ#stream#nativevideo"]
-      - ["VL_QuantTrio/Qwen3-VL-30B-A3B-Instruct-AWQ#stream#nativevideo#ctx=32768"]
-      - ["VL_QuantTrio/Qwen3-VL-30B-A3B-Instruct-AWQ#stream#nativevideo#ctx=4096"]
-
-  - domain: stt
+  # STT: Across all models and languages
+  - domain: "stt"
+    pipeline: "atomic_stt"
     loadouts:
       - ["faster-whisper-tiny"]
       - ["faster-whisper-base"]
-      - ["faster-whisper-large"]
+    scenarios: [stt_polish_std, stt_french_std, stt_chinese_std, stt_english_std]
 
-  - domain: tts
+  # LLM: Quality & Speed variations
+  - domain: "llm"
+    pipeline: "atomic_llm"
     loadouts:
-      - ["chatterbox-eng"]
-      - ["chatterbox-multilingual"]
+      - ["OL_qwen2.5:0.5b"]
+      - ["OL_gpt-oss-20b"]
+    scenarios: [llm_basic_chat, llm_polish_explicit, llm_short2long, llm_long_story]
+
+  # TTS: Audio fidelity variations
+  - domain: "tts"
+    pipeline: "atomic_tts"
+    loadouts:
       - ["chatterbox-turbo"]
+      - ["chatterbox-multilingual"]
+    scenarios: [tts_standard, tts_polish, tts_implicit_excited]
 
-  - domain: sts
+  # VLM: Vision support
+  - domain: "vlm"
+    pipeline: "atomic_llm"
     loadouts:
-      - ["faster-whisper-tiny", "VL_Qwen/Qwen2.5-0.5B-Instruct#stream#ctx=4096", "chatterbox-turbo"]
-      - ["faster-whisper-base", "OL_qwen2.5:0.5b#stream", "chatterbox-turbo"]
-      - ["faster-whisper-base", "VL_QuantTrio/Qwen3-VL-30B-A3B-Instruct-AWQ#stream", "chatterbox-multilingual"]
-      - ["faster-whisper-base", "VL_QuantTrio/Qwen3-VL-30B-A3B-Instruct-AWQ#stream#ctx=4096", "chatterbox-multilingual"]
-      - ["faster-whisper-base", "VL_QuantTrio/Qwen3-VL-30B-A3B-Instruct-AWQ#stream#ctx=16384", "chatterbox-multilingual"]
-      - ["faster-whisper-large", "VL_QuantTrio/Qwen3-VL-30B-A3B-Instruct-AWQ#stream#ctx=4096", "chatterbox-multilingual"]
+      - ["vl_qwen--qwen2-vl-2b-instruct#stream"]
+    scenarios: [vlm_jarvis_logo, vlm_bunny]
+
+  - domain: "hybrid_chat"
+    pipeline: "hybrid_chat"
+    loadouts:
+      - ["faster-whisper-tiny", "OL_qwen2.5:0.5b"]
+    scenarios: [all]

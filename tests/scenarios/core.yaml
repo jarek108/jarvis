@@ -1,0 +1,117 @@
+# Jarvis Unified Interaction Scenarios
+
+# --- STT (Speech-to-Text) ---
+stt_polish_std:
+  turns:
+    - send_binary: "tests/data/polish.wav"
+      expect: [{"type": "log", "content": "Cześć, nazywam się Jarvis. Jak mogę Ci dzisiaj pomóc?"}]
+
+stt_french_std:
+  turns:
+    - send_binary: "tests/data/french.wav"
+      expect: [{"type": "log", "content": "Bonjour, je m'appelle Jarvis. Comment puis-je vous aider?"}]
+
+stt_chinese_std:
+  turns:
+    - send_binary: "tests/data/chinese.wav"
+      expect: [{"type": "log", "content": "你好，我叫贾维斯。我今天能为您做什么？"}]
+
+stt_english_std:
+  turns:
+    - send_binary: "tests/data/input.wav"
+      expect: [{"type": "log", "content": "Hello, this is a test of Tatterbox TTS."}]
+
+# --- LLM (Language Models) ---
+llm_basic_chat:
+  turns:
+    - send: {"type": "message", "content": "Hello Jarvis"}
+      expect: [{"type": "log", "role": "assistant"}]
+
+llm_polish_explicit:
+  turns:
+    - send: {"type": "message", "content": "Cześć, nazywam się Jarvis, jak mogę ci dzisiaj pomóc?"}
+      expect: [{"type": "log", "role": "assistant"}]
+
+llm_short2long:
+  turns:
+    - send: {"type": "message", "content": "Tell me a four to five sentences story about a dog."}
+      expect: [{"type": "log", "role": "assistant"}]
+
+llm_long_story:
+  turns:
+    - send: {"type": "message", "content": "Write a detailed, creative, and engaging 800-word story about a colony of robotic bees on Mars discovering a lost human artifact. Focus on descriptive language and complex character motivations."}
+      expect: [{"type": "log", "role": "assistant"}]
+
+# --- TTS (Text-to-Speech) ---
+tts_standard:
+  turns:
+    - send: {"type": "message", "content": "The quick brown fox jumps over the lazy dog."}
+      expect: [{"type": "binary", "label": "TTS Output"}]
+
+tts_polish:
+  turns:
+    - send: {"type": "message", "content": "W Szczebrzeszynie chrząszcz brzmi w trzcinie."}
+      expect: [{"type": "binary", "label": "TTS Output"}]
+
+tts_implicit_excited:
+  turns:
+    - send: {"type": "message", "content": "I am so incredibly happy to be here today!"}
+      expect: [{"type": "binary", "label": "TTS Output"}]
+
+# --- VLM (Vision-Language Models) ---
+vlm_jarvis_logo:
+  turns:
+    - send: {"type": "context", "content": "What does this logo represent?", "media": "tests/data/jarvis_logo.png"}
+      expect: [{"type": "log", "role": "assistant"}]
+
+vlm_bunny:
+  turns:
+    - send: {"type": "context", "content": "Describe the character in this video.", "media": "tests/data/bunny.mp4"}
+      expect: [{"type": "log", "role": "assistant"}]
+
+# --- BOUNDARY & STRESS CASES ---
+null_audio:
+  description: "Verify system behavior with silent audio input."
+  turns:
+    - send_binary: "tests/data/silence.wav"
+      expect: [{"type": "status", "state": "READY"}]
+
+empty_instruction:
+  description: "Verify system behavior with empty text command."
+  turns:
+    - send: {"type": "message", "content": ""}
+      expect: [{"type": "status", "state": "READY"}]
+
+token_explosion:
+  description: "Stress test long-form streaming throughput."
+  turns:
+    - send: {"type": "message", "content": "Tell me a very long story about a robot who discovered the meaning of art."}
+      expect: [{"type": "log", "role": "assistant"}]
+
+complex_punctuation:
+  description: "Stress test text-to-sentence splitting for TTS."
+  turns:
+    - send: {"type": "message", "content": "I said, 'Wait!'... Did you hear me? Mr. Smith (the baker) shouted: 'Run!' then stopped."}
+      expect: [{"type": "binary", "label": "TTS Output"}]
+
+# --- COMPLEX INTEGRATION (Multi-Turn / Multi-Input) ---
+sts_voice:
+  description: "Voice-driven Speech-to-Speech (Polish)"
+  turns:
+    - send_binary: "tests/data/polish.wav"
+      expect:
+        - {"type": "status", "state": "THINKING"}
+        - {"type": "log", "role": "user"}
+        - {"type": "binary", "label": "TTS Output"}
+      wait_state: "READY"
+
+super_whisper_action:
+  description: "Verify SuperWhisper contextual action (Selection + Command)"
+  turns:
+    - send: {"type": "context", "content": "I am interested in the RTX 5090 architecture."}
+    - send_binary: "tests/data/summarize_command.wav"
+    - send: {"type": "trigger"}
+      expect:
+        - {"type": "status", "state": "THINKING"}
+        - {"type": "log", "role": "assistant"}
+      wait_state: "READY"

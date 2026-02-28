@@ -16,235 +16,176 @@ python servers/sts_server.py --loadout eng_turbo
 python servers/sts_server.py --stt faster-whisper-tiny --tts chatterbox-turbo
 """
 
+"""
+[Title] : Speech-to-Speech (sts) Graph-Based Server
+[Section] : Description
+Unified Production Server hosting the declarative flow graph engine.
+Replaces the hardcoded pipeline with the reactive PipelineExecutor.
+"""
+
 from fastapi import FastAPI, UploadFile, File, HTTPException, Form
 from fastapi.responses import Response, JSONResponse, StreamingResponse
 from contextlib import asynccontextmanager
-import aiohttp
-import asyncio
 import os
 import sys
 import time
 import argparse
 import yaml
 import json
-import re
+import asyncio
 from typing import Optional
 from loguru import logger
 
-# Allow importing from parent directory
+# Project Setup
 script_dir = os.path.dirname(os.path.abspath(__file__))
 project_root = os.path.dirname(script_dir)
 sys.path.append(project_root)
 
-from utils import load_config, is_port_in_use, kill_process_on_port, start_server, get_service_status
+import utils
+from utils.pipeline import PipelineResolver, PipelineExecutor
 from utils.console import ensure_utf8_output
 
-# Ensure UTF-8 output for Windows console
 ensure_utf8_output()
-
-# Global config and state
-cfg = load_config()
-owned_ports = []
-DEFAULT_LOADOUT = "base-qwen30-multi"
+cfg = utils.load_config()
 
 # Configure lean logging
 logger.remove()
 logger.add(sys.stderr, format="<level>{level: <8}</level> | <cyan>{message}</cyan>", colorize=True, enqueue=True)
 
 def get_args():
-    parser = argparse.ArgumentParser(description="Jarvis sts Server")
-    parser.add_argument("--port", type=int, default=cfg['ports']['sts'], help="Port to run the sts server on")
-    parser.add_argument("--loadout", type=str, help="Name of a loadout preset (e.g., eng_turbo)")
-    parser.add_argument("--stt", type=str, help="STT model override")
-    parser.add_argument("--tts", type=str, help="TTS variant override")
-    parser.add_argument("--llm", type=str, help="LLM model override")
+    parser = argparse.ArgumentParser(description="Jarvis sts Flow Server")
+    parser.add_argument("--port", type=int, default=cfg['ports']['sts'])
+    parser.add_argument("--pipeline", type=str, default="voice_to_voice")
+    parser.add_argument("--mapping", type=str, help="Optional mapping override")
     parser.add_argument("--host", type=str, default="127.0.0.1")
-    parser.add_argument("--benchmark-mode", action="store_true", help="Enable deterministic output for benchmarking")
-    parser.add_argument("--stub", action="store_true", help="Run in stub mode (skip warmup)")
-    parser.add_argument("--trust-deps", action="store_true", help="Skip internal dependency health checks and warmup (assumes runner manages infra)")
     return parser.parse_known_args()[0]
 
 args = get_args()
 
-def safe_header(text):
-    """Aggressively sanitize text for HTTP headers (printable ASCII only)."""
-    if not text: return ""
-    # Replace newlines/tabs with spaces, then keep only printable ASCII (32-126)
-    text = text.replace("\n", " ").replace("\t", " ")
-    return "".join(c for c in text if 32 <= ord(c) <= 126)
-
-async def wait_for_service_ready(name, url, timeout=120):
-    """Polls a /health endpoint until it returns 200 OK."""
-    start_time = time.perf_counter()
-    logger.info(f"  ↳ ⌛ Checking {name}...")
-    async with aiohttp.ClientSession() as session:
-        while time.perf_counter() - start_time < timeout:
-            try:
-                async with session.get(url) as resp:
-                    if resp.status == 200:
-                        logger.info(f"  ↳ ✅ {name} is ONLINE ({time.perf_counter() - start_time:.1f}s)")
-                        return True
-            except Exception:
-                pass
-            await asyncio.sleep(0.5)
-    logger.error(f"  ↳ ❌ {name} TIMEOUT")
-    return False
-
-async def warmup_ollama(url, model_name):
-    """Pokes Ollama with a tiny prompt to ensure it is hot in VRAM."""
-    logger.info(f"🔥 Activating LLM ({model_name})...")
-    start_time = time.perf_counter()
-    async with aiohttp.ClientSession() as session:
-        payload = {
-            "model": model_name,
-            "messages": [{"role": "user", "content": "hi"}],
-            "max_tokens": 5
-        }
-        try:
-            async with session.post(f"{url}/v1/chat/completions", json=payload) as resp:
-                if resp.status == 200:
-                    await resp.json()
-                    logger.info(f"✅ LLM is HOT ({time.perf_counter() - start_time:.1f}s)")
-                else:
-                    logger.error(f"⚠️ LLM Warmup Status: {resp.status}")
-        except Exception as e:
-            logger.error(f"⚠️ LLM Warmup Failed: {e}")
-
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # --- STARTUP ---
-    logger.info("Initializing Jarvis sts Cluster...")
+    logger.info(f"🚀 Initializing Jarvis Flow Engine (Pipeline: {args.pipeline})")
+    app.state.resolver = PipelineResolver(project_root)
+    app.state.executor = PipelineExecutor(project_root)
     
-    # 1. Determine active models
-    active_stt = args.stt
-    active_tts = args.tts
-    active_llm = args.llm
-    
-    selected_loadout = args.loadout or DEFAULT_LOADOUT
-    loadout_path = os.path.join(project_root, "loadouts", f"{selected_loadout}.yaml")
-    
-    if os.path.exists(loadout_path):
-        with open(loadout_path, "r") as f:
-            l_data = yaml.safe_load(f)
-            if not active_stt:
-                stt_val = l_data.get("stt")
-                if stt_val:
-                    active_stt = stt_val[0] if isinstance(stt_val, list) else stt_val
-            if not active_tts:
-                tts_val = l_data.get("tts")
-                if tts_val:
-                    active_tts = tts_val[0] if isinstance(tts_val, list) else tts_val
-            if not active_llm: active_llm = l_data.get("llm")
-            logger.info(f"📦 Loadout: {selected_loadout}")
-    else:
-        logger.error(f"❌ Preset {selected_loadout} missing at {loadout_path}")
-        if not active_stt: active_stt = "faster-whisper-base"
-        if not active_tts: active_tts = "chatterbox-multilingual"
-        if not active_llm: active_llm = "gpt-oss:20b"
-
-    app.state.stt_model = active_stt
-    app.state.tts_model = active_tts
-    app.state.llm_model = active_llm
-    
-    logger.info(f"🛠️  Pipeline: {active_stt} ➔ {active_llm} ➔ {active_tts}")
-
-    # 2. Ports
-    stt_port = cfg['stt_loadout'][active_stt]
-    tts_port = cfg['tts_loadout'][active_tts]
-    
-    # 3. Executables
-    python_exe = sys.executable
-
-    # Determine LLM engine and port
-    llm_engine = "ollama"
-    llm_model_name = active_llm
-    if isinstance(active_llm, dict):
-        llm_engine = active_llm.get("engine", "ollama")
-        llm_model_name = active_llm.get("model")
-    elif isinstance(active_llm, str) and active_llm.startswith("vllm:"):
-        llm_engine = "vllm"
-        llm_model_name = active_llm[5:]
-    elif isinstance(active_llm, str) and active_llm.startswith("VL_"):
-        llm_engine = "vllm"
-        llm_model_name = active_llm[3:]
-    elif isinstance(active_llm, str) and active_llm.startswith("OL_"):
-        llm_engine = "ollama"
-        llm_model_name = active_llm[3:]
-
-    if llm_engine == "vllm":
-        llm_port = cfg['ports'].get('vllm', 8300)
-        llm_service_name = "vLLM Core"
-        llm_cmd = [python_exe, "-m", "vllm.entrypoints.openai.api_server", "--model", llm_model_name, "--port", str(llm_port)]
-        llm_health = f"http://127.0.0.1:{llm_port}/v1/models"
-        app.state.llm_model_prefixed = f"vl_{llm_model_name}"
-    else:
-        llm_port = cfg['ports']['ollama']
-        llm_service_name = "Ollama Core"
-        llm_cmd = ["ollama", "serve"]
-        llm_health = f"http://127.0.0.1:{llm_port}/api/tags"
-        app.state.llm_model_prefixed = f"ol_{llm_model_name}"
-
-    app.state.llm_port = llm_port
-    app.state.llm_engine = llm_engine
-    app.state.llm_model = llm_model_name
-
-    stt_script = os.path.join(project_root, "servers", "stt_server.py")
-    tts_script = os.path.join(project_root, "servers", "tts_server.py")
-
-    services = [
-        {
-            "name": "STT Server", 
-            "port": stt_port, 
-            "cmd": [python_exe, stt_script, "--port", str(stt_port), "--model", active_stt] + (["--benchmark-mode"] if args.benchmark_mode else []), 
-            "health": f"http://127.0.0.1:{stt_port}/health"
-        },
-        {
-            "name": "TTS Server", 
-            "port": tts_port, 
-            "cmd": [python_exe, tts_script, "--port", str(tts_port), "--variant", active_tts] + (["--benchmark-mode"] if args.benchmark_mode else []), 
-            "health": f"http://127.0.0.1:{tts_port}/health"
-        },
-        {
-            "name": llm_service_name, 
-            "port": llm_port, 
-            "cmd": llm_cmd, 
-            "health": llm_health
-        }
-    ]
-
-    if not args.trust_deps:
-        logger.info("📡 Checking Infrastructure...")
-        for s in services:
-            if not is_port_in_use(s["port"]):
-                logger.info(f"  ✨ Spawning {s['name']} (Port {s['port']})")
-                start_server(s["cmd"], loud=False)
-                owned_ports.append(s["port"])
-            else:
-                logger.info(f"  ℹ️  {s['name']} is already running.")
-
-        # Wait for all
-        wait_timeout = 5 if args.stub else 120
-        ready_tasks = [wait_for_service_ready(s['name'], s['health'], timeout=wait_timeout) for s in services]
-        results = await asyncio.gather(*ready_tasks)
-        
-        if not all(results):
-            logger.critical("🚨 DEPENDENCY FAILURE: Pipeline entry blocked.")
-
-        # 4. LLM Warmup (External)
-        if llm_engine == "ollama" and not args.stub:
-            await warmup_ollama(f"http://127.0.0.1:{llm_port}", llm_model_name)
-    else:
-        logger.info("🚀 Trusting Dependencies (Skipping internal checks/warmup)")
+    # 1. Resolve Graph using the currently active loadout
+    try:
+        app.state.bound_graph = app.state.resolver.resolve(args.pipeline, args.mapping)
+        logger.info("✅ Pipeline Resolved & Ready")
+    except Exception as e:
+        logger.error(f"❌ Failed to resolve pipeline: {e}")
+        app.state.bound_graph = None
 
     app.state.is_ready = True
-    logger.info("✨ JARVIS PIPELINE READY")
     yield
-    
-    # --- SHUTDOWN ---
-    logger.info(f"sts Server shutting down. Cleaning up {len(owned_ports)} owned services...")
-    for port in owned_ports:
-        kill_process_on_port(port)
-    logger.info("Cleanup complete.")
+    logger.info("sts Server shutting down.")
+
+app = FastAPI(lifespan=lifespan)
+app.state.is_ready = False
+
+@app.get("/health")
+async def health():
+    if not app.state.is_ready:
+        return JSONResponse(status_code=503, content={"status": "STARTUP"})
+    return {"status": "ON", "service": "sts_server", "pipeline": args.pipeline}
+
+@app.post("/process_stream")
+async def process_stream(
+    file: UploadFile = File(...),
+    language_id: Optional[str] = Form(None)
+):
+    """Production streaming endpoint using the Reactive Engine."""
+    if not app.state.bound_graph:
+        raise HTTPException(status_code=500, detail="Pipeline not resolved.")
+
+    # 1. Save input to buffer
+    audio_data = await file.read()
+    temp_path = os.path.join(project_root, "buffers", "sts_input.wav")
+    os.makedirs(os.path.dirname(temp_path), exist_ok=True)
+    with open(temp_path, "wb") as f: f.write(audio_data)
+
+    # 2. Prepare Inputs
+    scenario_inputs = {
+        "input_mic": temp_path,
+        "language": language_id or "en"
+    }
+
+    async def event_generator():
+        # Standard Jarvis Protocol: Multi-part octet stream
+        def frame(type_char, data):
+            return type_char.encode() + len(data).to_bytes(4, 'little') + data
+
+        # Wrapper task to run the executor
+        exec_task = asyncio.create_task(app.state.executor.run(app.state.bound_graph, scenario_inputs))
+        
+        # Monitor the Trace and yield packets as they appear
+        last_yielded_idx = 0
+        while not exec_task.done() or last_yielded_idx < len(app.state.executor.trace):
+            while last_yielded_idx < len(app.state.executor.trace):
+                event = app.state.executor.trace[last_yielded_idx]
+                last_yielded_idx += 1
+                
+                # Filter for OUT packets to stream to client
+                if event.get('dir') == 'OUT':
+                    etype = event.get('type')
+                    # Map Packet types to Frame types
+                    if etype in ['text_token', 'text_final', 'text_sentence']:
+                        # For text, we send JSON metadata
+                        # Note: In a real production app we'd retrieve the content from a packet queue
+                        # but for now we rely on the trace's captured metadata logic
+                        pass 
+                
+            await asyncio.sleep(0.05)
+            
+        # For this refactor, we yield the final result for simplicity in Step 1
+        # Real binary audio streaming requires the Executor to yield raw buffers
+        res = app.state.executor.results
+        if "proc_tts" in res:
+            with open(res["proc_tts"], "rb") as f:
+                yield frame('A', f.read()[44:]) # Skip WAV header
+        
+        # Yield Metrics
+        yield frame('M', json.dumps({
+            "timings": app.state.executor.timings,
+            "stt_text": res.get("proc_stt", ""),
+            "llm_text": res.get("proc_llm", "")
+        }).encode())
+
+    return StreamingResponse(event_generator(), media_type="application/octet-stream")
+
+@app.post("/process")
+async def process_simple(
+    file: UploadFile = File(...),
+    language_id: Optional[str] = Form(None)
+):
+    """Simple Request-Response endpoint."""
+    if not app.state.bound_graph:
+        raise HTTPException(status_code=500, detail="Pipeline not resolved.")
+
+    audio_data = await file.read()
+    temp_path = os.path.join(project_root, "buffers", "sts_input.wav")
+    with open(temp_path, "wb") as f: f.write(audio_data)
+
+    success = await app.state.executor.run(app.state.bound_graph, {"input_mic": temp_path})
+    if not success:
+        raise HTTPException(status_code=500, detail="Pipeline execution failed.")
+
+    res = app.state.executor.results
+    if "proc_tts" in res:
+        with open(res["proc_tts"], "rb") as f:
+            audio_out = f.read()
+            
+        headers = {
+            "X-Result-STT": str(res.get("proc_stt", ""))[:1000],
+            "X-Result-LLM": str(res.get("proc_llm", ""))[:1000]
+        }
+        return Response(content=audio_out, media_type="audio/wav", headers=headers)
+
+    raise HTTPException(status_code=500, detail="No audio output generated.")
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host=args.host, port=args.port)
 
 app = FastAPI(lifespan=lifespan)
 app.state.is_ready = False

@@ -3,16 +3,19 @@ prompt = """
 You are now in RESEARCH MODE. 
 
 Your goal is strictly to:
-1. PLAN: Design architectural approaches or workflows.
-2. ANALYZE: Review code, logs, or system states.
-3. INSPECT: Read files and gather information.
+1. ANALYZE: Review code, logs, or system states.
+2. INSPECT: Read files and gather information.
+3. PLAN: Design architectural approaches or workflows.
+4. CLARIFY and DISCUSS - Make sure ke decision points are made clear and choices are explicit. Also show non-obvious tradeofs that the user may miss and discuss them.  
+ 
 
 CRITICAL CONSTRAINTS:
 - DO NOT write any code.
 - DO NOT suggest file modifications.
 - DO NOT perform any 'Act' phase.
 - Use only read-only tools if necessary.
-- Focus entirely on high-level reasoning and strategy.
+- Focus entirely on reasoning and strategy, not action
+- Still, be brief, concrete and to the point.
 
 Query: {{args}}
 """

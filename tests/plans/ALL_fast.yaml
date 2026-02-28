@@ -1,33 +1,37 @@
-name: "Fast Health Check"
-description: "Minimal verification of the core stack (Ollama + vLLM)."
-
+name: "Jarvis Unified Fast Check"
+description: "Core capability smoke test using the reactive flow engine."
 settings:
   purge_on_entry: true
-  purge_on_exit: false
-  track_prior_vram: true
+  purge_on_exit: true
+  force_download: true
 
 execution:
-  - domain: llm
-    loadouts:
-      - ["OL_qwen2.5:0.5b#stream"]
-      - ["VL_Qwen/Qwen2.5-0.5B-Instruct#stream#ctx=4096"]
-      - ["VL_Qwen/Qwen2.5-0.5B-Instruct#stream"]
+  # 1. Pure Transcription (Atomic)
+  - domain: "stt"
+    pipeline: "atomic_stt"
+    loadouts: [["faster-whisper-tiny"]]
+    scenarios: [stt_polish_std, stt_french_std]
 
-  - domain: vlm
-    loadouts:
-      - ["OL_moondream#stream"]
-      - ["VL_Qwen/Qwen2-VL-2B-Instruct#stream"]
-      - ["VL_QuantTrio/Qwen3-VL-30B-A3B-Instruct-AWQ#stream"]
+  # 2. Pure Inference (Atomic)
+  - domain: "llm"
+    pipeline: "atomic_llm"
+    loadouts: [["OL_qwen2.5:0.5b"]]
+    scenarios: [llm_basic_chat]
 
-  - domain: stt
-    loadouts:
-      - ["faster-whisper-base"]
+  # 3. Text-to-Speech (Atomic)
+  - domain: "tts"
+    pipeline: "atomic_tts"
+    loadouts: [["chatterbox-turbo"]]
+    scenarios: [tts_standard]
 
-  - domain: tts
-    loadouts:
-      - ["chatterbox-turbo"]
+  # 4. End-to-End Voice (Complex)
+  - domain: "sts_voice"
+    pipeline: "voice_to_voice"
+    loadouts: [["faster-whisper-tiny", "chatterbox-turbo", "OL_qwen2.5:0.5b"]]
+    scenarios: [sts_voice]
 
-  - domain: sts
-    loadouts:
-      - ["faster-whisper-base", "OL_qwen2.5:0.5b#stream", "chatterbox-turbo"]
-      - ["faster-whisper-base", "VL_Qwen/Qwen2.5-0.5B-Instruct#stream", "chatterbox-turbo"]
+  # 5. Multi-Input (Complex)
+  - domain: "hybrid_chat"
+    pipeline: "hybrid_chat"
+    loadouts: [["faster-whisper-tiny", "OL_qwen2.5:0.5b"]]
+    scenarios: [super_whisper_action]

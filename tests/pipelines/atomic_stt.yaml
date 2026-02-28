@@ -1,0 +1,14 @@
+id: atomic_stt
+description: "Single-node STT pipeline for component testing."
+nodes:
+  - id: input_mic
+    type: input
+    source: device_stream
+    buffer: "buffers/user_voice.wav"
+
+  - id: proc_stt
+    type: processing
+    role: stt
+    capabilities: [audio_in, text_out]
+    inputs: 
+      - input_mic

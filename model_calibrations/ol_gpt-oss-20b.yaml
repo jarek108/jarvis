@@ -1,5 +1,6 @@
 id: gpt-oss-20b
 engine: ollama
+capabilities: [text_in, text_out]
 constants:
   base_vram_gb: 13.0445
   kv_cache_gb_per_10k: 0.261068

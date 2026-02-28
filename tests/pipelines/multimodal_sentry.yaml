@@ -1,0 +1,41 @@
+id: multimodal_sentry
+description: "Visual analysis with file-buffered inputs."
+nodes:
+  - id: sys_prompt
+    type: input
+    source: file
+    path: "prompts/sentry_persona.txt"
+
+  - id: input_mic
+    type: input
+    source: device_stream
+    device: microphone
+    buffer: "buffers/command.wav"
+
+  - id: input_desktop
+    type: input
+    source: device_snapshot
+    device: screen
+    buffer: "buffers/desktop_snapshot.jpg"
+
+  - id: proc_stt
+    type: processing
+    role: stt
+    capabilities: [audio_in, text_out]
+    inputs: 
+      - input_mic
+
+  - id: proc_vlm
+    type: processing
+    role: llm
+    capabilities: [text_in, image_in, text_out]
+    system_prompt: sys_prompt
+    inputs: 
+      - proc_stt
+      - input_desktop
+    context_layout: |
+      [VISUAL_CONTEXT]
+      <image_path>{{ input_desktop }}</image_path>
+      
+      [USER_QUERY]
+      {{ proc_stt }}
