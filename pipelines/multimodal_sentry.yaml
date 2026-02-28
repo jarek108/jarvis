@@ -1,22 +1,21 @@
 id: multimodal_sentry
-description: "Visual analysis with file-buffered inputs."
+description: "Visual analysis with declarative sensors and actuators."
 nodes:
   - id: sys_prompt
-    type: input
-    source: file
+    type: source
+    role: file_reader
+    capabilities: [text_out]
     path: "prompts/sentry_persona.txt"
 
   - id: input_mic
-    type: input
-    source: device_stream
-    device: microphone
-    buffer: "buffers/command.wav"
+    type: source
+    role: microphone
+    capabilities: [audio_out]
 
   - id: input_desktop
-    type: input
-    source: device_snapshot
-    device: screen
-    buffer: "buffers/desktop_snapshot.jpg"
+    type: source
+    role: screen_capture
+    capabilities: [image_out]
 
   - id: proc_stt
     type: processing
@@ -39,3 +38,10 @@ nodes:
       
       [USER_QUERY]
       {{ proc_stt }}
+
+  - id: output_notification
+    type: sink
+    role: system_notification
+    capabilities: [text_in]
+    inputs:
+      - proc_vlm

@@ -3,6 +3,7 @@ from .llm import LLMAdapter
 from .tts import TTSAdapter
 from .utility import UtilityAdapter
 from .memory import MemoryAdapter
+from .sink import SinkAdapter
 
 def get_adapter(role, project_root):
     """Factory to return the correct adapter based on node role."""
@@ -11,7 +12,8 @@ def get_adapter(role, project_root):
         "llm": LLMAdapter,
         "tts": TTSAdapter,
         "utility": UtilityAdapter,
-        "memory": MemoryAdapter
+        "memory": MemoryAdapter,
+        "sink": SinkAdapter
     }
     
     adapter_class = adapters.get(role.lower())

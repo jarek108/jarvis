@@ -94,6 +94,12 @@ complex_punctuation:
     - send: {"type": "message", "content": "I said, 'Wait!'... Did you hear me? Mr. Smith (the baker) shouted: 'Run!' then stopped."}
       expect: [{"type": "binary", "label": "TTS Output"}]
 
+memory_recall:
+  description: "Verify that LLM can recall info from a pre-populated history file."
+  turns:
+    - send: {"type": "message", "content": "Wait, what did I say was my favorite color?"}
+      expect: [{"type": "log", "content": "neon blue"}]
+
 # --- COMPLEX INTEGRATION (Multi-Turn / Multi-Input) ---
 sts_voice:
   description: "Voice-driven Speech-to-Speech (Polish)"

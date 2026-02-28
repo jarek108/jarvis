@@ -2,22 +2,19 @@ id: hybrid_chat
 description: "Voice and Text merged context."
 nodes:
   - id: input_mic
-    type: input
-    source: device_stream
-    device: microphone
-    buffer: "buffers/user_voice.wav"
+    type: source
+    role: microphone
+    capabilities: [audio_out]
 
   - id: input_text
-    type: input
-    source: user_interface
-    widget: selection_buffer
-    buffer: "buffers/selection.txt"
+    type: source
+    role: selection_buffer
+    capabilities: [text_out]
 
   - id: input_instruction
-    type: input
-    source: user_interface
-    widget: chat_box
-    buffer: "buffers/instruction.txt"
+    type: source
+    role: chat_box
+    capabilities: [text_out]
 
   - id: proc_stt
     type: processing
@@ -43,3 +40,10 @@ nodes:
       
       ADDITIONAL INSTRUCTIONS:
       {{ input_instruction }}
+
+  - id: output_ui
+    type: sink
+    role: chat_box
+    capabilities: [text_in]
+    inputs:
+      - proc_llm

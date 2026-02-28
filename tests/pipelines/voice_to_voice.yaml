@@ -1,16 +1,16 @@
 id: voice_to_voice
-description: "Standard Speech-to-Speech interaction loop with file buffers."
+description: "Reactive Speech-to-Speech interaction loop."
 nodes:
   - id: sys_prompt
-    type: input
-    source: file
+    type: source
+    role: file_reader
+    capabilities: [text_out]
     path: "prompts/sts_persona.txt"
 
   - id: input_mic
-    type: input
-    source: device_stream
-    device: microphone
-    buffer: "buffers/user_voice.wav"
+    type: source
+    role: microphone
+    capabilities: [audio_out]
 
   - id: proc_stt
     type: processing
@@ -42,4 +42,10 @@ nodes:
     capabilities: [text_in, audio_out]
     inputs: 
       - logic_chunker
-    output: "buffers/jarvis_response.wav"
+
+  - id: output_speaker
+    type: sink
+    role: audio_playback
+    capabilities: [audio_in]
+    inputs:
+      - proc_tts

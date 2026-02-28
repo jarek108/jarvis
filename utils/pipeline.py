@@ -86,14 +86,14 @@ class PipelineResolver:
         live_models = self.get_live_models()
         
         bound_nodes = {}
-        # ... [remaining resolve logic remains the same] ...
-        for nid in [n['id'] for n in pipeline['nodes'] if n['type'] == 'input']:
+        # Identify entry points (input or source nodes)
+        for nid in [n['id'] for n in pipeline['nodes'] if n['type'] in ['input', 'source']]:
             bound_nodes[nid] = next(n for n in pipeline['nodes'] if n['id'] == nid)
 
-        for node in [n for n in pipeline['nodes'] if n['type'] == 'processing']:
+        for node in [n for n in pipeline['nodes'] if n['type'] in ['processing', 'sink']]:
             node_id = node['id']
-            # Skip resolution for local utility nodes
-            if node.get('role') == 'utility':
+            # Skip resolution for local utility or sink nodes (handled at edge)
+            if node.get('role') in ['utility', 'sink'] or node.get('type') == 'sink':
                 bound_nodes[node_id] = node.copy()
                 continue
                 
@@ -220,23 +220,24 @@ class PipelineExecutor:
         queues = {nid: asyncio.Queue() for nid in bound_graph}
         
         async with aiohttp.ClientSession() as session:
-            # 1. Initialize Input Nodes
+            # 1. Initialize Source/Input Nodes
             for nid, node in bound_graph.items():
-                if node['type'] == 'input':
+                if node['type'] in ['input', 'source']:
                     val = scenario_inputs.get(nid) or node.get('path')
                     if val and isinstance(val, str) and os.path.exists(os.path.join(self.project_root, val)):
                         bp = os.path.join(self.project_root, node.get('buffer', f"buffers/{nid}.tmp"))
                         os.makedirs(os.path.dirname(bp), exist_ok=True); shutil.copy(os.path.join(self.project_root, val), bp)
                         val = bp
                     
+                    self.results[nid] = val
                     p = {"type": "input_source", "content": val, "ts": time.perf_counter()}
                     self.record_packet(nid, p, "OUT")
                     await queues[nid].put(p); await queues[nid].put(None)
 
-            # 2. Run All Nodes Concurrently
+            # 2. Run Processing and Sink Nodes Concurrently
             tasks = []
             for nid, node in bound_graph.items():
-                if node['type'] == 'processing':
+                if node['type'] in ['processing', 'sink']:
                     in_qs = {d: queues[d] for d in node.get('inputs', [])}
                     tasks.append(self.execute_node(nid, node, in_qs, queues, session))
 

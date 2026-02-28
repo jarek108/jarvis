@@ -111,32 +111,34 @@ async def process_stream(
                 packet = app.state.executor.trace[last_seen_idx]
                 last_seen_idx += 1
                 
-                # Only stream 'OUT' packets to the client
+                # Filter for OUT packets to stream to client
                 if packet.get('dir') == 'OUT':
                     ptype = packet.get('type')
+                    content = packet.get('content')
                     
-                    # A: Audio Data
+                    # A: Audio Data (Fulfillment)
                     if ptype == "audio_path":
-                        path = packet.get('content')
-                        if path and os.path.exists(path):
-                            with open(path, "rb") as f:
-                                # Yield raw audio frames (skip 44b WAV header)
+                        if content and os.path.exists(content):
+                            with open(content, "rb") as f:
                                 yield frame('A', f.read()[44:])
                     
-                    # T: Text Content
+                    # T: Text Content (Tokens/Sentences)
                     elif ptype in ["text_token", "text_sentence", "text_final"]:
-                        content = packet.get('content', '')
                         if content:
-                            # Send as JSON metadata frame
-                            msg = {"text": content, "type": ptype, "seq": packet.get('seq', 0)}
+                            msg = {"text": str(content), "type": ptype, "seq": packet.get('seq', 0)}
                             yield frame('T', json.dumps(msg).encode())
+
+                    # S: State Metadata
+                    elif ptype == "input_source":
+                        yield frame('S', json.dumps({"state": "READY_FOR_Fulfillment", "source": packet.get('node')}).encode())
 
             await asyncio.sleep(0.01) # Yield to execution loop
 
-        # 3. Yield Final Metrics
+        # 3. Final Metrics & Telemetry
         final_metrics = {
             "node_timings": app.state.executor.timings,
-            "vram_peak": app.state.executor.vram_peak
+            "vram_peak": app.state.executor.vram_peak,
+            "trace_len": len(app.state.executor.trace)
         }
         yield frame('M', json.dumps(final_metrics).encode())
 

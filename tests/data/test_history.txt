@@ -1,0 +1,2 @@
+USER: My favorite color is neon blue.
+ASSISTANT: I will remember that.
