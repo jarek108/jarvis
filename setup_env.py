@@ -11,23 +11,20 @@ def run_cmd(cmd, env=None):
         sys.exit(result.returncode)
 
 def main():
-    print("🚀 Bootstrapping Jarvis Environment...
-")
+    print("🚀 Bootstrapping Jarvis Environment...\n")
     
     venv_dir = "jarvis-venv"
     
     # 1. Create VENV if it doesn't exist
     if not os.path.exists(venv_dir):
         print(f"📦 Creating fresh virtual environment in '{venv_dir}'...")
-        # Use the built-in venv module to create the environment
         venv.create(venv_dir, with_pip=True)
     else:
         print(f"✅ Virtual environment '{venv_dir}' already exists.")
 
-    # Determine the path to the venv python executable based on OS
-    if os.name == 'nt':  # Windows
+    if os.name == 'nt':
         python_exe = os.path.join(venv_dir, "Scripts", "python.exe")
-    else:                # macOS / Linux
+    else:
         python_exe = os.path.join(venv_dir, "bin", "python")
 
     if not os.path.exists(python_exe):
@@ -35,22 +32,23 @@ def main():
         sys.exit(1)
 
     # 2. Upgrade pip
-    print("
-📦 Upgrading pip...")
+    print("\n📦 Upgrading pip...")
     run_cmd([python_exe, "-m", "pip", "install", "--upgrade", "pip"])
 
-    # 3. Install core dependencies (including strict CUDA versions)
-    print("
-📦 Installing Core Stack (CUDA 12.4)...")
+    # 3. Install core dependencies (This will pull generic torch 2.6.0 via chatterbox)
+    print("\n📦 Installing Project Requirements...")
     run_cmd([python_exe, "-m", "pip", "install", "-r", "requirements.txt"])
 
-    # 4. Install conflicted packages without dependencies
-    print("
-📦 Surgically installing Chatterbox TTS (bypassing conflicts)...")
-    run_cmd([python_exe, "-m", "pip", "install", "chatterbox_tts", "--no-deps"])
+    # 4. Surgically Overwrite PyTorch with CUDA 12.4 Stack
+    print("\n📦 Optimizing PyTorch for NVIDIA Blackwell (CUDA 12.4)...")
+    run_cmd([
+        python_exe, "-m", "pip", "install", 
+        "torch==2.5.1+cu124", "torchvision==0.20.1+cu124", "torchaudio==2.5.1+cu124",
+        "--index-url", "https://download.pytorch.org/whl/cu124",
+        "--force-reinstall"
+    ])
 
-    print("
-✅ Environment Ready! You can now run the Jarvis Client.")
+    print("\n✅ Environment Ready! You can now run the Jarvis Client.")
 
 if __name__ == "__main__":
     main()
