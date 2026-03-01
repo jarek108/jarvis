@@ -67,8 +67,13 @@ class PipelineResolver:
         
         # Sanitize and normalize target
         target = model_id.lower().split('#')[0]
-        if target.startswith("ol_"): target = target[3:]
-        if target.startswith("vl_"): target = target[3:]
+        # Aggressive case-insensitive prefix stripping to handle 'OL_VL_' weirdness
+        while target.startswith("ol_") or target.startswith("vl_") or target.startswith("stt_") or target.startswith("tts_"):
+            if target.startswith("ol_"): target = target[3:]
+            elif target.startswith("vl_"): target = target[3:]
+            elif target.startswith("stt_"): target = target[4:]
+            elif target.startswith("tts_"): target = target[4:]
+            
         target = target.replace(':', '-').replace('/', '--')
         
         # Clean target for fuzzy matching (remove common suffixes)

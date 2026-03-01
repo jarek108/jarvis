@@ -224,10 +224,20 @@ def apply_loadout(name, loud=False, soft=False):
             # Calculate utilization for docker command
             total_vram = get_gpu_total_vram()
             if 'required_gb' in svc:
-                vllm_util = (svc['required_gb'] / total_vram) + 0.05
+                # Dynamically restrict utilization to avoid OOM when massive models run alongside STT/TTS
+                # 'external_vram' was captured after purge, BUT other services in THIS loadout might have just started!
+                # We need to compute the max safe utilization based on the remaining physical memory.
+                
+                # Assume each native service (STT/TTS) takes roughly 2-4GB if running.
+                # A safer heuristic: take the requested amount, but never let it exceed (Total - 5GB buffer for other services and OS)
+                max_safe_vram = max(0, total_vram - 5.0) 
+                allocated_vram = min(svc['required_gb'], max_safe_vram)
+                vllm_util = allocated_vram / total_vram
             else:
                 vllm_util = params.get('gpu_memory_utilization', 0.4)
-            vllm_util = min(0.95, max(0.1, vllm_util))
+            
+            # For massive models like 30B, ensure we don't accidentally ask for 95% if other things are running
+            vllm_util = min(0.85, max(0.1, vllm_util))
 
             if is_vllm_docker_running():
                 stop_vllm_docker()
