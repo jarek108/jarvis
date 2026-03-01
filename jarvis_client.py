@@ -403,8 +403,25 @@ class JarvisApp(ctk.CTk):
         self.loadout_opt.pack(pady=(0, 10), padx=10)
 
         # VRAM Monitor
-        self.vram_label = ctk.CTkLabel(self.sidebar, text="Vram: 0.0 (0.0 + 0.0 ext) / 0.0 GB (0%)", font=("Consolas", 11), text_color="#D0D0D0")
-        self.vram_label.pack(pady=(5, 0))
+        self.vram_container = ctk.CTkFrame(self.sidebar, fg_color="transparent")
+        self.vram_container.pack(pady=(5, 0))
+        
+        self.v_lbl_1 = ctk.CTkLabel(self.vram_container, text="Vram: ", font=("Consolas", 11), text_color="#D0D0D0")
+        self.v_lbl_1.pack(side="left")
+        self.v_lbl_used = ctk.CTkLabel(self.vram_container, text="0.0", font=("Consolas", 11, "bold"), text_color="#FFFFFF")
+        self.v_lbl_used.pack(side="left")
+        self.v_lbl_2 = ctk.CTkLabel(self.vram_container, text="(", font=("Consolas", 11), text_color="#D0D0D0")
+        self.v_lbl_2.pack(side="left")
+        self.v_lbl_model = ctk.CTkLabel(self.vram_container, text="0.0", font=("Consolas", 11), text_color="#FFFFFF")
+        self.v_lbl_model.pack(side="left")
+        self.v_lbl_3 = ctk.CTkLabel(self.vram_container, text=" + ", font=("Consolas", 11), text_color="#D0D0D0")
+        self.v_lbl_3.pack(side="left")
+        self.v_lbl_ext = ctk.CTkLabel(self.vram_container, text="0.0 ext", font=("Consolas", 11, "bold"), text_color=WARNING_COLOR)
+        self.v_lbl_ext.pack(side="left")
+        self.v_lbl_4 = ctk.CTkLabel(self.vram_container, text=") / ", font=("Consolas", 11), text_color="#D0D0D0")
+        self.v_lbl_4.pack(side="left")
+        self.v_lbl_total = ctk.CTkLabel(self.vram_container, text="0.0 GB (0%)", font=("Consolas", 11), text_color="#D0D0D0")
+        self.v_lbl_total.pack(side="left")
 
         # Layered VRAM Bar
         self.vram_bar_bg = ctk.CTkFrame(self.sidebar, width=200, height=8, fg_color="#10141B", corner_radius=4)
@@ -644,9 +661,11 @@ class JarvisApp(ctk.CTk):
             model_vram = max(0, used - external)
             pct = used / total if total > 0 else 0
             
-            # Format: Vram: 21(16 + 5 ext) / 31.8 GB (X %)
-            vram_text = f"Vram: {used:.1f} ({model_vram:.1f} + {external:.1f} ext) / {total:.1f} GB ({int(pct*100)}%)"
-            self.vram_label.configure(text=vram_text)
+            # Update Granular Labels
+            self.v_lbl_used.configure(text=f"{used:.1f}")
+            self.v_lbl_model.configure(text=f"{model_vram:.1f}")
+            self.v_lbl_ext.configure(text=f"{external:.1f} ext")
+            self.v_lbl_total.configure(text=f"{total:.1f} GB ({int(pct*100)}%)")
             
             # Update Layered Bar
             bar_max_w = 200
