@@ -49,11 +49,21 @@ def print_status():
     
     print("="*LINE_LEN + "\n")
 
-def save_runtime_registry(services, project_root=None):
+def save_runtime_registry(services, project_root=None, baseline_vram=None):
     root = project_root if project_root else get_project_root()
     registry_path = os.path.join(root, "model_calibrations", "runtime_registry.json")
+    
+    # Preserve existing baseline if not provided
+    current_baseline = 0.0
+    if baseline_vram is None and os.path.exists(registry_path):
+        try:
+            with open(registry_path, "r") as f:
+                current_baseline = json.load(f).get("system_baseline_vram", 0.0)
+        except: pass
+
     data = {
         "active_loadout": services,
+        "system_baseline_vram": baseline_vram if baseline_vram is not None else current_baseline,
         "last_updated": time.strftime("%Y-%m-%d %H:%M:%S")
     }
     with open(registry_path, "w", encoding="utf-8") as f:
@@ -146,16 +156,14 @@ def apply_loadout(name, loud=False, soft=False):
 
             active_services.append(svc_entry)
     
-    # Save registry IMMEDIATELY so UI shows "STARTUP" for all models
-    save_runtime_registry(active_services, project_root)
-
-    # 3. Surgical Purge
+    # 3. Surgical Purge and Baseline Capture
+    baseline_vram = None
     if not soft:
         logger.warning("Performing strict global purge...")
         kill_all_jarvis_services()
-        time.sleep(1)
+        time.sleep(1.5)
         baseline_vram = get_gpu_vram_usage()
-        logger.info(f"📉 Baseline VRAM: {baseline_vram:.1f} GB")
+        logger.info(f"📉 External VRAM Baseline: {baseline_vram:.1f} GB")
     else:
         logger.info("Soft switch: Purging only replaced service types...")
         stt_ports = list(cfg['stt_loadout'].values())
@@ -163,6 +171,9 @@ def apply_loadout(name, loud=False, soft=False):
         vllm_port = cfg['ports'].get('vllm')
         from utils.infra import kill_jarvis_ports
         kill_jarvis_ports(stt_ports + tts_ports + ([vllm_port] if vllm_port else []))
+
+    # Save registry IMMEDIATELY so UI shows "STARTUP" for all models
+    save_runtime_registry(active_services, project_root, baseline_vram=baseline_vram)
 
     # 4. Service Startup with Lifecycle Headers
     python_exe = resolve_path(cfg['paths']['venv_python'])
@@ -298,14 +309,11 @@ def kill_loadout(target):
     cfg = load_config()
     if target == "all":
         kill_all_jarvis_services()
-        # Clear registry
-        registry_path = os.path.join(get_project_root(), "model_calibrations", "runtime_registry.json")
-        if os.path.exists(registry_path): 
-            try:
-                os.remove(registry_path)
-                logger.info("🗑️ Cleared runtime registry.")
-            except Exception as e:
-                logger.error(f"Failed to clear registry: {e}")
+        time.sleep(1.0)
+        baseline = get_gpu_vram_usage()
+        # Save an empty registry with the new baseline
+        save_runtime_registry([], baseline_vram=baseline)
+        logger.info(f"🗑️ Cleared runtime registry. New baseline: {baseline:.1f} GB")
     else:
         # Simple port-based kill for now
         logger.warning(f"Targeted kill for '{target}' not yet updated for Loadout 2.0. Use 'all'.")

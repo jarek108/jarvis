@@ -107,11 +107,14 @@ class JarvisController:
         while self.is_polling:
             try:
                 # 1. Get Physical Health for ACTIVE LOADOUT ONLY (Fast Path)
-                active_models = self.resolver.get_live_models()
-                active_ports = [m['port'] for m in active_models]
+                registry_data = self.resolver.get_live_models()
+                active_models = registry_data.get("models", [])
+                external_vram = registry_data.get("baseline", 0.0)
+                
+                active_ports = [m['port'] for m in active_models if m.get('port')]
                 
                 # Map ports to log paths for error detection
-                log_map = {m['port']: m['log_path'] for m in active_models if m.get('log_path')}
+                log_map = {m['port']: m['log_path'] for m in active_models if m.get('log_path') and m.get('port')}
                 self.health_state = get_system_health(ports=active_ports, log_paths=log_map)
                 
                 # 2. Get Hardware Metrics
@@ -127,7 +130,7 @@ class JarvisController:
                     "health": self.health_state, 
                     "runnability": self.runnability,
                     "active_models": active_models,
-                    "vram": {"used": vram_used, "total": vram_total}
+                    "vram": {"used": vram_used, "total": vram_total, "external": external_vram}
                 })
             except Exception as e:
                 logger.error(f"Status Polling Error: {e}")
@@ -400,8 +403,22 @@ class JarvisApp(ctk.CTk):
         self.loadout_opt.pack(pady=(0, 10), padx=10)
 
         # VRAM Monitor
-        self.vram_label = ctk.CTkLabel(self.sidebar, text="VRAM: 0.0 / 0.0 GB", font=("Consolas", 11), text_color="#D0D0D0")
-        self.vram_label.pack(pady=(5, 0))
+        self.vram_container = ctk.CTkFrame(self.sidebar, fg_color="transparent")
+        self.vram_container.pack(pady=(5, 0))
+        
+        self.vram_lbl_prefix = ctk.CTkLabel(self.vram_container, text="VRAM: ", font=("Consolas", 11), text_color="#D0D0D0")
+        self.vram_lbl_prefix.pack(side="left")
+        self.vram_lbl_model = ctk.CTkLabel(self.vram_container, text="0.0", font=("Consolas", 11, "bold"), text_color="#FFFFFF")
+        self.vram_lbl_model.pack(side="left")
+        self.vram_lbl_plus = ctk.CTkLabel(self.vram_container, text=" + ", font=("Consolas", 11), text_color="#D0D0D0")
+        self.vram_lbl_plus.pack(side="left")
+        self.vram_lbl_ext = ctk.CTkLabel(self.vram_container, text="0.0", font=("Consolas", 11, "bold"), text_color=WARNING_COLOR)
+        self.vram_lbl_ext.pack(side="left")
+        self.vram_lbl_ext_tag = ctk.CTkLabel(self.vram_container, text="(ext)", font=("Consolas", 9), text_color="#B0B0B0")
+        self.vram_lbl_ext_tag.pack(side="left")
+        self.vram_lbl_total = ctk.CTkLabel(self.vram_container, text=" / 0.0 GB", font=("Consolas", 11), text_color="#D0D0D0")
+        self.vram_lbl_total.pack(side="left")
+
         self.vram_bar = ctk.CTkProgressBar(self.sidebar, width=200, height=8, fg_color="#10141B", progress_color=ACCENT_COLOR)
         self.vram_bar.pack(pady=(2, 20))
         self.vram_bar.set(0)
@@ -614,9 +631,14 @@ class JarvisApp(ctk.CTk):
     def update_health_ui(self, health, runnability, active_models=None, vram=None):
         # 1. Update VRAM Monitor
         if vram:
-            used, total = vram['used'], vram['total']
+            used, total, external = vram['used'], vram['total'], vram.get('external', 0.0)
+            model_vram = max(0, used - external)
             pct = used / total if total > 0 else 0
-            self.vram_label.configure(text=f"VRAM: {used:.1f} / {total:.1f} GB ({int(pct*100)}%)")
+            
+            self.vram_lbl_model.configure(text=f"{model_vram:.1f}")
+            self.vram_lbl_ext.configure(text=f"{external:.1f}")
+            self.vram_lbl_total.configure(text=f" / {total:.1f} GB ({int(pct*100)}%)")
+            
             self.vram_bar.set(pct)
             # Dynamic bar color
             if pct > 0.9: self.vram_bar.configure(progress_color=ERROR_COLOR)

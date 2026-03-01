@@ -39,23 +39,24 @@ class PipelineResolver:
 
     def get_live_models(self):
         if not os.path.exists(self.registry_path):
-            return []
+            return {"models": [], "baseline": 0.0}
         try:
             with open(self.registry_path, "r", encoding="utf-8") as f:
                 content = f.read().strip()
-                if not content: return []
+                if not content: return {"models": [], "baseline": 0.0}
                 data = json.loads(content)
                 models = data.get("active_loadout", [])
+                baseline = data.get("system_baseline_vram", 0.0)
                 for m in models:
                     try:
                         m['capabilities'] = self.get_model_capabilities(m['id'], m['engine'])
                     except Exception as e:
                         logger.error(f"Error getting caps for {m['id']}: {e}")
                         m['capabilities'] = []
-                return models
+                return {"models": models, "baseline": baseline}
         except Exception as e:
             logger.error(f"Error reading registry: {e}")
-            return []
+            return {"models": [], "baseline": 0.0}
 
     def get_model_capabilities(self, model_id, engine):
         """Looks up capabilities in the calibration registry with lenient matching."""
