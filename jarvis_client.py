@@ -494,12 +494,11 @@ class JarvisApp(ctk.CTk):
             logger.info(f"Loadout '{val}' is already active. No action taken.")
             return
 
-        self.transition_lock = True # Prevent background polling from clearing UI
-        self.controller.trigger_loadout_change(val)
-        self.selected_mid = None # Reset selection
+        # 2. Instant UI Refresh (PRIORITY: Before backend starts)
+        self.transition_lock = True 
+        self.selected_mid = None 
         self.switch_to_terminal()
         
-        # 2. Instant UI Refresh: Populate models in STARTUP state immediately
         # Clear existing widgets
         for widget in self.health_frame.winfo_children():
             widget.destroy()
@@ -522,12 +521,9 @@ class JarvisApp(ctk.CTk):
                     for i, m_str in enumerate(model_strings):
                         m_data = parse_model_string(m_str)
                         if m_data:
-                            # Use unique mock ports to avoid collision in the status dict
                             mock_port = -1 - i
                             instant_models.append({
-                                "id": m_data['id'],
-                                "engine": m_data['engine'],
-                                "params": m_data['params'],
+                                "id": m_data['id'], "engine": m_data['engine'], "params": m_data['params'],
                                 "port": mock_port,
                                 "capabilities": self.controller.resolver.get_model_capabilities(m_data['id'], m_data['engine'])
                             })
@@ -535,9 +531,13 @@ class JarvisApp(ctk.CTk):
                     
                     # Force immediate UI render with instant models
                     self.update_health_ui(instant_health, {"runnable": False, "errors": ["Loading..."]}, active_models=instant_models)
+                    # FORCE DRAW before proceeding to backend
+                    self.update() 
             except Exception as e:
                 logger.error(f"Instant UI refresh failed: {e}")
 
+        # 3. Trigger Backend Change
+        self.controller.trigger_loadout_change(val)
         self.update_graph_view()
 
     def update_graph_view(self):
