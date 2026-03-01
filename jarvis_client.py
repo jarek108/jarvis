@@ -60,10 +60,10 @@ class JarvisController:
         self.load_checkpoint()
         
         # Force system state to match UI "NONE" state
-        # Capture current VRAM as initial baseline and seed a fresh registry
-        initial_baseline = utils.get_gpu_vram_usage()
+        # Capture current VRAM as initial external and seed a fresh registry
+        initial_external = utils.get_gpu_vram_usage()
         from manage_loadout import save_runtime_registry
-        save_runtime_registry([], baseline_vram=initial_baseline)
+        save_runtime_registry([], external_vram=initial_external)
             
         def init_cleanup():
             self.ui_queue.put({"type": "log", "msg": "🧹 Cleaning up previous session state...", "tag": "system"})
@@ -108,7 +108,7 @@ class JarvisController:
                 # 1. Get Physical Health for ACTIVE LOADOUT ONLY (Fast Path)
                 registry_data = self.resolver.get_live_models()
                 active_models = registry_data.get("models", [])
-                external_vram = registry_data.get("baseline", 0.0)
+                system_external_vram = registry_data.get("external", 0.0)
                 
                 active_ports = [m['port'] for m in active_models if m.get('port')]
                 
@@ -129,7 +129,7 @@ class JarvisController:
                     "health": self.health_state, 
                     "runnability": self.runnability,
                     "active_models": active_models,
-                    "vram": {"used": vram_used, "total": vram_total, "external": external_vram}
+                    "vram": {"used": vram_used, "total": vram_total, "external": system_external_vram}
                 })
             except Exception as e:
                 logger.error(f"Status Polling Error: {e}")
