@@ -122,16 +122,27 @@ def apply_loadout(name, loud=False, soft=False):
                 "params": params, "log_path": log_path, "type": stype
             }
             
-            # Pre-calculate required GB for VLM/LLM
-            if engine == "vllm":
-                total_vram = get_gpu_total_vram()
-                base_gb, cost_10k = get_model_calibration(sid, engine="vllm")
-                num_ctx = params.get('num_ctx') or params.get('max_model_len') or 16384
-                if base_gb is not None:
-                    svc_entry['required_gb'] = round(base_gb + ((num_ctx / 10000.0) * cost_10k), 2)
+            # Pre-calculate required GB for all engines
+            total_vram = get_gpu_total_vram()
+            base_gb, cost_10k = get_model_calibration(sid, engine=engine)
+            
+            if base_gb is not None:
+                # Calculate based on params or defaults
+                if engine in ["vllm", "ollama"]:
+                    num_ctx = params.get('num_ctx') or params.get('max_model_len') or 8192
+                    svc_entry['required_gb'] = round(base_gb + ((num_ctx / 10000.0) * (cost_10k or 0)), 2)
                 else:
+                    svc_entry['required_gb'] = round(base_gb, 2)
+            else:
+                # Fallback for uncalibrated models
+                if engine == "vllm":
                     vllm_util = params.get('gpu_memory_utilization', 0.4)
                     svc_entry['required_gb'] = round(vllm_util * total_vram, 2)
+                elif engine == "native":
+                    # Heuristic for Whisper
+                    if "tiny" in sid: svc_entry['required_gb'] = 0.5
+                    elif "base" in sid: svc_entry['required_gb'] = 1.0
+                    elif "large" in sid: svc_entry['required_gb'] = 3.5
 
             active_services.append(svc_entry)
     
