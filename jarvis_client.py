@@ -420,9 +420,13 @@ class JarvisApp(ctk.CTk):
         self.vram_lbl_total = ctk.CTkLabel(self.vram_container, text=" / 0.0 GB", font=("Consolas", 11), text_color="#D0D0D0")
         self.vram_lbl_total.pack(side="left")
 
-        self.vram_bar = ctk.CTkProgressBar(self.sidebar, width=200, height=8, fg_color="#10141B", progress_color=ACCENT_COLOR)
-        self.vram_bar.pack(pady=(2, 20))
-        self.vram_bar.set(0)
+        # Layered VRAM Bar
+        self.vram_bar_bg = ctk.CTkFrame(self.sidebar, width=200, height=8, fg_color="#10141B", corner_radius=4)
+        self.vram_bar_bg.pack(pady=(2, 20))
+        self.vram_bar_ext = ctk.CTkFrame(self.vram_bar_bg, width=0, height=8, fg_color=WARNING_COLOR, corner_radius=4)
+        self.vram_bar_ext.place(x=0, y=0)
+        self.vram_bar_model = ctk.CTkFrame(self.vram_bar_bg, width=0, height=8, fg_color=ACCENT_COLOR, corner_radius=4)
+        self.vram_bar_model.place(x=0, y=0)
 
         ctk.CTkLabel(self.sidebar, text="ACTIVE MODELS", font=("Impact", 16), text_color="#E0E0E0").pack(pady=(10, 5))
         self.health_frame = ctk.CTkFrame(self.sidebar, fg_color="transparent")
@@ -653,11 +657,23 @@ class JarvisApp(ctk.CTk):
             self.vram_lbl_ext.configure(text=f"{external:.1f}")
             self.vram_lbl_total.configure(text=f" / {total:.1f} GB ({int(pct*100)}%)")
             
-            self.vram_bar.set(pct)
-            # Dynamic bar color
-            if pct > 0.9: self.vram_bar.configure(progress_color=ERROR_COLOR)
-            elif pct > 0.75: self.vram_bar.configure(progress_color=WARNING_COLOR)
-            else: self.vram_bar.configure(progress_color=ACCENT_COLOR)
+            # Update Layered Bar
+            bar_max_w = 200
+            ext_w = (external / total) * bar_max_w if total > 0 else 0
+            model_w = (model_vram / total) * bar_max_w if total > 0 else 0
+            
+            # Limit widths to bar bounds
+            ext_w = min(bar_max_w, ext_w)
+            model_w = min(bar_max_w - ext_w, model_w)
+            
+            self.vram_bar_ext.configure(width=ext_w)
+            self.vram_bar_model.place(x=ext_w, y=0) # Shift model bar to start after external
+            self.vram_bar_model.configure(width=model_w)
+            
+            # Dynamic bar color for model usage if very high
+            if pct > 0.95: self.vram_bar_model.configure(fg_color=ERROR_COLOR)
+            elif pct > 0.85: self.vram_bar_model.configure(fg_color=WARNING_COLOR)
+            else: self.vram_bar_model.configure(fg_color=ACCENT_COLOR)
 
         # 2. Update Service Sidebar (Precise Model List)
         models_to_render = active_models if active_models else []
