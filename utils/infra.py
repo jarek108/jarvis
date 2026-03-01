@@ -161,7 +161,9 @@ def check_log_for_errors(log_path):
         "RuntimeError:",
         "AttributeError:",
         "ModuleNotFoundError:",
-        "ImportError:"
+        "ImportError:",
+        "failed to connect to the docker API",
+        "is the docker daemon running"
     ]
     
     try:

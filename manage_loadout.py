@@ -202,6 +202,14 @@ def apply_loadout(name, loud=False, soft=False):
             canonical_id = resolve_canonical_id(sid, engine="vllm")
             num_ctx = params.get('num_ctx') or params.get('max_model_len') or 16384
             
+            # Verify Docker Daemon
+            from utils.infra import is_docker_daemon_running
+            if not is_docker_daemon_running():
+                with open(log_path, "a", encoding="utf-8") as f_err:
+                    f_err.write("ERROR: Docker daemon is not running. Cannot start vLLM.\n")
+                logger.error(f"❌ Docker daemon is down. Skipping vLLM: {sid}")
+                continue
+
             # Calculate utilization for docker command
             total_vram = get_gpu_total_vram()
             if 'required_gb' in svc:
