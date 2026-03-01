@@ -259,26 +259,43 @@ class JarvisApp(ctk.CTk):
             
             if mid not in self.service_widgets:
                 f = ctk.CTkFrame(self.health_frame, fg_color="#12161E", corner_radius=6)
-                f.pack(fill="x", pady=4, padx=5)
+                f.pack(fill="x", pady=6, padx=5)
                 
                 # Header: Lamp + ID
                 header = ctk.CTkFrame(f, fg_color="transparent")
-                header.pack(fill="x", padx=5, pady=(5, 0))
+                header.pack(fill="x", padx=8, pady=(8, 0))
                 lamp = ctk.CTkLabel(header, text="●", font=("Arial", 18))
-                lamp.pack(side="left", padx=2)
-                name = ctk.CTkLabel(header, text=mid, font=("Consolas", 12, "bold"), anchor="w", justify="left")
+                lamp.pack(side="left", padx=(0, 5))
+                name = ctk.CTkLabel(header, text=mid, font=("Consolas", 12, "bold"), anchor="w", justify="left", text_color="#FFFFFF")
                 name.pack(side="left", fill="x", expand=True)
                 
-                # Subtext: Engine + Caps
-                caps_str = " | ".join(m.get('capabilities', []))
-                subtext = ctk.CTkLabel(f, text=f"{m['engine'].upper()} • {caps_str}", font=("Consolas", 10), text_color=GRAY_COLOR, anchor="w")
-                subtext.pack(fill="x", padx=25, pady=(0, 2))
+                # Capabilities: IN: ... | OUT: ...
+                caps = m.get('capabilities', [])
+                inputs = [c.replace("_in", "") for c in caps if c.endswith("_in")]
+                outputs = [c.replace("_out", "") for c in caps if c.endswith("_out")]
                 
-                # Params: num_ctx, etc.
-                if m.get('params'):
-                    p_str = " ".join([f"{k}:{v}" for k, v in m['params'].items()])
-                    params = ctk.CTkLabel(f, text=p_str, font=("Consolas", 9), text_color="#5A6070", anchor="w", wraplength=180)
-                    params.pack(fill="x", padx=25, pady=(0, 5))
+                cap_text = f"IN: {', '.join(inputs)} | OUT: {', '.join(outputs)}"
+                subtext = ctk.CTkLabel(f, text=cap_text, font=("Consolas", 10), text_color="#A0A0A0", anchor="w")
+                subtext.pack(fill="x", padx=28, pady=(0, 2))
+                
+                # Streaming Status
+                is_llm = m['engine'] in ['ollama', 'vllm']
+                streaming = m.get('params', {}).get('stream', True if is_llm else False)
+                stream_text = "STREAMING: ON" if streaming else "STREAMING: OFF"
+                stream_label = ctk.CTkLabel(f, text=f"{m['engine'].upper()} • {stream_text}", font=("Consolas", 10, "italic"), text_color="#707070", anchor="w")
+                stream_label.pack(fill="x", padx=28, pady=(0, 2))
+
+                # Params (Filtered)
+                params_dict = m.get('params', {}).copy()
+                params_dict.pop('device', None)
+                params_dict.pop('stream', None)
+                
+                if params_dict:
+                    p_str = " ".join([f"{k}:{v}" for k, v in params_dict.items()])
+                    params = ctk.CTkLabel(f, text=p_str, font=("Consolas", 9), text_color="#808080", anchor="w", wraplength=180)
+                    params.pack(fill="x", padx=28, pady=(0, 8))
+                else:
+                    ctk.CTkLabel(f, text="", height=4).pack() # Spacer
                 
                 self.service_widgets[mid] = {"lamp": lamp, "frame": f}
             
