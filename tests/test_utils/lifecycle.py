@@ -302,7 +302,7 @@ class LifecycleManager:
 
     def reconcile(self, domain):
         ensure_utf8_output()
-        vram_background = utils.get_gpu_vram_usage()
+        vram_external = utils.get_gpu_vram_usage()
         prior_vram = 0.0
         
         # 1. Bulk health check (ONCE)
@@ -314,7 +314,7 @@ class LifecycleManager:
                 prior_vram = utils.get_gpu_vram_usage()
                 health_snapshot = asyncio.run(utils.get_system_health_async())
             else:
-                prior_vram = vram_background
+                prior_vram = vram_external
 
         required_services = self.get_required_services(domain)
         required_ports = {s['port'] for s in required_services}
@@ -344,7 +344,7 @@ class LifecycleManager:
                 if p in health_snapshot: health_snapshot[p]['status'] = 'OFF'
 
         setup_start = time.perf_counter()
-        if not self.stub_mode and not self.check_availability(): return -1, prior_vram, vram_background, 0.0
+        if not self.stub_mode and not self.check_availability(): return -1, prior_vram, vram_external, 0.0
 
         log_dir = self.session_dir if self.session_dir else os.path.join(self.project_root, "tests", "artifacts", "logs")
         os.makedirs(log_dir, exist_ok=True)
@@ -359,10 +359,17 @@ class LifecycleManager:
             f_log = open(log_path, "w")
             # --- ENGINE DIFFERENTIATION ---
             if s['type'] == "llm" and self.cat['llm'] and self.cat['llm']['engine'] == "vllm":
-                # For vLLM (Docker), we use a detached run. subprocess.run is fine here.
-                # We also need to ensure the -d flag is present (it is in get_required_services)
+                # For vLLM (Docker), we use a detached run. 
                 subprocess.run(s['cmd'], stdout=f_log, stderr=f_log)
-                self.owned_processes.append((s['port'], None))
+                
+                # PIPE DOCKER LOGS TO FILE IN BACKGROUND (same as manage_loadout)
+                f_log_append = open(log_path, "a")
+                tailer = subprocess.Popen(
+                    ["docker", "logs", "-f", "vllm-server"], 
+                    stdout=f_log_append, stderr=f_log_append, 
+                    creationflags=0x08000000 if os.name == 'nt' else 0
+                )
+                self.owned_processes.append((s['port'], tailer))
             else:
                 # Native services (STT/TTS/Ollama) need persistent process handles
                 proc = utils.start_server(s['cmd'], log_file=f_log)
@@ -383,7 +390,7 @@ class LifecycleManager:
                 utils.warmup_llm(model, visual=(domain == "vlm"), engine=engine)
         
         vram_static = utils.get_gpu_vram_usage()
-        return time.perf_counter() - setup_start, prior_vram, vram_background, vram_static
+        return time.perf_counter() - setup_start, prior_vram, vram_external, vram_static
 
     def cleanup(self):
         start_c = time.perf_counter()
@@ -433,7 +440,7 @@ def run_test_lifecycle(domain, setup_name, models, purge_on_entry, purge_on_exit
     with redirect_stdout(f):
         try:
             if on_phase: on_phase("setup")
-            setup_time, prior_vram, vram_background, vram_static = manager.reconcile(domain)
+            setup_time, prior_vram, vram_external, vram_static = manager.reconcile(domain)
             
             if on_ready: 
                 try: on_ready(manager)
@@ -447,12 +454,12 @@ def run_test_lifecycle(domain, setup_name, models, purge_on_entry, purge_on_exit
                     err_msg = f"Missing model files: {', '.join(manager.missing_models)}"
                     status = "MISSING"
                 
-                res_obj = {"name": "SETUP", "status": status, "duration": 0, "result": err_msg, "mode": domain.upper(), "vram_prior": prior_vram, "vram_background": vram_background, "vram_static": vram_static, "llm_model": model_display, "stt_model": model_display, "tts_model": model_display}
+                res_obj = {"name": "SETUP", "status": status, "duration": 0, "result": err_msg, "mode": domain.upper(), "vram_prior": prior_vram, "vram_external": vram_external, "vram_static": vram_static, "llm_model": model_display, "stt_model": model_display, "tts_model": model_display}
                 if reporter: reporter.report(res_obj)
                 else: 
                     from .reporting import report_scenario_result
                     report_scenario_result(res_obj)
-                return 0, 0, prior_vram, model_display, vram_background, vram_static
+                return 0, 0, prior_vram, model_display, vram_external, vram_static
             
             if on_phase: on_phase("execution")
             test_func()
@@ -463,12 +470,12 @@ def run_test_lifecycle(domain, setup_name, models, purge_on_entry, purge_on_exit
             with open(debug_log_path, "w", encoding="utf-8") as lf:
                 lf.write(f.getvalue())
                 
-            return setup_time, cleanup_time, prior_vram, model_display, vram_background, vram_static
+            return setup_time, cleanup_time, prior_vram, model_display, vram_external, vram_static
         except Exception as e:
             err_msg = str(e); status = "FAILED"
             if "NO-DOCKER" in err_msg: status = "NO-DOCKER"
             elif "NO-OLLAMA" in err_msg: status = "NO-OLLAMA"
-            res_obj = {"name": "LIFECYCLE", "status": status, "duration": 0, "result": err_msg, "mode": domain.upper(), "vram_prior": 0.0, "vram_background": 0.0, "vram_static": 0.0, "llm_model": model_display, "stt_model": model_display, "tts_model": model_display}
+            res_obj = {"name": "LIFECYCLE", "status": status, "duration": 0, "result": err_msg, "mode": domain.upper(), "vram_prior": 0.0, "vram_external": 0.0, "vram_static": 0.0, "llm_model": model_display, "stt_model": model_display, "tts_model": model_display}
             
             if reporter: reporter.report(res_obj)
             else:
