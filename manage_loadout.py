@@ -72,54 +72,77 @@ def apply_loadout(name, loud=False, soft=False):
 
     logger.info(f"Applying Loadout: {target.get('description', name)}")
     
+    # 1. Update Registry EARLY so UI reflects INTENT immediately
+    active_services = []
+    for svc in target.get('services', []):
+        sid = svc['id']
+        engine = svc['engine']
+        params = svc.get('params', {})
+        # Pre-resolve ports for the registry
+        if engine == "ollama": port = cfg['ports']['ollama']
+        elif engine == "vllm": port = cfg['ports'].get('vllm', 8300)
+        elif engine == "native":
+            if "whisper" in sid.lower(): port = cfg['stt_loadout'].get(sid)
+            elif "chatterbox" in sid.lower(): 
+                variant = sid.replace("chatterbox-", "")
+                port = cfg['tts_loadout'].get(sid) or cfg['tts_loadout'].get(variant)
+            else: port = None
+        else: port = None
+        
+        if port:
+            active_services.append({"id": sid, "engine": engine, "port": port, "params": params})
+    
+    save_runtime_registry(active_services, project_root)
+
+    # 2. Surgical Purge
     if not soft:
-        logger.warning("Performng strict global purge...")
+        logger.warning("Performing strict global purge...")
         kill_all_jarvis_services()
         time.sleep(1)
         baseline_vram = get_gpu_vram_usage()
         logger.info(f"📉 Baseline VRAM: {baseline_vram:.1f} GB")
+    else:
+        logger.info("Soft switch: Purging only replaced service types...")
+        # Kill all non-Ollama Jarvis services to ensure no ghosts/zombies
+        stt_ports = list(cfg['stt_loadout'].values())
+        tts_ports = list(cfg['tts_loadout'].values())
+        vllm_port = cfg['ports'].get('vllm')
+        
+        from utils.infra import kill_jarvis_ports
+        kill_jarvis_ports(stt_ports + tts_ports + ([vllm_port] if vllm_port else []))
 
     python_exe = resolve_path(cfg['paths']['venv_python'])
     stt_script = os.path.join(project_root, "servers", "stt_server.py")
     tts_script = os.path.join(project_root, "servers", "tts_server.py")
     
-    active_services = []
-
-    for svc in target.get('services', []):
+    for svc in active_services:
         sid = svc['id']
         engine = svc['engine']
-        params = svc.get('params', {})
+        port = svc['port']
+        params = svc['params']
         
         logger.info(f"⚙️ Setting up service: {sid} ({engine})")
         
         if engine == "ollama":
-            port = cfg['ports']['ollama']
             if not wait_for_port(port, timeout=1):
                 logger.info(f"🚀 Starting Ollama...")
                 os.environ['OLLAMA_MODELS'] = get_ollama_models()
                 start_server(["ollama", "serve"], loud=loud)
                 wait_for_port(port)
-            active_services.append({"id": sid, "engine": engine, "port": port, "params": params})
 
         elif engine == "vllm":
-            port = cfg['ports'].get('vllm', 8300)
             total_vram = get_gpu_total_vram()
-            
-            # Resolve canonical ID for external command
             from utils.config import resolve_canonical_id
             canonical_id = resolve_canonical_id(sid, engine="vllm")
             
-            # Smart Allocator
             num_ctx = params.get('num_ctx') or params.get('max_model_len') or 16384
             base_gb, cost_10k = get_model_calibration(sid, engine="vllm")
             
             if base_gb is not None:
                 required_gb = base_gb + ((num_ctx / 10000.0) * cost_10k)
                 vllm_util = (required_gb / total_vram) + 0.05
-                logger.info(f"🧠 SmartAllocator: {sid} needs {required_gb:.2f}GB for {num_ctx} ctx. Util: {vllm_util:.3f}")
             else:
                 vllm_util = params.get('gpu_memory_utilization', 0.4)
-                logger.warning(f"⚠️ No calibration for {sid}. Using default util: {vllm_util}")
 
             vllm_util = min(0.95, max(0.1, vllm_util))
             
@@ -140,38 +163,25 @@ def apply_loadout(name, loud=False, soft=False):
             ]
             subprocess.run(cmd, capture_output=True)
             wait_for_port(port, timeout=300)
-            active_services.append({"id": sid, "engine": engine, "port": port, "params": params})
 
         elif engine == "native":
-            # Determine if STT or TTS
             if "whisper" in sid.lower():
-                port = cfg['stt_loadout'].get(sid)
-                if not port: logger.error(f"No port mapping for STT: {sid}"); continue
-                
                 logger.info(f"🚀 Starting STT Server [{sid}]...")
                 os.environ['HF_HOME'] = get_hf_home()
                 cmd = [python_exe, stt_script, "--port", str(port), "--model", sid]
-                # Add params as flags
                 for k, v in params.items(): cmd.extend([f"--{k}", str(v)])
                 start_server(cmd, loud=loud)
                 wait_for_port(port)
-                active_services.append({"id": sid, "engine": engine, "port": port, "params": params})
                 
             elif "chatterbox" in sid.lower():
-                # Extract variant (chatterbox-multilingual -> multilingual)
                 variant = sid.replace("chatterbox-", "")
-                port = cfg['tts_loadout'].get(sid) or cfg['tts_loadout'].get(variant)
-                if not port: logger.error(f"No port mapping for TTS: {sid}"); continue
-                
                 logger.info(f"🚀 Starting TTS Server [{sid}]...")
                 os.environ['HF_HOME'] = get_hf_home()
                 cmd = [python_exe, tts_script, "--port", str(port), "--variant", variant]
                 for k, v in params.items(): cmd.extend([f"--{k}", str(v)])
                 start_server(cmd, loud=loud)
                 wait_for_port(port, timeout=120)
-                active_services.append({"id": sid, "engine": engine, "port": port, "params": params})
 
-    save_runtime_registry(active_services, project_root)
 
 def kill_loadout(target):
     cfg = load_config()
