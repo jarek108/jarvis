@@ -72,42 +72,43 @@ def apply_loadout(name, loud=False, soft=False):
 
     logger.info(f"Applying Loadout: {target.get('description', name)}")
     
-    # 1. Update Registry EARLY so UI reflects INTENT immediately
-    active_services = []
-    server_log_dir = os.path.join(project_root, "logs", "servers")
-    os.makedirs(server_log_dir, exist_ok=True)
+    # 1. Initialize Session Directory
+    session_id = f"RUN_{time.strftime('%Y%m%d_%H%M%S')}"
+    session_dir = os.path.join(project_root, "logs", "sessions", session_id)
+    os.makedirs(session_dir, exist_ok=True)
+    logger.info(f"📁 Initialized Loadout Session: {session_id}")
 
+    # 2. Pre-calculate active_services with ports and per-model session logs
+    active_services = []
     for svc in target.get('services', []):
         sid = svc['id']
         engine = svc['engine']
         params = svc.get('params', {})
-        # Pre-resolve ports and logs for the registry
-        log_path = None
-        if engine == "ollama": 
-            port = cfg['ports']['ollama']
-            from utils.infra import get_ollama_log_path
-            log_path = get_ollama_log_path()
-        elif engine == "vllm": 
-            port = cfg['ports'].get('vllm', 8300)
-            log_path = "DOCKER:vllm-server"
+        
+        # Resolve ports and logs
+        stype = "llm"
+        if engine == "native":
+            stype = "stt" if "whisper" in sid.lower() else "tts"
+            
+        if engine == "ollama": port = cfg['ports']['ollama']
+        elif engine == "vllm": port = cfg['ports'].get('vllm', 8300)
         elif engine == "native":
-            if "whisper" in sid.lower(): port = cfg['stt_loadout'].get(sid)
-            elif "chatterbox" in sid.lower(): 
+            if stype == "stt": port = cfg['stt_loadout'].get(sid)
+            else:
                 variant = sid.replace("chatterbox-", "")
                 port = cfg['tts_loadout'].get(sid) or cfg['tts_loadout'].get(variant)
-            else: port = None
-            if port: log_path = os.path.join(server_log_dir, f"{sid}.log")
         else: port = None
         
         if port:
+            log_path = os.path.join(session_dir, f"svc_{stype}_{sid.replace(':', '-').replace('/', '--')}.log")
             active_services.append({
                 "id": sid, "engine": engine, "port": port, 
-                "params": params, "log_path": log_path
+                "params": params, "log_path": log_path, "type": stype
             })
     
     save_runtime_registry(active_services, project_root)
 
-    # 2. Surgical Purge
+    # 3. Surgical Purge
     if not soft:
         logger.warning("Performing strict global purge...")
         kill_all_jarvis_services()
@@ -116,27 +117,48 @@ def apply_loadout(name, loud=False, soft=False):
         logger.info(f"📉 Baseline VRAM: {baseline_vram:.1f} GB")
     else:
         logger.info("Soft switch: Purging only replaced service types...")
-        # Kill all non-Ollama Jarvis services to ensure no ghosts/zombies
         stt_ports = list(cfg['stt_loadout'].values())
         tts_ports = list(cfg['tts_loadout'].values())
         vllm_port = cfg['ports'].get('vllm')
-        
         from utils.infra import kill_jarvis_ports
         kill_jarvis_ports(stt_ports + tts_ports + ([vllm_port] if vllm_port else []))
 
+    # 4. Service Startup with Lifecycle Headers
     python_exe = resolve_path(cfg['paths']['venv_python'])
     stt_script = os.path.join(project_root, "servers", "stt_server.py")
     tts_script = os.path.join(project_root, "servers", "tts_server.py")
-    
+
     for svc in active_services:
         sid = svc['id']
         engine = svc['engine']
         port = svc['port']
         params = svc['params']
-        log_path = svc.get('log_path')
+        log_path = svc['log_path']
         
         logger.info(f"⚙️ Setting up service: {sid} ({engine})")
         
+        # Initialize Log with Physics Header
+        with open(log_path, "w", encoding="utf-8") as f_head:
+            f_head.write(f"[Lifecycle] Service: {sid}\n")
+            f_head.write(f"[Lifecycle] Engine: {engine}\n")
+            f_head.write(f"[Lifecycle] Port: {port}\n")
+            f_head.write(f"[Lifecycle] Params: {params}\n")
+            
+            if engine == "vllm":
+                total_vram = get_gpu_total_vram()
+                base_gb, cost_10k = get_model_calibration(sid, engine="vllm")
+                num_ctx = params.get('num_ctx') or params.get('max_model_len') or 16384
+                if base_gb is not None:
+                    required_gb = base_gb + ((num_ctx / 10000.0) * cost_10k)
+                    vllm_util = (required_gb / total_vram) + 0.05
+                    svc['required_gb'] = round(required_gb, 2)
+                    f_head.write(f"[Lifecycle] SmartAllocator: {base_gb}GB base + {num_ctx} ctx. Required: {svc['required_gb']}GB. Util: {round(vllm_util, 3)}\n")
+                else:
+                    vllm_util = params.get('gpu_memory_utilization', 0.4)
+                    svc['required_gb'] = round(vllm_util * total_vram, 2)
+                    f_head.write(f"[Lifecycle] WARNING: No calibration found. Using default util: {vllm_util}\n")
+                f_head.write("-" * 40 + "\n\n")
+
         if engine == "ollama":
             if not wait_for_port(port, timeout=1):
                 logger.info(f"🚀 Starting Ollama...")
@@ -145,22 +167,9 @@ def apply_loadout(name, loud=False, soft=False):
                 wait_for_port(port)
 
         elif engine == "vllm":
-            total_vram = get_gpu_total_vram()
             from utils.config import resolve_canonical_id
             canonical_id = resolve_canonical_id(sid, engine="vllm")
-            
             num_ctx = params.get('num_ctx') or params.get('max_model_len') or 16384
-            base_gb, cost_10k = get_model_calibration(sid, engine="vllm")
-            
-            if base_gb is not None:
-                required_gb = base_gb + ((num_ctx / 10000.0) * cost_10k)
-                svc['required_gb'] = round(required_gb, 2) # Save for UI
-                vllm_util = (required_gb / total_vram) + 0.05
-            else:
-                vllm_util = params.get('gpu_memory_utilization', 0.4)
-                svc['required_gb'] = round(vllm_util * total_vram, 2)
-
-            vllm_util = min(0.95, max(0.1, vllm_util))
             
             if is_vllm_docker_running():
                 stop_vllm_docker()
@@ -178,11 +187,18 @@ def apply_loadout(name, loud=False, soft=False):
                 "--max-model-len", str(num_ctx)
             ]
             subprocess.run(cmd, capture_output=True)
+            
+            # PIPE DOCKER LOGS TO FILE IN BACKGROUND
+            log_file = open(log_path, "a", encoding="utf-8")
+            subprocess.Popen(
+                ["docker", "logs", "-f", "vllm-server"], 
+                stdout=log_file, stderr=log_file, 
+                creationflags=0x08000000 if os.name == 'nt' else 0
+            )
             wait_for_port(port, timeout=300)
 
         elif engine == "native":
-            # Redirect logs to file
-            log_file = open(log_path, "w") if log_path else None
+            log_file = open(log_path, "a", encoding="utf-8")
             if "whisper" in sid.lower():
                 logger.info(f"🚀 Starting STT Server [{sid}]...")
                 os.environ['HF_HOME'] = get_hf_home()

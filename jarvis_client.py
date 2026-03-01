@@ -259,10 +259,7 @@ class JarvisApp(ctk.CTk):
             self.terminal.insert("end", f"No log path for {m['id']}\n")
             return
             
-        if log_path.startswith("DOCKER:"):
-            container = log_path.split(":")[1]
-            subprocess.Popen(f'powershell.exe -NoProfile -Command "docker logs -f {container}"', creationflags=subprocess.CREATE_NEW_CONSOLE)
-        elif os.path.exists(log_path):
+        if os.path.exists(log_path):
             os.startfile(log_path)
         else:
             self.terminal.insert("end", f"Log file not found: {log_path}\n")
