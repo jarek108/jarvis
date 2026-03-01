@@ -1,7 +1,7 @@
 name: "base-qwen30-multi"
 description: "High-performance vision-capable loadout using Qwen 30B."
 services:
-  - id: "qwen3-vl:30b-a3b-instruct"
+  - id: "quanttrio--qwen3-vl-30b-a3b-instruct-awq"
     engine: "vllm"
     params:
       num_ctx: 32768

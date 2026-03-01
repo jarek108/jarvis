@@ -163,7 +163,9 @@ def apply_loadout(name, loud=False, soft=False):
             if not wait_for_port(port, timeout=1):
                 logger.info(f"🚀 Starting Ollama...")
                 os.environ['OLLAMA_MODELS'] = get_ollama_models()
-                start_server(["ollama", "serve"], loud=loud)
+                # Redirect Ollama output to its session log
+                log_file = open(log_path, "a", encoding="utf-8")
+                start_server(["ollama", "serve"], loud=loud, log_file=log_file)
                 wait_for_port(port)
 
         elif engine == "vllm":
