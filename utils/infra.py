@@ -254,10 +254,13 @@ def kill_all_jarvis_services():
 
 def stop_vllm_docker():
     try:
+        # Check if container exists (running or stopped)
         res = subprocess.run(["docker", "ps", "-a", "--filter", "name=vllm-server", "--format", "{{.Names}}"], capture_output=True, text=True)
         if "vllm-server" in res.stdout:
-            subprocess.run(["docker", "stop", "vllm-server"], capture_output=True)
-            subprocess.run(["docker", "rm", "vllm-server"], capture_output=True)
+            # Force remove is more reliable for cleanup
+            subprocess.run(["docker", "rm", "-f", "vllm-server"], capture_output=True)
+            # Give Docker a moment to release the namespace
+            time.sleep(1.0)
             return True
     except: pass
     return False

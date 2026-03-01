@@ -223,7 +223,7 @@ class LifecycleManager:
                 vlm_input_dir = os.path.join(self.project_root, "tests", "data")
                 
                 cmd = [
-                    "docker", "run", "--gpus", "all", "--rm",
+                    "docker", "run", "--gpus", "all", "--rm", "-d",
                     "--name", "vllm-server",
                     "-p", f"{vllm_port}:8000", 
                     "-v", f"{hf_cache}:/root/.cache/huggingface", 
@@ -372,9 +372,18 @@ class LifecycleManager:
             spawn_ts = time.strftime("%H%M%S")
             log_path = os.path.join(log_dir, f"svc_{s['type']}_{s['id'].replace(':', '-').replace('/', '--')}_{spawn_ts}.log")
             if self.on_phase: self.on_phase(f"log_path:{s['type']}:{log_path}")
+            
             f_log = open(log_path, "w")
-            proc = utils.start_server(s['cmd'], log_file=f_log)
-            self.owned_processes.append((s['port'], proc))
+            # --- ENGINE DIFFERENTIATION ---
+            if s['type'] == "llm" and self.cat['llm'] and self.cat['llm']['engine'] == "vllm":
+                # For vLLM (Docker), we use a detached run. subprocess.run is fine here.
+                # We also need to ensure the -d flag is present (it is in get_required_services)
+                subprocess.run(s['cmd'], stdout=f_log, stderr=f_log)
+                self.owned_processes.append((s['port'], None))
+            else:
+                # Native services (STT/TTS/Ollama) need persistent process handles
+                proc = utils.start_server(s['cmd'], log_file=f_log)
+                self.owned_processes.append((s['port'], proc))
             
         # 4. Parallel Wait
         if services_to_start:
