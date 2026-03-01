@@ -1,3 +1,5 @@
+--extra-index-url https://download.pytorch.org/whl/cu124
+
 # --- Core Logic & Networking ---
 aiohttp
 fastapi
@@ -15,13 +17,21 @@ Pillow<12.0
 PyAudio
 sounddevice
 soundfile
-numpy
+numpy<1.26.0
 mss
 PyAutoGUI
 pyperclip
 win10toast
 
+# --- PyTorch Stack (Locked to CUDA 12.4) ---
+torch==2.5.1+cu124
+torchvision==0.20.1+cu124
+torchaudio==2.5.1+cu124
+
 # --- Models & Inference ---
 faster_whisper
-chatterbox_tts
 resemble_perth
+
+# Note: chatterbox_tts is excluded from the master list 
+# because it contains a conflicting torch==2.6.0 requirement.
+# It must be installed separately with --no-deps.
