@@ -821,8 +821,19 @@ class JarvisApp(ctk.CTk):
         if runnability.get('runnable'):
             self.record_btn.configure(state="normal", fg_color=ACCENT_COLOR, text="HOLD TO TALK")
         else:
-            err = runnability['errors'][0] if runnability['errors'] else "Offline"
-            self.record_btn.configure(state="disabled", fg_color=GRAY_COLOR, text=f"OFFLINE: {err}")
+            errors = runnability.get('errors', [])
+            if not errors:
+                err_msg = "Offline"
+            elif len(errors) == 1:
+                err_msg = errors[0]
+            else:
+                # Group common errors for brevity
+                if any("Resolution Error" in e or "ARCH_MISMATCH" in e for e in errors):
+                    err_msg = "Arch Mismatch / Unbound Nodes"
+                else:
+                    err_msg = f"{len(errors)} Services Failed"
+            
+            self.record_btn.configure(state="disabled", fg_color=GRAY_COLOR, text=f"OFFLINE: {err_msg}")
 
     def poll_queue(self):
         while not self.queue.empty():
