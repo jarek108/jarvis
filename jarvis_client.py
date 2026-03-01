@@ -88,11 +88,13 @@ class JarvisController:
     def _status_polling_loop(self):
         while self.is_polling:
             try:
-                # 1. Get Physical Health
-                self.health_state = get_system_health()
+                # 1. Get Physical Health for ACTIVE LOADOUT ONLY (Fast Path)
+                active_models = self.resolver.get_live_models()
+                active_ports = [m['port'] for m in active_models]
+                self.health_state = get_system_health(ports=active_ports)
                 
-                # 2. Check Logical Runnability
-                self.runnability = self.resolver.check_runnability(self.current_pipeline, self.current_strategy)
+                # 2. Check Logical Runnability (Passing existing health to avoid double-poll)
+                self.runnability = self.resolver.check_runnability(self.current_pipeline, self.current_strategy, external_health=self.health_state)
                 
                 # 3. Update UI
                 self.ui_queue.put({"type": "health_update", "health": self.health_state, "runnability": self.runnability})

@@ -60,9 +60,9 @@ def get_service_status(port: int):
     except:
         return "OFF", None
 
-def get_system_health():
-    """Consolidated synchronous health check for all services."""
-    health_raw = asyncio.run(get_system_health_async())
+def get_system_health(ports=None):
+    """Consolidated synchronous health check for all or specific services."""
+    health_raw = asyncio.run(get_system_health_async(ports=ports))
     cfg = load_config()
     health = {}
     
@@ -74,6 +74,10 @@ def get_system_health():
     
     for name, port in cfg['stt_loadout'].items(): port_map[port] = {"label": name, "type": "stt"}
     for name, port in cfg['tts_loadout'].items(): port_map[port] = {"label": name, "type": "tts"}
+
+    # Filter port_map if specific ports were requested
+    if ports:
+        port_map = {p: meta for p, meta in port_map.items() if p in ports}
 
     for port, meta in port_map.items():
         res = health_raw.get(port, {"status": "OFF", "info": None})
@@ -117,11 +121,11 @@ async def get_service_status_async(session, port: int):
     except:
         return port, "OFF", None
 
-async def get_system_health_async():
-    """Polls all Jarvis services in parallel."""
-    ports = get_jarvis_ports()
+async def get_system_health_async(ports=None):
+    """Polls specified or all Jarvis services in parallel."""
+    target_ports = ports if ports else get_jarvis_ports()
     async with aiohttp.ClientSession() as session:
-        tasks = [get_service_status_async(session, p) for p in ports]
+        tasks = [get_service_status_async(session, p) for p in target_ports]
         results = await asyncio.gather(*tasks)
     return {r[0]: {"status": r[1], "info": r[2]} for r in results}
 

@@ -126,7 +126,7 @@ class PipelineResolver:
         logger.info(f"✅ Resolved '{pipeline_name}' ({'AUTO' if not strategy else strategy_name})")
         return bound_nodes
 
-    def check_runnability(self, pipeline_name, strategy_name=None):
+    def check_runnability(self, pipeline_name, strategy_name=None, external_health=None):
         """
         Proactively verifies if a pipeline is runnable based on live system health.
         Returns: {runnable: bool, errors: list, map: dict}
@@ -150,8 +150,11 @@ class PipelineResolver:
             return report
 
         # 3. Check Live Health for all bound ports
-        from .infra import get_system_health
-        health = get_system_health()
+        if external_health:
+            health = external_health
+        else:
+            from .infra import get_system_health
+            health = get_system_health()
         
         for nid, node in bound_graph.items():
             role = node.get('role', '').lower()
