@@ -105,7 +105,7 @@ class PipelineResolver:
         """
         pipeline = self.load_yaml(pipeline_name)
         strategy = self.load_yaml(strategy_name, folder=self.strategies_dir) if strategy_name else None
-        live_models = self.get_live_models()
+        live_models = self.get_live_models().get("models", [])
         
         bound_nodes = {}
         # Identify entry points (input or source nodes)
