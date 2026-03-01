@@ -91,7 +91,10 @@ class JarvisController:
                 # 1. Get Physical Health for ACTIVE LOADOUT ONLY (Fast Path)
                 active_models = self.resolver.get_live_models()
                 active_ports = [m['port'] for m in active_models]
-                self.health_state = get_system_health(ports=active_ports)
+                
+                # Map ports to log paths for error detection
+                log_map = {m['port']: m['log_path'] for m in active_models if m.get('log_path')}
+                self.health_state = get_system_health(ports=active_ports, log_paths=log_map)
                 
                 # 2. Get Hardware Metrics
                 vram_used = utils.get_gpu_vram_usage()

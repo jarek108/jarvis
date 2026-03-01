@@ -60,9 +60,9 @@ def get_service_status(port: int):
     except:
         return "OFF", None
 
-def get_system_health(ports=None):
+def get_system_health(ports=None, log_paths=None):
     """Consolidated synchronous health check for all or specific services."""
-    health_raw = asyncio.run(get_system_health_async(ports=ports))
+    health_raw = asyncio.run(get_system_health_async(ports=ports, log_paths=log_paths))
     cfg = load_config()
     health = {}
     
@@ -128,13 +128,56 @@ async def get_service_status_async(session, port: int):
     except:
         return port, "OFF", None
 
-async def get_system_health_async(ports=None):
-    """Polls specified or all Jarvis services in parallel."""
+async def get_system_health_async(ports=None, log_paths=None):
+    """Polls specified or all Jarvis services in parallel, including log error checks."""
     target_ports = ports if ports else get_jarvis_ports()
     async with aiohttp.ClientSession() as session:
         tasks = [get_service_status_async(session, p) for p in target_ports]
         results = await asyncio.gather(*tasks)
-    return {r[0]: {"status": r[1], "info": r[2]} for r in results}
+    
+    health = {r[0]: {"status": r[1], "info": r[2]} for r in results}
+    
+    # LOG ERROR DETECTION
+    if log_paths:
+        for port, path in log_paths.items():
+            if port in health and health[port]['status'] != "ON":
+                if check_log_for_errors(path):
+                    health[port]['status'] = "ERROR"
+                    health[port]['info'] = "Fatal Error (Check Logs)"
+    
+    return health
+
+def check_log_for_errors(log_path):
+    """Fast-scan the tail of a log file for fatal error signatures."""
+    if not log_path or not os.path.exists(log_path):
+        return False
+        
+    error_signatures = [
+        "Traceback (most recent call last)",
+        "OSError:",
+        "HFValidationError",
+        "ValueError: No available memory",
+        "CUDA Out of Memory",
+        "RuntimeError:",
+        "AttributeError:",
+        "ModuleNotFoundError:",
+        "ImportError:"
+    ]
+    
+    try:
+        with open(log_path, 'rb') as f:
+            # Check last 8KB for performance
+            f.seek(0, os.SEEK_END)
+            size = f.tell()
+            f.seek(max(0, size - 8192))
+            chunk = f.read().decode('utf-8', errors='ignore')
+            
+            for sig in error_signatures:
+                if sig in chunk:
+                    return True
+    except:
+        pass
+    return False
 
 async def wait_for_ports_parallel(ports, timeout, require_stub=False):
     if not ports: return True
