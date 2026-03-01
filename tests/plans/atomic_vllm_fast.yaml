@@ -1,0 +1,10 @@
+name: "Atomic vLLM Fast Check"
+description: "Quick smoke test for LLM running on vLLM engine."
+settings:
+  purge_on_entry: true
+  purge_on_exit: true
+execution:
+  - domain: "vllm"
+    pipeline: "atomic_llm"
+    loadouts: [["VL_qwen--qwen2.5-0.5b-instruct"]]
+    scenarios: [llm_basic_chat]

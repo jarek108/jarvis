@@ -1,0 +1,10 @@
+name: "Atomic VLM Fast Check"
+description: "Quick smoke test for Vision-Language model processing."
+settings:
+  purge_on_entry: true
+  purge_on_exit: true
+execution:
+  - domain: "vlm"
+    pipeline: "atomic_vlm"
+    loadouts: [["VL_qwen--qwen2-vl-2b-instruct"]]
+    scenarios: [vlm_jarvis_logo]

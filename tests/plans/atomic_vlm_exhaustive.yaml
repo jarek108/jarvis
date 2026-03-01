@@ -1,0 +1,13 @@
+name: "Atomic VLM Exhaustive Audit"
+description: "Comprehensive benchmark of VLM variants and multi-image context."
+settings:
+  purge_on_entry: true
+  purge_on_exit: true
+  track_prior_vram: true
+execution:
+  - domain: "vlm"
+    pipeline: "atomic_vlm"
+    loadouts:
+      - ["VL_qwen--qwen2-vl-2b-instruct#stream"]
+      - ["VL_quanttrio--qwen3-vl-30b-a3b-instruct-awq#stream"]
+    scenarios: [vlm_jarvis_logo, vlm_bunny]
