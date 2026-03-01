@@ -72,7 +72,8 @@ class JarvisController:
                     data = json.load(f)
                     self.current_pipeline = data.get("pipeline", self.current_pipeline)
                     self.current_strategy = data.get("strategy", self.current_strategy)
-                    self.current_loadout = data.get("loadout", self.current_loadout)
+                    # Force NONE on startup
+                    self.current_loadout = "NONE"
             except: pass
 
     def save_checkpoint(self):
