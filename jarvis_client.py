@@ -253,6 +253,20 @@ class JarvisApp(ctk.CTk):
             widget.destroy()
         self.service_widgets = {}
 
+    def open_service_log(self, m):
+        log_path = m.get('log_path')
+        if not log_path:
+            self.terminal.insert("end", f"No log path for {m['id']}\n")
+            return
+            
+        if log_path.startswith("DOCKER:"):
+            container = log_path.split(":")[1]
+            subprocess.Popen(f'powershell.exe -NoProfile -Command "docker logs -f {container}"', creationflags=subprocess.CREATE_NEW_CONSOLE)
+        elif os.path.exists(log_path):
+            os.startfile(log_path)
+        else:
+            self.terminal.insert("end", f"Log file not found: {log_path}\n")
+
     def update_health_ui(self, health, runnability, active_models=None, vram=None):
         # 1. Update VRAM Monitor
         if vram:
@@ -281,16 +295,24 @@ class JarvisApp(ctk.CTk):
             info = health.get(port, {"status": "OFF", "info": None})
             
             if mid not in self.service_widgets:
-                f = ctk.CTkFrame(self.health_frame, fg_color="#12161E", corner_radius=6)
+                f = ctk.CTkFrame(self.health_frame, fg_color="#12161E", corner_radius=6, cursor="hand2")
                 f.pack(fill="x", pady=6, padx=5)
+                # Bind click to open log
+                f.bind("<Button-1>", lambda e, model=m: self.open_service_log(model))
                 
                 # Header: Lamp + ID
                 header = ctk.CTkFrame(f, fg_color="transparent")
                 header.pack(fill="x", padx=8, pady=(8, 0))
+                header.bind("<Button-1>", lambda e, model=m: self.open_service_log(model))
+                
                 lamp = ctk.CTkLabel(header, text="●", font=("Arial", 18))
                 lamp.pack(side="left", padx=(0, 5))
-                name = ctk.CTkLabel(header, text=mid, font=("Consolas", 12, "bold"), anchor="w", justify="left", text_color="#FFFFFF")
-                name.pack(side="left", fill="x", expand=True)
+                
+                # Selectable Model Name
+                name_box = ctk.CTkTextbox(header, font=("Consolas", 12, "bold"), height=25, fg_color="transparent", text_color="#FFFFFF", border_width=0, activate_scrollbars=False)
+                name_box.insert("1.0", mid)
+                name_box.configure(state="disabled")
+                name_box.pack(side="left", fill="x", expand=True)
                 
                 # Capabilities: IN: ... | OUT: ...
                 caps = m.get('capabilities', [])
@@ -300,16 +322,21 @@ class JarvisApp(ctk.CTk):
                 cap_text = f"IN: {', '.join(inputs)} | OUT: {', '.join(outputs)}"
                 subtext = ctk.CTkLabel(f, text=cap_text, font=("Consolas", 10), text_color="#A0A0A0", anchor="w")
                 subtext.pack(fill="x", padx=28, pady=(0, 2))
+                subtext.bind("<Button-1>", lambda e, model=m: self.open_service_log(model))
                 
                 # Streaming Indicator: Output-Stream ●
                 stream_frame = ctk.CTkFrame(f, fg_color="transparent")
                 stream_frame.pack(fill="x", padx=28, pady=(0, 2))
+                stream_frame.bind("<Button-1>", lambda e, model=m: self.open_service_log(model))
                 
                 is_llm = m['engine'] in ['ollama', 'vllm']
                 streaming = m.get('params', {}).get('stream', True if is_llm else False)
                 stream_color = SUCCESS_COLOR if streaming else ERROR_COLOR
                 
-                ctk.CTkLabel(stream_frame, text=f"{m['engine'].upper()} • Output-Stream: ", font=("Consolas", 10), text_color="#707070").pack(side="left")
+                engine_str = m['engine'].upper()
+                if m.get('required_gb'): engine_str += f" ({m['required_gb']} GB)"
+                
+                ctk.CTkLabel(stream_frame, text=f"{engine_str} • Out-Stream: ", font=("Consolas", 10), text_color="#707070").pack(side="left")
                 ctk.CTkLabel(stream_frame, text="●", font=("Arial", 12), text_color=stream_color).pack(side="left")
 
                 # Params (Filtered)
@@ -319,8 +346,10 @@ class JarvisApp(ctk.CTk):
                 
                 if params_dict:
                     p_str = " ".join([f"{k}:{v}" for k, v in params_dict.items()])
-                    params = ctk.CTkLabel(f, text=p_str, font=("Consolas", 9), text_color="#808080", anchor="w", wraplength=180)
-                    params.pack(fill="x", padx=28, pady=(0, 8))
+                    params_box = ctk.CTkTextbox(f, font=("Consolas", 9), height=35, fg_color="transparent", text_color="#808080", border_width=0, activate_scrollbars=False)
+                    params_box.insert("1.0", p_str)
+                    params_box.configure(state="disabled")
+                    params_box.pack(fill="x", padx=28, pady=(0, 8))
                 else:
                     ctk.CTkLabel(f, text="", height=4).pack() # Spacer
                 

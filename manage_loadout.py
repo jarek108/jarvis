@@ -74,23 +74,36 @@ def apply_loadout(name, loud=False, soft=False):
     
     # 1. Update Registry EARLY so UI reflects INTENT immediately
     active_services = []
+    server_log_dir = os.path.join(project_root, "logs", "servers")
+    os.makedirs(server_log_dir, exist_ok=True)
+
     for svc in target.get('services', []):
         sid = svc['id']
         engine = svc['engine']
         params = svc.get('params', {})
-        # Pre-resolve ports for the registry
-        if engine == "ollama": port = cfg['ports']['ollama']
-        elif engine == "vllm": port = cfg['ports'].get('vllm', 8300)
+        # Pre-resolve ports and logs for the registry
+        log_path = None
+        if engine == "ollama": 
+            port = cfg['ports']['ollama']
+            from utils.infra import get_ollama_log_path
+            log_path = get_ollama_log_path()
+        elif engine == "vllm": 
+            port = cfg['ports'].get('vllm', 8300)
+            log_path = "DOCKER:vllm-server"
         elif engine == "native":
             if "whisper" in sid.lower(): port = cfg['stt_loadout'].get(sid)
             elif "chatterbox" in sid.lower(): 
                 variant = sid.replace("chatterbox-", "")
                 port = cfg['tts_loadout'].get(sid) or cfg['tts_loadout'].get(variant)
             else: port = None
+            if port: log_path = os.path.join(server_log_dir, f"{sid}.log")
         else: port = None
         
         if port:
-            active_services.append({"id": sid, "engine": engine, "port": port, "params": params})
+            active_services.append({
+                "id": sid, "engine": engine, "port": port, 
+                "params": params, "log_path": log_path
+            })
     
     save_runtime_registry(active_services, project_root)
 
@@ -120,6 +133,7 @@ def apply_loadout(name, loud=False, soft=False):
         engine = svc['engine']
         port = svc['port']
         params = svc['params']
+        log_path = svc.get('log_path')
         
         logger.info(f"⚙️ Setting up service: {sid} ({engine})")
         
@@ -140,9 +154,11 @@ def apply_loadout(name, loud=False, soft=False):
             
             if base_gb is not None:
                 required_gb = base_gb + ((num_ctx / 10000.0) * cost_10k)
+                svc['required_gb'] = round(required_gb, 2) # Save for UI
                 vllm_util = (required_gb / total_vram) + 0.05
             else:
                 vllm_util = params.get('gpu_memory_utilization', 0.4)
+                svc['required_gb'] = round(vllm_util * total_vram, 2)
 
             vllm_util = min(0.95, max(0.1, vllm_util))
             
@@ -165,12 +181,14 @@ def apply_loadout(name, loud=False, soft=False):
             wait_for_port(port, timeout=300)
 
         elif engine == "native":
+            # Redirect logs to file
+            log_file = open(log_path, "w") if log_path else None
             if "whisper" in sid.lower():
                 logger.info(f"🚀 Starting STT Server [{sid}]...")
                 os.environ['HF_HOME'] = get_hf_home()
                 cmd = [python_exe, stt_script, "--port", str(port), "--model", sid]
                 for k, v in params.items(): cmd.extend([f"--{k}", str(v)])
-                start_server(cmd, loud=loud)
+                start_server(cmd, loud=loud, log_file=log_file)
                 wait_for_port(port)
                 
             elif "chatterbox" in sid.lower():
@@ -179,8 +197,11 @@ def apply_loadout(name, loud=False, soft=False):
                 os.environ['HF_HOME'] = get_hf_home()
                 cmd = [python_exe, tts_script, "--port", str(port), "--variant", variant]
                 for k, v in params.items(): cmd.extend([f"--{k}", str(v)])
-                start_server(cmd, loud=loud)
+                start_server(cmd, loud=loud, log_file=log_file)
                 wait_for_port(port, timeout=120)
+
+    # Final registry save to capture required_gb
+    save_runtime_registry(active_services, project_root)
 
 
 def kill_loadout(target):
