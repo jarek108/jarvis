@@ -31,20 +31,20 @@ def main():
         print(f"❌ Error: Could not find Python executable at {python_exe}")
         sys.exit(1)
 
-    # 2. Upgrade pip
-    print("\n📦 Upgrading pip...")
-    run_cmd([python_exe, "-m", "pip", "install", "--upgrade", "pip"])
+    # 2. Upgrade pip, setuptools, and wheel
+    print("\n📦 Upgrading pip, setuptools, and wheel...")
+    run_cmd([python_exe, "-m", "pip", "install", "--upgrade", "pip", "setuptools", "wheel"])
 
     # 3. Install core dependencies (This will pull generic torch 2.6.0 via chatterbox)
     print("\n📦 Installing Project Requirements...")
     run_cmd([python_exe, "-m", "pip", "install", "-r", "requirements.txt"])
 
-    # 4. Surgically Overwrite PyTorch with CUDA 12.4 Stack
-    print("\n📦 Optimizing PyTorch for NVIDIA Blackwell (CUDA 12.4)...")
+    # 4. Surgically Overwrite PyTorch with Nightly CUDA Stack (Blackwell Support)
+    print("\n📦 Optimizing PyTorch for NVIDIA Blackwell (RTX 5090 / CUDA 12.8)...")
     run_cmd([
-        python_exe, "-m", "pip", "install", 
-        "torch==2.5.1+cu124", "torchvision==0.20.1+cu124", "torchaudio==2.5.1+cu124",
-        "--index-url", "https://download.pytorch.org/whl/cu124",
+        python_exe, "-m", "pip", "install", "--pre",
+        "torch", "torchvision", "torchaudio",
+        "--index-url", "https://download.pytorch.org/whl/nightly/cu128",
         "--force-reinstall"
     ])
 
