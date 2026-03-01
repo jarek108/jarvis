@@ -8,6 +8,6 @@ execution:
   - domain: "vlm"
     pipeline: "atomic_vlm"
     loadouts:
-      - ["VL_qwen--qwen2-vl-2b-instruct#stream"]
-      - ["VL_quanttrio--qwen3-vl-30b-a3b-instruct-awq#stream"]
+      - ["vllm://Qwen/Qwen2-VL-2B-Instruct#stream"]
+      - ["vllm://QuantTrio/Qwen3-VL-30B-A3B-Instruct-AWQ#stream"]
     scenarios: [vlm_jarvis_logo, vlm_bunny]

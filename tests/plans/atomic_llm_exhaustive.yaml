@@ -8,6 +8,6 @@ execution:
   - domain: "llm"
     pipeline: "atomic_llm"
     loadouts:
-      - ["OL_qwen2.5:0.5b"]
-      - ["OL_gpt-oss-20b"]
+      - ["ollama://qwen2.5:0.5b"]
+      - ["ollama://gpt-oss-20b"]
     scenarios: [llm_basic_chat, llm_polish_explicit, llm_short2long, llm_long_story, token_explosion]

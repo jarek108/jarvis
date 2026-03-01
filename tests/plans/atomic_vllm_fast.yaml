@@ -6,5 +6,5 @@ settings:
 execution:
   - domain: "vllm"
     pipeline: "atomic_llm"
-    loadouts: [["VL_qwen--qwen2.5-0.5b-instruct"]]
+    loadouts: [["vllm://Qwen/Qwen2.5-0.5B-Instruct"]]
     scenarios: [llm_basic_chat]

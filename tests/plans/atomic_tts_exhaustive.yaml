@@ -8,6 +8,6 @@ execution:
   - domain: "tts"
     pipeline: "atomic_tts"
     loadouts:
-      - ["chatterbox-turbo"]
-      - ["chatterbox-multilingual"]
+      - ["native://chatterbox-turbo"]
+      - ["native://chatterbox-multilingual"]
     scenarios: [tts_standard, tts_polish, tts_implicit_excited, complex_punctuation]

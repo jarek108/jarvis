@@ -44,16 +44,7 @@ def parse_model_string(entry, stt_registry=None, tts_registry=None):
     if not isinstance(entry, str): return None
     
     if "://" not in entry:
-        # Fallback for legacy configs missing engine prefixes during transition
-        # We will assume native for whisper/chatterbox, otherwise throw an error
-        if "whisper" in entry.lower() or "chatterbox" in entry.lower():
-            entry = f"native://{entry}"
-        elif entry.startswith("OL_"):
-            entry = f"ollama://{entry[3:]}"
-        elif entry.startswith("VL_"):
-            entry = f"vllm://{entry[3:]}"
-        else:
-            raise ValueError(f"Invalid model string '{entry}'. Must use format 'engine://canonical_id#params'")
+        raise ValueError(f"Invalid model string '{entry}'. Must use format 'engine://canonical_id#params'")
 
     engine, rest = entry.split("://", 1)
     parts = rest.split("#")
@@ -93,11 +84,6 @@ def get_model_calibration(model_id, engine="vllm"):
     # Use standard safe filename generator
     safe_id = safe_filename(model_id)
     cal_path = os.path.join(cal_dir, f"{engine}_{safe_id}.yaml")
-    
-    # Fallback to legacy prefix format if migration is incomplete
-    if not os.path.exists(cal_path):
-        legacy_prefix = "vl_" if engine == "vllm" else "ol_"
-        cal_path = os.path.join(cal_dir, f"{legacy_prefix}{safe_id}.yaml")
     
     if os.path.exists(cal_path):
         with open(cal_path, "r", encoding="utf-8") as f:

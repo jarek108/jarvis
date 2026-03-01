@@ -67,14 +67,6 @@ class PipelineResolver:
         
         # 1. Direct match using standard naming convention
         cal_path = os.path.join(self.cal_dir, f"{engine}_{safe_id}.yaml")
-        
-        # Fallback to legacy prefix format if migration is incomplete
-        if not os.path.exists(cal_path):
-            legacy_prefix = "vl_" if engine == "vllm" else ("ol_" if engine == "ollama" else "")
-            if engine == "native":
-                if "whisper" in model_id.lower(): legacy_prefix = "stt_"
-                elif "chatterbox" in model_id.lower(): legacy_prefix = "tts_"
-            cal_path = os.path.join(self.cal_dir, f"{legacy_prefix}{safe_id}.yaml")
             
         if os.path.exists(cal_path):
             with open(cal_path, "r") as f:

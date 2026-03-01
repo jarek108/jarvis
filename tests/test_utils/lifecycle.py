@@ -54,8 +54,8 @@ class LifecycleManager:
             
             # Map back to LifecycleManager's expected 'cat' format
             stype = "llm"
-            if svc['id'] in self.cfg['stt_loadout']: stype = "stt"
-            elif svc['id'] in self.cfg['tts_loadout']: stype = "tts"
+            if svc['engine'] == "native":
+                stype = "stt" if svc['id'] in self.cfg['stt_loadout'] else "tts"
             
             if stype == "llm":
                 categorized['llm'] = {
@@ -130,7 +130,7 @@ class LifecycleManager:
                 # --- END OLLAMA GUARDRAIL ---
 
                 # --- RESOLVED ID for Reporting ---
-                res_id = f"OL_{model.upper()}"
+                res_id = f"ollama_{model.upper()}"
                 if 'stream' in llm_flags or self.kwargs.get('stream'): res_id += "#STREAM"
                 res_id += f"#CTX={num_ctx}"
                 # ---------------------------------
@@ -188,7 +188,7 @@ class LifecycleManager:
                 mm_limit_json = json.dumps(limits)
 
                 # --- RESOLVED ID for Reporting ---
-                res_id = f"VL_{model.upper()}"
+                res_id = f"vllm_{model}"
                 if self.kwargs.get('nativevideo'): res_id += "#NATIVE"
                 if self.kwargs.get('stream'): res_id += "#STREAM"
                 res_id += f"#CTX={max_len}"
@@ -284,7 +284,7 @@ class LifecycleManager:
                 if vid_lim and int(vid_lim) > 1: name += f"#VID_LIM={vid_lim}"
 
             # Prepend engine explicitly for clarity in test runner output
-            engine_prefix = "OL_" if llm['engine'] == "ollama" else ("VL_" if llm['engine'] == "vllm" else "")
+            engine_prefix = f"{llm['engine']}_" if llm['engine'] else ""
             display_parts.append(f"{engine_prefix}{name}")
             
         if self.cat['tts']: 

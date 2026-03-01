@@ -6,5 +6,5 @@ settings:
 execution:
   - domain: "tts"
     pipeline: "atomic_tts"
-    loadouts: [["chatterbox-turbo"]]
+    loadouts: [["native://chatterbox-turbo"]]
     scenarios: [tts_standard]

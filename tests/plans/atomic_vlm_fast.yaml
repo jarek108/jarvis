@@ -6,5 +6,5 @@ settings:
 execution:
   - domain: "vlm"
     pipeline: "atomic_vlm"
-    loadouts: [["VL_qwen--qwen2-vl-2b-instruct"]]
+    loadouts: [["vllm://Qwen/Qwen2-VL-2B-Instruct"]]
     scenarios: [vlm_jarvis_logo]

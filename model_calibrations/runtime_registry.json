@@ -1,33 +1,26 @@
 {
   "active_loadout": [
     {
+      "id": "vllm_QuantTrio/Qwen3-VL-30B-A3B-Instruct-AWQ#CTX=16384#IMG_LIM=8",
+      "engine": "vllm",
+      "port": 8300,
+      "params": {
+        "stream": true
+      }
+    },
+    {
       "id": "faster-whisper-base",
       "engine": "native",
       "port": 8101,
-      "params": {},
-      "log_path": "c:\\Users\\chojn\\projects\\jarvis\\logs\\sessions\\RUN_20260301_143012\\svc_stt_faster-whisper-base.log",
-      "type": "stt",
-      "required_gb": 1.0
+      "params": {}
     },
     {
       "id": "chatterbox-multilingual",
       "engine": "native",
       "port": 8201,
-      "params": {},
-      "log_path": "c:\\Users\\chojn\\projects\\jarvis\\logs\\sessions\\RUN_20260301_143012\\svc_tts_chatterbox-multilingual.log",
-      "type": "tts"
-    },
-    {
-      "id": "quanttrio--qwen3-vl-30b-a3b-instruct-awq",
-      "engine": "vllm",
-      "port": 8300,
-      "params": {
-        "num_ctx": 32768
-      },
-      "log_path": "c:\\Users\\chojn\\projects\\jarvis\\logs\\sessions\\RUN_20260301_143012\\svc_llm_quanttrio--qwen3-vl-30b-a3b-instruct-awq.log",
-      "type": "llm",
-      "required_gb": 20.96
+      "params": {}
     }
   ],
-  "last_updated": "2026-03-01 14:30:12"
+  "system_external_vram": 2.921875,
+  "last_updated": "2026-03-01 23:50:33"
 }

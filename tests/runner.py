@@ -43,7 +43,7 @@ class PipelineTestRunner:
                 return yaml.safe_load(f)
         return {}
 
-    def run_scenario(self, sid, pid, mid, domain, l_id, v_bg=0.0, v_static=0.0):
+    def run_scenario(self, sid, pid, mid, domain, l_id, v_ext=0.0, v_static=0.0):
         # 3. Execution (Multi-Input & Multi-Modal Support)
         inputs = {}
         scen_def = self.integration_scenarios.get(sid)
@@ -128,7 +128,7 @@ class PipelineTestRunner:
             "domain": domain,
             "loadout_id": l_id,
             "node_metrics": node_metrics,
-            "vram_background": v_bg,
+            "vram_external": v_ext,
             "vram_static": v_static,
             "vram_peak": self.executor.vram_peak,
             "stt_text": "".join(stt_res) if isinstance(stt_res, list) else str(stt_res),
@@ -184,7 +184,7 @@ class PipelineTestRunner:
                 if self.dashboard: self.dashboard.current_loadout = l_id
 
                 models = l if isinstance(l, list) else ([l] if l else [])
-                v_bg = 0.0
+                v_ext = 0.0
                 v_static = 0.0
 
                 class ReporterProxy:
@@ -200,18 +200,18 @@ class PipelineTestRunner:
                     services = manager.get_registry_entries(domain)
                     try:
                         from manage_loadout import save_runtime_registry
-                        save_runtime_registry(services, project_root)
+                        save_runtime_registry(services, project_root, external_vram=v_ext)
                     except Exception as e: self.log(f"Failed to update registry: {e}")
 
                 def execution_wrapper():
                     # At this point v_static has been assigned by run_test_lifecycle
                     for s_id in scenarios:
-                        self.run_scenario(s_id, pipeline, mapping, domain, l_id, v_bg=v_bg, v_static=v_static)
+                        self.run_scenario(s_id, pipeline, mapping, domain, l_id, v_ext=v_ext, v_static=v_static)
 
-                # Capture pre-load baseline
-                v_bg = utils.get_gpu_vram_usage()
+                # Capture pre-load external VRAM
+                v_ext = utils.get_gpu_vram_usage()
 
-                setup_time, cleanup_time, prior_vram, model_display, v_bg_actual, v_static_actual = run_test_lifecycle(
+                setup_time, cleanup_time, prior_vram, model_display, v_ext_actual, v_static_actual = run_test_lifecycle(
                     domain=domain, setup_name=l_id, models=models,
                     purge_on_entry=True if l else False, purge_on_exit=True if l else False,
                     full=True, test_func=execution_wrapper, benchmark_mode=True, session_dir=self.session_dir,
@@ -219,7 +219,7 @@ class PipelineTestRunner:
                     stub_mode=args.plumbing, reporter=proxy_reporter, on_ready=on_ready_callback
                 )
                 v_static = v_static_actual
-                v_bg = v_bg_actual # Use the internal more accurate background measure
+                v_ext = v_ext_actual # Use the internal more accurate external measure
 
                 for r in self.reporter.results:
                     if r.get('loadout_id') == l_id:

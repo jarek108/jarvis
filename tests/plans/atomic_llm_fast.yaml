@@ -6,5 +6,5 @@ settings:
 execution:
   - domain: "llm"
     pipeline: "atomic_llm"
-    loadouts: [["OL_qwen2.5:0.5b"]]
+    loadouts: [["ollama://qwen2.5:0.5b"]]
     scenarios: [llm_basic_chat, empty_instruction]

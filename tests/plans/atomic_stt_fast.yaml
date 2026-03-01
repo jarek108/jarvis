@@ -6,5 +6,5 @@ settings:
 execution:
   - domain: "stt"
     pipeline: "atomic_stt"
-    loadouts: [["faster-whisper-tiny"]]
+    loadouts: [["native://faster-whisper-tiny"]]
     scenarios: [stt_polish_std, stt_french_std]

@@ -8,6 +8,6 @@ execution:
   - domain: "stt"
     pipeline: "atomic_stt"
     loadouts:
-      - ["faster-whisper-tiny"]
-      - ["faster-whisper-base"]
+      - ["native://faster-whisper-tiny"]
+      - ["native://faster-whisper-base"]
     scenarios: [stt_polish_std, stt_french_std, stt_chinese_std, stt_english_std, null_audio]

@@ -8,7 +8,7 @@ execution:
   - domain: "sts_voice"
     pipeline: "voice_to_voice"
     loadouts:
-      - ["faster-whisper-tiny", "chatterbox-turbo", "OL_qwen2.5:0.5b"]
-      - ["faster-whisper-base", "chatterbox-multilingual", "OL_qwen2.5:0.5b"]
-      - ["faster-whisper-base", "chatterbox-multilingual", "VL_QuantTrio/Qwen3-VL-30B-A3B-Instruct-AWQ#stream"]
+      - ["native://faster-whisper-tiny", "native://chatterbox-turbo", "ollama://qwen2.5:0.5b"]
+      - ["native://faster-whisper-base", "native://chatterbox-multilingual", "ollama://qwen2.5:0.5b"]
+      - ["native://faster-whisper-base", "native://chatterbox-multilingual", "vllm://QuantTrio/Qwen3-VL-30B-A3B-Instruct-AWQ#stream"]
     scenarios: [sts_voice, token_explosion]

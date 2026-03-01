@@ -228,9 +228,10 @@ def apply_loadout(name, loud=False, soft=False):
                 # 'external_vram' was captured after purge, BUT other services in THIS loadout might have just started!
                 # We need to compute the max safe utilization based on the remaining physical memory.
                 
-                # Assume each native service (STT/TTS) takes roughly 2-4GB if running.
-                # A safer heuristic: take the requested amount, but never let it exceed (Total - 5GB buffer for other services and OS)
-                max_safe_vram = max(0, total_vram - 5.0) 
+                other_services_vram = sum(s.get('required_gb', 2.0) for s in active_services if s['id'] != sid)
+                system_buffer = (external_vram if external_vram is not None else 2.0) + 1.0
+                
+                max_safe_vram = max(0, total_vram - (other_services_vram + system_buffer))
                 allocated_vram = min(svc['required_gb'], max_safe_vram)
                 vllm_util = allocated_vram / total_vram
             else:

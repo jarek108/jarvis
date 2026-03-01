@@ -6,5 +6,5 @@ settings:
 execution:
   - domain: "sts_voice"
     pipeline: "voice_to_voice"
-    loadouts: [["faster-whisper-tiny", "chatterbox-turbo", "OL_qwen2.5:0.5b"]]
+    loadouts: [["native://faster-whisper-tiny", "native://chatterbox-turbo", "ollama://qwen2.5:0.5b"]]
     scenarios: [sts_voice]
