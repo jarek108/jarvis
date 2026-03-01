@@ -147,7 +147,7 @@ def generate_excel(upload=True, upload_outputs=False, session_dir=None):
                             "Exec": 0,
                             "Setup": r3(lc.get('setup_time', 0)),
                             "Cleanup": r3(lc.get('cleanup_time', 0)),
-                            "V_BG": 0, "V_Static": 0, "V_Peak": 0,
+                            "V_EXT": 0, "V_Static": 0, "V_Peak": 0,
                             "Response": f"LIFECYCLE ERROR: {lc.get('result', 'Unknown error')}"
                         })
 
@@ -159,7 +159,7 @@ def generate_excel(upload=True, upload_outputs=False, session_dir=None):
                         "Exec": r3(s.get('duration', 0)),
                         "Setup": r3(s.get('setup_time', 0)),
                         "Cleanup": r3(s.get('cleanup_time', 0)),
-                        "V_BG": r3(s.get('vram_background', 0)),
+                        "V_EXT": r3(s.get('vram_external', 0)),
                         "V_Static": r3(s.get('vram_static', 0)),
                         "V_Peak": r3(s.get('vram_peak', 0))
                     }
