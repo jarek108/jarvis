@@ -61,9 +61,11 @@ def warmup_llm(model_name, visual=False, engine="ollama"):
     timeout = cfg.get('system', {}).get('llm_warmup_timeout', 300)
     
     if engine == "vllm":
+        from .config import resolve_canonical_id
+        canonical_id = resolve_canonical_id(model_name, engine="vllm")
         url = "http://127.0.0.1:8300/v1/chat/completions"
         payload = {
-            "model": model_name,
+            "model": canonical_id,
             "messages": [{"role": "user", "content": "hi"}],
             "stream": False
         }
