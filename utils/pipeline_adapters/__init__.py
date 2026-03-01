@@ -18,8 +18,12 @@ def get_adapter(role, project_root):
     
     adapter_class = adapters.get(role.lower())
     if not adapter_class:
-        # Default to LLM if engine is recognized but role is generic
-        if role.lower() in ["ollama", "vllm"]:
+        # 1. Hardware/Edge Roles -> SinkAdapter
+        sink_roles = ["audio_playback", "keyboard_typer", "system_notification", "chat_box"]
+        if role.lower() in sink_roles:
+            adapter_class = SinkAdapter
+        # 2. Default to LLM if engine is recognized but role is generic
+        elif role.lower() in ["ollama", "vllm"]:
             adapter_class = LLMAdapter
         else:
             raise ValueError(f"No adapter found for role: {role}")

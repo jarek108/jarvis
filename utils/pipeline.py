@@ -90,10 +90,10 @@ class PipelineResolver:
         for nid in [n['id'] for n in pipeline['nodes'] if n['type'] in ['input', 'source']]:
             bound_nodes[nid] = next(n for n in pipeline['nodes'] if n['id'] == nid)
 
-        for node in [n for n in pipeline['nodes'] if n['type'] in ['processing', 'sink']]:
+        for node in [n for n in pipeline['nodes'] if n['type'] in ['processing', 'sink', 'utility']]:
             node_id = node['id']
             # Skip resolution for local utility or sink nodes (handled at edge)
-            if node.get('role') in ['utility', 'sink'] or node.get('type') == 'sink':
+            if node.get('role') in ['utility', 'memory', 'sink'] or node.get('type') in ['sink', 'utility']:
                 bound_nodes[node_id] = node.copy()
                 continue
                 
