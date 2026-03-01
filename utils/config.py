@@ -107,30 +107,36 @@ def resolve_canonical_id(model_id, engine):
     into its canonical engine ID (e.g., Qwen/Qwen2-2B or qwen:2b).
     Source of truth: model_calibrations/*.yaml 'id' field.
     """
-    project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    project_root = get_project_root()
     cal_dir = os.path.join(project_root, "model_calibrations")
     
     prefix = "vl_" if engine == "vllm" else "ol_"
-    # Sanitize incoming to find the calibration file
-    lookup_id = model_id.lower().replace(" ", "-").replace("/", "--").replace(":", "-").split('#')[0]
-    if lookup_id.startswith(prefix): lookup_id = lookup_id[len(prefix):]
+    
+    # 1. Prepare Lookup ID (lowercase for filename matching)
+    lookup_id = model_id.lower().split('#')[0]
+    # Strip prefixes case-insensitively
+    if lookup_id.startswith("vl_"): lookup_id = lookup_id[3:]
+    elif lookup_id.startswith("ol_"): lookup_id = lookup_id[3:]
     
     cal_path = os.path.join(cal_dir, f"{prefix}{lookup_id}.yaml")
     
-    # 1. Metadata Lookup (Source of Truth)
+    # 2. Metadata Lookup (Source of Truth)
     if os.path.exists(cal_path):
         with open(cal_path, "r", encoding="utf-8") as f:
             data = yaml.safe_load(f)
             if data.get("id"): return data["id"]
 
-    # 2. Heuristic Fallback (For uncalibrated models)
+    # 3. Heuristic Fallback (For uncalibrated models)
+    # Start with original ID to preserve case if possible
     clean_id = model_id.split('#')[0]
-    if clean_id.startswith(prefix): clean_id = clean_id[len(prefix):]
+    # Case-insensitive prefix stripping for the return value
+    if clean_id.upper().startswith("VL_"): clean_id = clean_id[3:]
+    elif clean_id.upper().startswith("OL_"): clean_id = clean_id[3:]
     
     if engine == "vllm":
-        return clean_id.replace("--", "/") # Restore slashes
+        return clean_id.replace("--", "/") # Restore slashes for HF
     elif engine == "ollama":
-        return clean_id.replace("--", ":") # Restore colons
+        return clean_id.replace("--", ":") # Restore colons for Ollama
     return clean_id
 
 def resolve_path(path_str):
