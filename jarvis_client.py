@@ -41,7 +41,12 @@ class JarvisController:
         self.cfg = load_config()
         self.project_root = script_dir
         
-        # 1. Embedded Flow Engine
+        # 1. Redirect System Logs to UI
+        def ui_sink(message):
+            self.ui_queue.put({"type": "log", "msg": message.record["message"], "tag": "system"})
+        logger.add(ui_sink, format="{message}", level="INFO")
+
+        # 2. Embedded Flow Engine
         self.resolver = PipelineResolver(self.project_root)
         self.executor = PipelineExecutor(self.project_root)
         
