@@ -1,0 +1,27 @@
+# --- Core Logic & Networking ---
+aiohttp
+fastapi
+uvicorn
+requests
+PyYAML
+loguru
+psutil
+
+# --- UI & Graphics ---
+customtkinter
+Pillow<12.0
+
+# --- Audio & Hardware ---
+PyAudio
+sounddevice
+soundfile
+numpy
+mss
+PyAutoGUI
+pyperclip
+win10toast
+
+# --- Models & Inference ---
+faster_whisper
+chatterbox_tts
+resemble_perth

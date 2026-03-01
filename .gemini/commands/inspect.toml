@@ -1,0 +1,15 @@
+description = "Performs a deep-dive inspection of a specific system aspect to identify debt and improvements."
+prompt = """
+You are now in AUDIT MODE.
+
+Your goal is to perform an exhaustive but high-signal inspection of: {{args}}
+
+Your report MUST cover:
+1. TECHNICAL DEBT: Identify outdated patterns, "band-aid" fixes, and leaky abstractions.
+2. INCONSISTENCIES: Find areas where naming conventions, protocols, or styles diverge.
+3. ARCHITECTURAL FRICTION: Point out confusing choices or rigid designs that hinder scalability.
+4. "GUT FEELINGS": Highlight anything that feels fragile, duplicated, or "wrong" even if functional.
+5. PROPOSED IMPROVEMENTS: Concrete, prioritized suggestions for the next iteration.
+
+Be brief, direct, and critical. Focus on the 'why' behind the friction. Use only read-only tools for the audit.
+"""

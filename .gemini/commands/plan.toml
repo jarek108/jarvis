@@ -1,0 +1,14 @@
+description = "Generates a structured architectural feature plan as a Markdown file."
+prompt = """
+You are now in FEATURE PLANNING MODE.
+
+Your goal is design a robust, high-level architectural plan for the following feature: {{args}}
+
+Format your response as a valid Markdown file content.
+The structure MUST follow this pattern:
+1. VISION: A brief description of the envisioned feature and its impact.
+2. ARCHITECTURAL REQUIREMENTS: Core constraints and data contracts.
+3. IMPLEMENTATION PHASES: A logical, step-by-step breakdown of work (defined dynamically based on the feature complexity).
+4. KEY DECISION POINTS & TRADEOFFS: Explicit choices that must be made and non-obvious consequences.
+
+"""

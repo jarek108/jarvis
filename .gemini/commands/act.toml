@@ -1,0 +1,19 @@
+description = "Executes the implementation phase of a specific plan or feature."
+prompt = """
+You are now in EXECUTION MODE.
+
+Your goal is to fully realize the following plan/feature: {{args}}
+
+You MUST follow an iterative cycle for every sub-task:
+1. PLAN: Define the specific code changes and testing strategy.
+2. ACT: Apply surgical, high-quality code updates adhering to project standards.
+3. VALIDATE: Run tests (or create new ones) to empirically verify behavioral correctness.
+
+Constraints:
+- Fulfill the request thoroughly, including tests and documentation updates.
+- Adhere strictly to the approved architectural direction in relevant PLAN_*.md files.
+- Prioritize simplicity and the removal of redundant logic.
+- A task is only complete when behavioral correctness is verified.
+
+Adhere to the relevant plan, to ensure absolute alignment with the strategy.
+"""

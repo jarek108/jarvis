@@ -13,20 +13,21 @@ from .pipeline_adapters import get_adapter
 class PipelineResolver:
     def __init__(self, project_root, base_dir=None):
         self.project_root = project_root
-        # Use provided base_dir (must be absolute) or default to project's pipelines folder
+        # ISOLATION: Define explicit directories for different graph artifacts
         if base_dir:
-            self.base_dir = base_dir if os.path.isabs(base_dir) else os.path.join(project_root, base_dir)
+            self.pipelines_dir = base_dir if os.path.isabs(base_dir) else os.path.join(project_root, base_dir)
         else:
-            self.base_dir = os.path.join(project_root, "pipelines")
+            self.pipelines_dir = os.path.join(project_root, "pipelines")
             
+        self.strategies_dir = os.path.join(project_root, "strategies")
         self.cal_dir = os.path.join(project_root, "model_calibrations")
         self.registry_path = os.path.join(self.cal_dir, "runtime_registry.json")
 
-    def load_yaml(self, name):
-        """Loads a YAML from the configured absolute base_dir."""
-        # Ensure we don't have .yaml extension doubled
+    def load_yaml(self, name, folder=None):
+        """Loads a YAML from the configured absolute base_dir or a specified folder."""
         clean_name = name.replace(".yaml", "")
-        path = os.path.join(self.base_dir, f"{clean_name}.yaml")
+        base = folder if folder else self.pipelines_dir
+        path = os.path.join(base, f"{clean_name}.yaml")
         
         if not os.path.exists(path):
             raise FileNotFoundError(f"YAML not found at: {path}")
@@ -77,12 +78,12 @@ class PipelineResolver:
             return ["text_in", "text_out"]
         return []
 
-    def resolve(self, pipeline_name, mapping_name=None):
+    def resolve(self, pipeline_name, strategy_name=None):
         """
-        Binds a pipeline to live models.
+        Binds a pipeline to live models using a specific strategy.
         """
         pipeline = self.load_yaml(pipeline_name)
-        mapping = self.load_yaml(mapping_name) if mapping_name else None
+        strategy = self.load_yaml(strategy_name, folder=self.strategies_dir) if strategy_name else None
         live_models = self.get_live_models()
         
         bound_nodes = {}
@@ -100,8 +101,8 @@ class PipelineResolver:
             required_caps = node.get('capabilities', [])
             bound_model = None
 
-            if mapping:
-                candidates = mapping['bindings'].get(node_id, {}).get('candidates', [])
+            if strategy:
+                candidates = strategy['bindings'].get(node_id, {}).get('candidates', [])
                 for cid in candidates:
                     match = next((m for m in live_models if m['id'] == cid), None)
                     if match and all(c in self.get_model_capabilities(match['id'], match['engine']) for c in required_caps):
@@ -122,8 +123,63 @@ class PipelineResolver:
             bn['binding'] = bound_model
             bound_nodes[node_id] = bn
 
-        logger.info(f"✅ Resolved '{pipeline_name}' ({'AUTO' if not mapping else mapping_name})")
+        logger.info(f"✅ Resolved '{pipeline_name}' ({'AUTO' if not strategy else strategy_name})")
         return bound_nodes
+
+    def check_runnability(self, pipeline_name, strategy_name=None):
+        """
+        Proactively verifies if a pipeline is runnable based on live system health.
+        Returns: {runnable: bool, errors: list, map: dict}
+        """
+        report = {"runnable": True, "errors": [], "map": {}}
+        
+        # 1. Load the raw pipeline first to populate the map even if resolution fails
+        try:
+            raw_pipeline = self.load_yaml(pipeline_name)
+            for node in raw_pipeline['nodes']:
+                report["map"][node['id']] = {"status": "UNRESOLVED", "model": "None"}
+        except Exception as e:
+            return {"runnable": False, "errors": [f"Pipeline Load Error: {e}"], "map": {}}
+
+        # 2. Try to Resolve the graph (Detects ARCH_MISMATCH or strategy errors)
+        try:
+            bound_graph = self.resolve(pipeline_name, strategy_name)
+        except Exception as e:
+            report["runnable"] = False
+            report["errors"].append(f"Resolution Error: {e}")
+            return report
+
+        # 3. Check Live Health for all bound ports
+        from .infra import get_system_health
+        health = get_system_health()
+        
+        for nid, node in bound_graph.items():
+            role = node.get('role', '').lower()
+            if node['type'] == 'processing' and role not in ['utility', 'memory']:
+                binding = node.get('binding')
+                if not binding:
+                    report["runnable"] = False
+                    report["errors"].append(f"Node '{nid}' is unbound.")
+                    continue
+                
+                port = binding.get('port')
+                svc_info = health.get(port, {"status": "OFF", "info": None})
+                
+                report["map"][nid] = {
+                    "status": svc_info['status'],
+                    "model": binding['id'],
+                    "port": port
+                }
+                
+                if svc_info['status'] != "ON":
+                    report["runnable"] = False
+                    report["errors"].append(f"Service for '{nid}' ({binding['id']} on port {port}) is {svc_info['status']}.")
+            
+            else:
+                # Utility, Memory, or Sink nodes
+                report["map"][nid] = {"status": "LOCAL", "role": role or node['type']}
+
+        return report
 
 class PipelineExecutor:
     def __init__(self, project_root, dashboard=None):
