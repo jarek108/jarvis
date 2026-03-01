@@ -60,11 +60,10 @@ class JarvisController:
         self.load_checkpoint()
         
         # Force system state to match UI "NONE" state
-        # Synchronously delete registry to prevent UI flashing old models
-        registry_path = os.path.join(self.project_root, "model_calibrations", "runtime_registry.json")
-        if os.path.exists(registry_path):
-            try: os.remove(registry_path)
-            except: pass
+        # Capture current VRAM as initial baseline and seed a fresh registry
+        initial_baseline = utils.get_gpu_vram_usage()
+        from manage_loadout import save_runtime_registry
+        save_runtime_registry([], baseline_vram=initial_baseline)
             
         def init_cleanup():
             self.ui_queue.put({"type": "log", "msg": "🧹 Cleaning up previous session state...", "tag": "system"})
