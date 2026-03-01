@@ -184,8 +184,14 @@ class JarvisApp(ctk.CTk):
         self.configure(fg_color=BG_COLOR)
         self.queue = queue.Queue()
         self.controller = JarvisController(self.queue)
+        
+        # State for Log Viewing
+        self.selected_mid = None
+        self.last_log_content = ""
+        
         self.setup_ui()
         self.poll_queue()
+        self._update_log_viewer_loop()
 
     def setup_ui(self):
         self.grid_columnconfigure(1, weight=1)
@@ -232,9 +238,21 @@ class JarvisApp(ctk.CTk):
         self.strategy_opt = ctk.CTkOptionMenu(self.header, values=strategies, variable=self.strategy_var, command=self.on_config_change)
         self.strategy_opt.pack(side="left", padx=10)
 
-        # --- MAIN ---
-        self.terminal = ctk.CTkTextbox(self, font=("Consolas", 13), fg_color=BG_COLOR, text_color=TEXT_COLOR)
-        self.terminal.grid(row=1, column=1, sticky="nsew", padx=15, pady=15)
+        # Mode Indicator
+        self.mode_label = ctk.CTkLabel(self.header, text="MODE: TERMINAL", font=("Consolas", 12, "bold"), text_color=ACCENT_COLOR)
+        self.mode_label.pack(side="right", padx=20)
+
+        # --- MAIN CONSOLE AREA ---
+        self.console_container = ctk.CTkFrame(self, fg_color="transparent")
+        self.console_container.grid(row=1, column=1, sticky="nsew", padx=15, pady=15)
+        self.console_container.grid_columnconfigure(0, weight=1)
+        self.console_container.grid_rowconfigure(0, weight=1)
+
+        self.terminal = ctk.CTkTextbox(self.console_container, font=("Consolas", 13), fg_color=BG_COLOR, text_color=TEXT_COLOR)
+        self.terminal.grid(row=0, column=0, sticky="nsew")
+        
+        self.log_viewer = ctk.CTkTextbox(self.console_container, font=("Consolas", 11), fg_color="#05080F", text_color="#A0A0A0")
+        # Hide log viewer initially
         
         # --- FOOTER ---
         self.footer = ctk.CTkFrame(self, height=120, fg_color="#0D1117")
@@ -251,21 +269,57 @@ class JarvisApp(ctk.CTk):
 
     def on_loadout_change(self, val):
         self.controller.trigger_loadout_change(val)
+        self.selected_mid = None # Reset selection
+        self.switch_to_terminal()
         # Clear health frame on change to force a fresh rebuild
         for widget in self.health_frame.winfo_children():
             widget.destroy()
         self.service_widgets = {}
 
-    def open_service_log(self, m):
-        log_path = m.get('log_path')
-        if not log_path:
-            self.terminal.insert("end", f"No log path for {m['id']}\n")
-            return
-            
-        if os.path.exists(log_path):
-            os.startfile(log_path)
+    def switch_to_terminal(self):
+        self.log_viewer.grid_remove()
+        self.terminal.grid()
+        self.mode_label.configure(text="MODE: TERMINAL", text_color=ACCENT_COLOR)
+
+    def switch_to_log(self, mid):
+        self.terminal.grid_remove()
+        self.log_viewer.grid(row=0, column=0, sticky="nsew")
+        self.mode_label.configure(text=f"LOG: {mid}", text_color=SUCCESS_COLOR)
+        self.log_viewer.delete("1.0", "end")
+        self.last_log_content = ""
+
+    def _update_log_viewer_loop(self):
+        if self.selected_mid:
+            # Find the model info in controller's resolver
+            active_models = self.controller.resolver.get_live_models()
+            m = next((m for m in active_models if m['id'] == self.selected_mid), None)
+            if m and m.get('log_path') and os.path.exists(m['log_path']):
+                try:
+                    with open(m['log_path'], "r", encoding="utf-8", errors="ignore") as f:
+                        # Read last 5000 chars for performance
+                        f.seek(0, os.SEEK_END)
+                        size = f.tell()
+                        f.seek(max(0, size - 10000))
+                        content = f.read()
+                        if content != self.last_log_content:
+                            self.log_viewer.configure(state="normal")
+                            self.log_viewer.delete("1.0", "end")
+                            self.log_viewer.insert("1.0", content)
+                            self.log_viewer.see("end")
+                            self.log_viewer.configure(state="disabled")
+                            self.last_log_content = content
+                except: pass
+        self.after(1000, self._update_log_viewer_loop)
+
+    def on_model_click(self, mid):
+        if self.selected_mid == mid:
+            self.selected_mid = None
+            self.switch_to_terminal()
         else:
-            self.terminal.insert("end", f"Log file not found: {log_path}\n")
+            self.selected_mid = mid
+            self.switch_to_log(mid)
+        # Force UI update to show border change immediately
+        # The next health update will also refresh it
 
     def update_health_ui(self, health, runnability, active_models=None, vram=None):
         # 1. Update VRAM Monitor
@@ -295,16 +349,18 @@ class JarvisApp(ctk.CTk):
             info = health.get(port, {"status": "OFF", "info": None})
             
             if mid not in self.service_widgets:
-                # Hover and Click handlers
-                def on_click(event, model=m): self.open_service_log(model)
-                def on_enter(event, f=None): f.configure(fg_color="#1A202C")
-                def on_leave(event, f=None): f.configure(fg_color="#12161E")
+                # Selection/Hover handlers
+                def on_click(event, m_id=mid): self.on_model_click(m_id)
+                def on_enter(event, f=None, m_id=mid): 
+                    if self.selected_mid != m_id: f.configure(fg_color="#1A202C")
+                def on_leave(event, f=None, m_id=mid): 
+                    if self.selected_mid != m_id: f.configure(fg_color="#12161E")
 
-                f = ctk.CTkFrame(self.health_frame, fg_color="#12161E", corner_radius=6, cursor="hand2")
+                f = ctk.CTkFrame(self.health_frame, fg_color="#12161E", corner_radius=6, cursor="hand2", border_width=0)
                 f.pack(fill="x", pady=6, padx=5)
                 f.bind("<Button-1>", on_click)
-                f.bind("<Enter>", lambda e, frame=f: on_enter(e, frame))
-                f.bind("<Leave>", lambda e, frame=f: on_leave(e, frame))
+                f.bind("<Enter>", lambda e, frame=f, m_id=mid: on_enter(e, frame, m_id))
+                f.bind("<Leave>", lambda e, frame=f, m_id=mid: on_leave(e, frame, m_id))
                 
                 # Header: Lamp + ID
                 header = ctk.CTkFrame(f, fg_color="transparent")
@@ -320,7 +376,6 @@ class JarvisApp(ctk.CTk):
                 name_box.insert("1.0", mid)
                 name_box.configure(state="disabled")
                 name_box.pack(side="left", fill="x", expand=True)
-                # Textbox captures mouse, but we want click to bubble or be handled
                 name_box.bind("<Button-1>", on_click)
                 
                 # Capabilities: IN: ... | OUT: ...
@@ -370,13 +425,36 @@ class JarvisApp(ctk.CTk):
                 
                 self.service_widgets[mid] = {"lamp": lamp, "frame": f}
             
+            # Update Status Lamp
             color = GRAY_COLOR
             if info['status'] == "ON": color = SUCCESS_COLOR
             elif info['status'] == "OFF": color = ERROR_COLOR
             elif info['status'] == "STARTUP": color = WARNING_COLOR
             elif info['status'] == "BUSY": color = ACCENT_COLOR
-            
             self.service_widgets[mid]['lamp'].configure(text_color=color)
+
+            # Update Selection Border
+            if mid == self.selected_mid:
+                self.service_widgets[mid]['frame'].configure(border_width=2, border_color=SUCCESS_COLOR, fg_color="#1A202C")
+            else:
+                self.service_widgets[mid]['frame'].configure(border_width=0, fg_color="#12161E")
+
+        # 3. Update Loadout Dropdown Color
+        if self.controller.current_loadout == "NONE":
+            self.loadout_opt.configure(fg_color=GRAY_COLOR)
+        elif all(s['status'] == "ON" or s['status'] == "BUSY" for s in health.values()):
+            self.loadout_opt.configure(fg_color=SUCCESS_COLOR)
+        elif any(s['status'] == "STARTUP" for s in health.values()):
+            self.loadout_opt.configure(fg_color=WARNING_COLOR)
+        else:
+            self.loadout_opt.configure(fg_color=ACCENT_COLOR)
+
+        # 4. Update Record Button
+        if runnability.get('runnable'):
+            self.record_btn.configure(state="normal", fg_color=ACCENT_COLOR, text="HOLD TO TALK")
+        else:
+            err = runnability['errors'][0] if runnability['errors'] else "Offline"
+            self.record_btn.configure(state="disabled", fg_color=GRAY_COLOR, text=f"OFFLINE: {err}")
 
         # 3. Update Loadout Dropdown Color
         if self.controller.current_loadout == "NONE":
