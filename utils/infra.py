@@ -81,8 +81,15 @@ def get_system_health(ports=None):
 
     for port, meta in port_map.items():
         res = health_raw.get(port, {"status": "OFF", "info": None})
+        
+        # TRANSITION LOGIC: If a specific port was requested but is currently OFF, 
+        # it means we've just updated the registry and the service is STARTING.
+        status = res['status']
+        if ports and port in ports and status == "OFF":
+            status = "STARTUP"
+            
         health[port] = {
-            "status": res['status'], "info": res['info'],
+            "status": status, "info": res['info'],
             "label": meta['label'], "type": meta['type']
         }
     return health
