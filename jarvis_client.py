@@ -325,21 +325,31 @@ class PipelineGraphWidget(ctk.CTkFrame):
             outline_color = SUCCESS_COLOR if is_selected else "#2A2F3E"
             outline_w = 2 if is_selected else 1
             
-            if node.get('type') == 'source': outline_color = ACCENT_COLOR
-            elif node.get('type') == 'sink': outline_color = WARNING_COLOR
+            ntype = node.get('type')
+            role = node.get('role', ntype)
+            binding = node.get('binding')
+            
+            if ntype == 'source': outline_color = ACCENT_COLOR
+            elif ntype == 'sink': outline_color = WARNING_COLOR
+            elif ntype == 'processing' and role != 'utility' and not binding:
+                # Flag unbound required models
+                outline_color = ERROR_COLOR
+                outline_w = 2
 
             self.draw_rounded_rect(bx1, by1, node_w, node_h, 8, bg_color, outline_color, outline_w)
             
             # Text Content
             self.canvas.create_text(cx, cy - 10, text=nid[:20], fill="#FFFFFF", font=("Consolas", 10, "bold"))
             
-            binding = node.get('binding')
             if binding:
                 subtext = binding.get('id', 'Unknown')
                 self.canvas.create_text(cx, cy + 10, text=subtext[:22], fill=SUCCESS_COLOR, font=("Consolas", 8))
+            elif ntype == 'processing' and role != 'utility':
+                self.canvas.create_text(cx, cy + 10, text="[UNBOUND]", fill=ERROR_COLOR, font=("Consolas", 8, "bold"))
             else:
-                role = node.get('role', node.get('type'))
                 self.canvas.create_text(cx, cy + 10, text=f"[{role.upper()}]", fill=GRAY_COLOR, font=("Consolas", 8))
+
+class JarvisApp(ctk.CTk):
     def __init__(self):
         super().__init__()
         self.title("JARVIS CORE CONSOLE")
@@ -455,10 +465,18 @@ class PipelineGraphWidget(ctk.CTkFrame):
 
     def update_graph_view(self):
         try:
+            # Try to get the fully bound graph (with live models)
             bound_graph = self.controller.resolver.resolve(self.controller.current_pipeline, self.controller.current_strategy)
             self.graph_widget.set_graph_data(bound_graph)
-        except:
-            self.graph_widget.set_graph_data(None)
+        except Exception as e:
+            # Fallback: Load raw pipeline to show structure even if unbound
+            try:
+                raw_pipeline = self.controller.resolver.load_yaml(self.controller.current_pipeline)
+                unbound_graph = {n['id']: n.copy() for n in raw_pipeline.get('nodes', [])}
+                self.graph_widget.set_graph_data(unbound_graph)
+            except Exception as e2:
+                logger.error(f"Failed to load raw pipeline for graph: {e2}")
+                self.graph_widget.set_graph_data(None)
 
     def switch_to_terminal(self):
         self.log_viewer.grid_remove()
