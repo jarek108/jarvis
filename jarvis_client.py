@@ -20,7 +20,7 @@ from utils import load_config, list_all_loadouts, get_system_health, kill_all_ja
 from utils.pipeline import PipelineResolver, PipelineExecutor
 from utils.edge_sensors import AudioSensor
 
-from manage_loadout import apply_loadout, kill_loadout
+from manage_loadout import apply_loadout, kill_loadout, restart_service, kill_service
 
 # --- UI CONSTANTS ---
 BG_COLOR = "#0B0F19"
@@ -133,6 +133,26 @@ class JarvisController:
                 except Exception as e:
                     self.ui_queue.put({"type": "log", "msg": f"❌ LOADOUT ERROR: {e}", "tag": "system"})
 
+        threading.Thread(target=task, daemon=True).start()
+
+    def trigger_service_restart(self, sid):
+        def task():
+            self.ui_queue.put({"type": "log", "msg": f"🔄 RESTARTING SERVICE: {sid}", "tag": "system"})
+            try:
+                restart_service(sid, self.current_loadout)
+                self.ui_queue.put({"type": "log", "msg": f"✅ RESTARTED: {sid}", "tag": "system"})
+            except Exception as e:
+                self.ui_queue.put({"type": "log", "msg": f"❌ RESTART ERROR [{sid}]: {e}", "tag": "system"})
+        threading.Thread(target=task, daemon=True).start()
+
+    def trigger_service_kill(self, sid):
+        def task():
+            self.ui_queue.put({"type": "log", "msg": f"🔪 CLOSING SERVICE: {sid}", "tag": "system"})
+            try:
+                kill_service(sid)
+                self.ui_queue.put({"type": "log", "msg": f"✅ CLOSED: {sid}", "tag": "system"})
+            except Exception as e:
+                self.ui_queue.put({"type": "log", "msg": f"❌ CLOSE ERROR [{sid}]: {e}", "tag": "system"})
         threading.Thread(target=task, daemon=True).start()
 
     def start_recording(self):
@@ -329,6 +349,28 @@ class JarvisApp(ctk.CTk):
             else:
                 widgets['frame'].configure(border_width=0, fg_color="#12161E")
 
+    def on_right_click(self, event, m):
+        menu = ctk.CTkFrame(self, fg_color="#1A1E26", border_width=1, border_color=ACCENT_COLOR)
+        
+        def close_menu(e=None): menu.place_forget()
+        
+        # Position menu at mouse
+        menu.place(x=event.x_root - self.winfo_rootx(), y=event.y_root - self.winfo_rooty())
+        
+        # --- Options ---
+        ctk.CTkButton(menu, text="Open Log", fg_color="transparent", anchor="w", height=30, hover_color="#2A2F3E", 
+                      command=lambda: [self.open_service_log(m), close_menu()]).pack(fill="x", padx=2, pady=2)
+        
+        ctk.CTkButton(menu, text="Restart", fg_color="transparent", anchor="w", height=30, hover_color="#2A2F3E",
+                      command=lambda: [self.controller.trigger_service_restart(m['id']), close_menu()]).pack(fill="x", padx=2, pady=2)
+        
+        ctk.CTkButton(menu, text="Close", fg_color="transparent", anchor="w", height=30, hover_color="#2A2F3E", text_color=ERROR_COLOR,
+                      command=lambda: [self.controller.trigger_service_kill(m['id']), close_menu()]).pack(fill="x", padx=2, pady=2)
+
+        # Close menu when mouse leaves or clicks elsewhere
+        menu.bind("<Leave>", close_menu)
+        self.bind("<Button-1>", close_menu, add="+")
+
     def update_health_ui(self, health, runnability, active_models=None, vram=None):
         # 1. Update VRAM Monitor
         if vram:
@@ -359,6 +401,7 @@ class JarvisApp(ctk.CTk):
             if mid not in self.service_widgets:
                 # Selection/Hover handlers
                 def on_click(event, m_id=mid): self.on_model_click(m_id)
+                def on_rclick(event, model=m): self.on_right_click(event, model)
                 def on_enter(event, f=None, m_id=mid): 
                     if self.selected_mid != m_id: f.configure(fg_color="#1A202C")
                 def on_leave(event, f=None, m_id=mid): 
@@ -367,6 +410,7 @@ class JarvisApp(ctk.CTk):
                 f = ctk.CTkFrame(self.health_frame, fg_color="#12161E", corner_radius=6, cursor="hand2", border_width=0)
                 f.pack(fill="x", pady=6, padx=5)
                 f.bind("<Button-1>", on_click)
+                f.bind("<Button-3>", on_rclick)
                 f.bind("<Enter>", lambda e, frame=f, m_id=mid: on_enter(e, frame, m_id))
                 f.bind("<Leave>", lambda e, frame=f, m_id=mid: on_leave(e, frame, m_id))
                 
@@ -374,10 +418,12 @@ class JarvisApp(ctk.CTk):
                 header = ctk.CTkFrame(f, fg_color="transparent")
                 header.pack(fill="x", padx=8, pady=(8, 0))
                 header.bind("<Button-1>", on_click)
+                header.bind("<Button-3>", on_rclick)
                 
                 lamp = ctk.CTkLabel(header, text="●", font=("Arial", 18))
                 lamp.pack(side="left", padx=(0, 5))
                 lamp.bind("<Button-1>", on_click)
+                lamp.bind("<Button-3>", on_rclick)
                 
                 # Selectable Model Name
                 name_box = ctk.CTkTextbox(header, font=("Consolas", 12, "bold"), height=25, fg_color="transparent", text_color="#FFFFFF", border_width=0, activate_scrollbars=False)
@@ -385,6 +431,7 @@ class JarvisApp(ctk.CTk):
                 name_box.configure(state="disabled")
                 name_box.pack(side="left", fill="x", expand=True)
                 name_box.bind("<Button-1>", on_click)
+                name_box.bind("<Button-3>", on_rclick)
                 
                 # Capabilities: IN: ... | OUT: ...
                 caps = m.get('capabilities', [])
@@ -395,11 +442,13 @@ class JarvisApp(ctk.CTk):
                 subtext = ctk.CTkLabel(f, text=cap_text, font=("Consolas", 10), text_color="#D0D0D0", anchor="w")
                 subtext.pack(fill="x", padx=28, pady=(0, 2))
                 subtext.bind("<Button-1>", on_click)
+                subtext.bind("<Button-3>", on_rclick)
                 
                 # Streaming Indicator: Output-Stream ●
                 stream_frame = ctk.CTkFrame(f, fg_color="transparent")
                 stream_frame.pack(fill="x", padx=28, pady=(0, 2))
                 stream_frame.bind("<Button-1>", on_click)
+                stream_frame.bind("<Button-3>", on_rclick)
                 
                 is_llm = m['engine'] in ['ollama', 'vllm']
                 streaming = m.get('params', {}).get('stream', True if is_llm else False)
@@ -411,10 +460,12 @@ class JarvisApp(ctk.CTk):
                 e_lbl = ctk.CTkLabel(stream_frame, text=f"{engine_str} • Out-Stream: ", font=("Consolas", 10), text_color="#B0B0B0")
                 e_lbl.pack(side="left")
                 e_lbl.bind("<Button-1>", on_click)
+                e_lbl.bind("<Button-3>", on_rclick)
                 
                 s_lamp = ctk.CTkLabel(stream_frame, text="●", font=("Arial", 12), text_color=stream_color)
                 s_lamp.pack(side="left")
                 s_lamp.bind("<Button-1>", on_click)
+                s_lamp.bind("<Button-3>", on_rclick)
 
                 # Params (Filtered & Selectable)
                 params_dict = m.get('params', {}).copy()
@@ -428,10 +479,12 @@ class JarvisApp(ctk.CTk):
                     params_box.configure(state="disabled")
                     params_box.pack(fill="x", padx=28, pady=(0, 8))
                     params_box.bind("<Button-1>", on_click)
+                    params_box.bind("<Button-3>", on_rclick)
                 else:
                     ctk.CTkLabel(f, text="", height=4).pack() # Spacer
                 
                 self.service_widgets[mid] = {"lamp": lamp, "frame": f}
+
             
             # Update Status Lamp
             color = GRAY_COLOR

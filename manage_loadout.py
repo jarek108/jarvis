@@ -265,6 +265,35 @@ def apply_loadout(name, loud=False, soft=False):
 
 
 
+def kill_service(sid):
+    """Surgically kills a service and removes it from the registry."""
+    cfg = load_config()
+    project_root = get_project_root()
+    registry_path = os.path.join(project_root, "model_calibrations", "runtime_registry.json")
+    
+    if not os.path.exists(registry_path): return
+    
+    with open(registry_path, "r") as f:
+        data = json.load(f)
+        active = data.get("active_loadout", [])
+    
+    svc = next((s for s in active if s['id'] == sid), None)
+    if not svc: return
+
+    logger.warning(f"Surgical Kill: {sid} on port {svc['port']}")
+    kill_process_on_port(svc['port'])
+    
+    # Update registry
+    new_active = [s for s in active if s['id'] != sid]
+    save_runtime_registry(new_active, project_root)
+
+def restart_service(sid, loadout_name):
+    """Kills a service and restarts it using its definition from the specified loadout."""
+    kill_service(sid)
+    # Give OS a moment to release port
+    time.sleep(1)
+    apply_loadout(loadout_name, soft=True)
+
 def kill_loadout(target):
     cfg = load_config()
     if target == "all":
