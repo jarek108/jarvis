@@ -209,13 +209,13 @@ class JarvisApp(ctk.CTk):
         self.loadout_opt.pack(pady=(0, 10), padx=10)
 
         # VRAM Monitor
-        self.vram_label = ctk.CTkLabel(self.sidebar, text="VRAM: 0.0 / 0.0 GB", font=("Consolas", 11), text_color=GRAY_COLOR)
+        self.vram_label = ctk.CTkLabel(self.sidebar, text="VRAM: 0.0 / 0.0 GB", font=("Consolas", 11), text_color="#D0D0D0")
         self.vram_label.pack(pady=(5, 0))
-        self.vram_bar = ctk.CTkProgressBar(self.sidebar, width=200, height=8, fg_color="#1A1E26", progress_color=ACCENT_COLOR)
+        self.vram_bar = ctk.CTkProgressBar(self.sidebar, width=200, height=8, fg_color="#10141B", progress_color=ACCENT_COLOR)
         self.vram_bar.pack(pady=(2, 20))
         self.vram_bar.set(0)
 
-        ctk.CTkLabel(self.sidebar, text="ACTIVE MODELS", font=("Impact", 16), text_color=GRAY_COLOR).pack(pady=(10, 5))
+        ctk.CTkLabel(self.sidebar, text="ACTIVE MODELS", font=("Impact", 16), text_color="#E0E0E0").pack(pady=(10, 5))
         self.health_frame = ctk.CTkFrame(self.sidebar, fg_color="transparent")
         self.health_frame.pack(fill="both", expand=True, padx=10)
         self.service_widgets = {}
@@ -447,11 +447,11 @@ class JarvisApp(ctk.CTk):
         if self.controller.current_loadout == "NONE":
             self.loadout_opt.configure(fg_color=GRAY_COLOR)
         elif all(s['status'] == "ON" or s['status'] == "BUSY" for s in health.values()):
-            self.loadout_opt.configure(fg_color=SUCCESS_COLOR)
+            self.loadout_opt.configure(fg_color=SUCCESS_COLOR, text_color="black")
         elif any(s['status'] == "STARTUP" for s in health.values()):
-            self.loadout_opt.configure(fg_color=WARNING_COLOR)
+            self.loadout_opt.configure(fg_color="#CCAA00", text_color="white")
         else:
-            self.loadout_opt.configure(fg_color=ACCENT_COLOR)
+            self.loadout_opt.configure(fg_color=ACCENT_COLOR, text_color="black")
 
         # 5. Update Record Button
         if runnability.get('runnable'):
