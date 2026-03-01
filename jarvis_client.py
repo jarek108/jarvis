@@ -202,7 +202,144 @@ class JarvisController:
         
         asyncio.run(run_and_monitor())
 
-class JarvisApp(ctk.CTk):
+class PipelineGraphWidget(ctk.CTkFrame):
+    def __init__(self, master, **kwargs):
+        super().__init__(master, **kwargs)
+        self.canvas = ctk.CTkCanvas(self, bg="#080C14", highlightthickness=0)
+        self.canvas.pack(fill="both", expand=True)
+        self.nodes = {}
+        self.edges = []
+        self.canvas.bind("<Configure>", self.on_resize)
+        self.canvas.bind("<Button-1>", self.on_click)
+        self.on_node_click_callback = None
+        self.selected_node_id = None
+
+    def on_resize(self, event):
+        self.draw_graph()
+
+    def set_graph_data(self, bound_graph):
+        self.bound_graph = bound_graph
+        self.draw_graph()
+
+    def on_click(self, event):
+        x, y = event.x, event.y
+        clicked_id = None
+        for nid, data in self.nodes.items():
+            bx1, by1, bx2, by2 = data['bbox']
+            if bx1 <= x <= bx2 and by1 <= y <= by2:
+                clicked_id = nid
+                break
+                
+        if clicked_id:
+            if self.selected_node_id == clicked_id:
+                self.selected_node_id = None
+            else:
+                self.selected_node_id = clicked_id
+            self.draw_graph()
+            if self.on_node_click_callback:
+                self.on_node_click_callback(self.selected_node_id)
+
+    def draw_rounded_rect(self, x, y, w, h, r, color, outline_color="", outline_width=0):
+        # Create a rounded rectangle using lines and arcs
+        points = [
+            x+r, y,
+            x+w-r, y,
+            x+w, y,
+            x+w, y+r,
+            x+w, y+h-r,
+            x+w, y+h,
+            x+w-r, y+h,
+            x+r, y+h,
+            x, y+h,
+            x, y+h-r,
+            x, y+r,
+            x, y
+        ]
+        return self.canvas.create_polygon(points, fill=color, outline=outline_color, width=outline_width, smooth=True)
+
+    def draw_edge(self, x1, y1, x2, y2, color="#2A2F3E", style=None):
+        # Draw an angled or curved line with an arrowhead
+        ctrl_x = (x1 + x2) / 2
+        return self.canvas.create_line(x1, y1, ctrl_x, y1, ctrl_x, y2, x2, y2, fill=color, width=2, arrow=ctk.LAST, smooth=True, dash=style)
+
+    def draw_graph(self):
+        self.canvas.delete("all")
+        if not hasattr(self, 'bound_graph') or not self.bound_graph:
+            self.canvas.create_text(self.winfo_width()/2, self.winfo_height()/2, text="No Pipeline Loaded", fill=GRAY_COLOR, font=("Consolas", 14))
+            return
+
+        w, h = self.winfo_width(), self.winfo_height()
+        if w <= 1 or h <= 1: return
+
+        # 1. Layout Engine (Simple Tiered Grid based on implicit roles)
+        tiers = {0: [], 1: [], 2: [], 3: []}
+        
+        # Categorize nodes by role/type to assign tiers
+        for nid, node in self.bound_graph.items():
+            ntype = node.get('type')
+            role = node.get('role', '')
+            if ntype in ['source', 'input']: tiers[0].append(nid)
+            elif role == 'utility': tiers[1].append(nid)
+            elif ntype == 'processing' and role != 'utility': tiers[2].append(nid)
+            elif ntype == 'sink': tiers[3].append(nid)
+            else: tiers[1].append(nid) # Fallback
+
+        # Calculate coordinates
+        node_w, node_h = 160, 60
+        margin_x = w / 5
+        self.nodes = {}
+
+        for tier_idx, nodes_in_tier in tiers.items():
+            if not nodes_in_tier: continue
+            cx = margin_x * (tier_idx + 1)
+            spacing_y = h / (len(nodes_in_tier) + 1)
+            
+            for i, nid in enumerate(nodes_in_tier):
+                cy = spacing_y * (i + 1)
+                self.nodes[nid] = {
+                    'x': cx, 'y': cy,
+                    'bbox': (cx - node_w/2, cy - node_h/2, cx + node_w/2, cy + node_h/2),
+                    'data': self.bound_graph[nid]
+                }
+
+        # 2. Draw Edges
+        for nid, ndata in self.nodes.items():
+            node = ndata['data']
+            inputs = node.get('inputs', [])
+            for src_id in inputs:
+                if src_id in self.nodes:
+                    src = self.nodes[src_id]
+                    # Arrow from right edge of source to left edge of target
+                    dash = (4, 4) if node.get('role') == 'memory' else None
+                    self.draw_edge(src['bbox'][2], src['y'], ndata['bbox'][0], ndata['y'], style=dash)
+
+        # 3. Draw Nodes
+        for nid, ndata in self.nodes.items():
+            node = ndata['data']
+            cx, cy = ndata['x'], ndata['y']
+            bx1, by1, bx2, by2 = ndata['bbox']
+            
+            # Styling based on state and selection
+            is_selected = (nid == self.selected_node_id)
+            bg_color = "#12161E"
+            outline_color = SUCCESS_COLOR if is_selected else "#2A2F3E"
+            outline_w = 2 if is_selected else 1
+            
+            if node.get('type') == 'source': outline_color = ACCENT_COLOR
+            elif node.get('type') == 'sink': outline_color = WARNING_COLOR
+
+            self.draw_rounded_rect(bx1, by1, node_w, node_h, 8, bg_color, outline_color, outline_w)
+            
+            # Text Content
+            self.canvas.create_text(cx, cy - 10, text=nid[:20], fill="#FFFFFF", font=("Consolas", 10, "bold"))
+            
+            binding = node.get('binding')
+            if binding:
+                subtext = binding.get('id', 'Unknown')
+                self.canvas.create_text(cx, cy + 10, text=subtext[:22], fill=SUCCESS_COLOR, font=("Consolas", 8))
+            else:
+                role = node.get('role', node.get('type'))
+                self.canvas.create_text(cx, cy + 10, text=f"[{role.upper()}]", fill=GRAY_COLOR, font=("Consolas", 8))
     def __init__(self):
         super().__init__()
         self.title("JARVIS CORE CONSOLE")
@@ -216,6 +353,7 @@ class JarvisApp(ctk.CTk):
         self.last_log_content = ""
         
         self.setup_ui()
+        self.update_graph_view()
         self.poll_queue()
         self._update_log_viewer_loop()
 
@@ -268,9 +406,20 @@ class JarvisApp(ctk.CTk):
         self.mode_label = ctk.CTkLabel(self.header, text="MODE: TERMINAL", font=("Consolas", 12, "bold"), text_color=ACCENT_COLOR)
         self.mode_label.pack(side="right", padx=20)
 
-        # --- MAIN CONSOLE AREA ---
-        self.console_container = ctk.CTkFrame(self, fg_color="transparent")
-        self.console_container.grid(row=1, column=1, sticky="nsew", padx=15, pady=15)
+        # --- MAIN DISPLAY AREA ---
+        self.main_area = ctk.CTkFrame(self, fg_color="transparent")
+        self.main_area.grid(row=1, column=1, sticky="nsew", padx=15, pady=15)
+        self.main_area.grid_columnconfigure(0, weight=1) # Graph
+        self.main_area.grid_columnconfigure(1, weight=1) # Console
+        self.main_area.grid_rowconfigure(0, weight=1)
+
+        # 1. Pipeline Graph
+        self.graph_widget = PipelineGraphWidget(self.main_area)
+        self.graph_widget.grid(row=0, column=0, sticky="nsew", padx=(0, 10))
+
+        # 2. Console Container (Terminal or Log Viewer)
+        self.console_container = ctk.CTkFrame(self.main_area, fg_color="transparent")
+        self.console_container.grid(row=0, column=1, sticky="nsew")
         self.console_container.grid_columnconfigure(0, weight=1)
         self.console_container.grid_rowconfigure(0, weight=1)
 
@@ -292,6 +441,7 @@ class JarvisApp(ctk.CTk):
         self.controller.current_pipeline = self.pipe_var.get()
         self.controller.current_strategy = self.strategy_var.get()
         self.controller.save_checkpoint()
+        self.update_graph_view()
 
     def on_loadout_change(self, val):
         self.controller.trigger_loadout_change(val)
@@ -301,6 +451,14 @@ class JarvisApp(ctk.CTk):
         for widget in self.health_frame.winfo_children():
             widget.destroy()
         self.service_widgets = {}
+        self.update_graph_view()
+
+    def update_graph_view(self):
+        try:
+            bound_graph = self.controller.resolver.resolve(self.controller.current_pipeline, self.controller.current_strategy)
+            self.graph_widget.set_graph_data(bound_graph)
+        except:
+            self.graph_widget.set_graph_data(None)
 
     def switch_to_terminal(self):
         self.log_viewer.grid_remove()
