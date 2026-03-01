@@ -16,17 +16,67 @@ def load_config():
     return _config_cache
 
 def list_all_loadouts(include_experimental=False):
-    """Lists all available loadout names from the loadouts/ directory."""
+    """Lists all available loadout names from the loadouts.yaml file."""
     project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    loadouts_dir = os.path.join(project_root, "loadouts")
-    if not os.path.exists(loadouts_dir):
+    loadouts_file = os.path.join(project_root, "loadouts.yaml")
+    if not os.path.exists(loadouts_file):
         return []
     
-    loadouts = []
-    for f in os.listdir(loadouts_dir):
-        if f.endswith(".yaml"):
-            loadouts.append(f.replace(".yaml", ""))
-    return sorted(loadouts)
+    with open(loadouts_file, "r") as f:
+        data = yaml.safe_load(f)
+        return sorted(list(data.keys())) if data else []
+
+def parse_model_string(entry, stt_registry=None, tts_registry=None):
+    """
+    Parses a string like 'VL_model-id#ctx=8192#stream' into a structured dict.
+    Returns: {"id": str, "engine": str, "params": dict}
+    """
+    if not isinstance(entry, str): return None
+    
+    # Fallback registry fetch if not provided
+    if stt_registry is None or tts_registry is None:
+        cfg = load_config()
+        stt_registry = cfg.get('stt_loadout', {})
+        tts_registry = cfg.get('tts_loadout', {})
+
+    parts = entry.split('#')
+    raw_id = parts[0]
+    
+    flags = {}
+    for f in parts[1:]:
+        if '=' in f:
+            k, v = f.split('=', 1)
+            try:
+                v = int(v) if v.isdigit() else (float(v) if '.' in v else v)
+            except: pass
+            flags[k.lower()] = v
+        else:
+            flags[f.lower()] = True
+
+    engine = "native"
+    clean_id = raw_id
+    
+    if raw_id in stt_registry or raw_id in tts_registry:
+        engine = "native"
+    elif raw_id.startswith("OL_"):
+        engine = "ollama"
+        clean_id = raw_id[3:]
+    elif raw_id.startswith("VL_"):
+        engine = "vllm"
+        clean_id = raw_id[3:]
+    elif raw_id.startswith("vllm:"):
+        engine = "vllm"
+        clean_id = raw_id[5:]
+        
+    # Map 'ctx' flag back to 'num_ctx' for system compatibility
+    if 'ctx' in flags:
+        flags['num_ctx'] = flags.pop('ctx')
+
+    return {
+        "id": clean_id,
+        "engine": engine,
+        "params": flags
+    }
 
 def get_model_calibration(model_id, engine="vllm"):
     """

@@ -61,16 +61,25 @@ def save_runtime_registry(services, project_root):
 def apply_loadout(name, loud=False, soft=False):
     cfg = load_config()
     project_root = os.getcwd()
-    loadout_path = os.path.join(project_root, "loadouts", f"{name}.yaml")
+    loadouts_file = os.path.join(project_root, "loadouts.yaml")
     
-    if not os.path.exists(loadout_path):
-        logger.error(f"Loadout '{name}' not found at {loadout_path}")
+    if not os.path.exists(loadouts_file):
+        logger.error(f"Loadouts file not found: {loadouts_file}")
         return
 
-    with open(loadout_path, "r") as f:
-        target = yaml.safe_load(f)
+    with open(loadouts_file, "r") as f:
+        all_loadouts = yaml.safe_load(f)
 
-    logger.info(f"Applying Loadout: {target.get('description', name)}")
+    if name not in all_loadouts:
+        logger.error(f"Loadout '{name}' not found in loadouts.yaml")
+        return
+
+    target = all_loadouts[name]
+    # 'target' can be a list of strings OR a dict with a 'models' key
+    model_strings = target.get('models', []) if isinstance(target, dict) else target
+    description = target.get('desc', name) if isinstance(target, dict) else name
+
+    logger.info(f"Applying Loadout: {description}")
     
     # 1. Initialize Session Directory
     session_id = f"RUN_{time.strftime('%Y%m%d_%H%M%S')}"
@@ -79,11 +88,16 @@ def apply_loadout(name, loud=False, soft=False):
     logger.info(f"📁 Initialized Loadout Session: {session_id}")
 
     # 2. Pre-calculate active_services with ports and per-model session logs
+    from utils.config import parse_model_string
     active_services = []
-    for svc in target.get('services', []):
+    
+    for m_str in model_strings:
+        svc = parse_model_string(m_str)
+        if not svc: continue
+        
         sid = svc['id']
         engine = svc['engine']
-        params = svc.get('params', {})
+        params = svc['params']
         
         # Resolve ports and logs
         stype = "llm"

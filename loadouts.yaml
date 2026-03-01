@@ -1,0 +1,13 @@
+base-qwen30-multi:
+  desc: "High-performance vision-capable loadout using Qwen 30B."
+  models:
+    - "VL_quanttrio--qwen3-vl-30b-a3b-instruct-awq#ctx=32768"
+    - "faster-whisper-base#compute_type=float16"
+    - "chatterbox-multilingual"
+
+tiny-gpt20-turbo:
+  desc: "Ultra-fast lightweight loadout for rapid interaction."
+  models:
+    - "OL_qwen2.5:0.5b#ctx=4096"
+    - "faster-whisper-tiny"
+    - "chatterbox-turbo"
