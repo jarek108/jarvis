@@ -108,9 +108,6 @@ class LifecycleManager:
                 health = f"http://127.0.0.1:{llm_port}/health"
                 required.append({"type": "llm", "id": f"STUB-{original_id}", "port": llm_port, "cmd": cmd, "health": health})
             elif engine == "ollama":
-                # Resolve canonical ID for external command
-                canonical_id = utils.resolve_canonical_id(model, engine="ollama")
-                
                 # --- START OLLAMA GUARDRAIL ---
                 try:
                     # 1. Resolve context length
@@ -149,9 +146,6 @@ class LifecycleManager:
 
                 vllm_port = self.cfg['ports'].get('vllm', 8300)
                 total_vram = utils.get_gpu_total_vram()
-                
-                # Resolve canonical ID for external command
-                canonical_id = utils.resolve_canonical_id(model, engine="vllm")
                 
                 # --- START SMART ALLOCATOR ---
                 vllm_util = None
@@ -212,7 +206,7 @@ class LifecycleManager:
                     "-v", f"{hf_cache}:/root/.cache/huggingface", 
                     "-v", f"{vlm_input_dir}:/data",
                     "vllm/vllm-openai", 
-                    canonical_id,
+                    model,
                     "--gpu-memory-utilization", str(vllm_util),
                     "--max-model-len", str(max_len),
                     "--limit-mm-per-prompt", mm_limit_json,
@@ -251,9 +245,7 @@ class LifecycleManager:
             if self.cat['stt']: cmd.extend(["--stt", self.cat['stt']['id']])
             if self.cat['tts']: cmd.extend(["--tts", self.cat['tts']['id']])
             if self.cat['llm']: 
-                # Use canonical ID for external orchestrator call
-                can_id = utils.resolve_canonical_id(self.cat['llm']['original'], engine=self.cat['llm']['engine'])
-                cmd.extend(["--llm", can_id])
+                cmd.extend(["--llm", self.cat['llm']['model']])
             if self.benchmark_mode: cmd.append("--benchmark-mode")
             if self.stub_mode: cmd.append("--stub")
             
@@ -270,11 +262,8 @@ class LifecycleManager:
         
         if self.cat['llm']:
             llm = self.cat['llm']
-            prefix = "VL_" if llm['engine'] == "vllm" else "OL_"
-            
             flags = llm.get('flags', {})
-            model_id = llm['model'].upper()
-            name = f"{prefix}{model_id}"
+            name = llm['model'].upper()
             
             if flags.get('nativevideo') or self.kwargs.get('nativevideo'):
                 name += "#NATIVE"
@@ -294,7 +283,9 @@ class LifecycleManager:
                 if img_lim and int(img_lim) > 1: name += f"#IMG_LIM={img_lim}"
                 if vid_lim and int(vid_lim) > 1: name += f"#VID_LIM={vid_lim}"
 
-            display_parts.append(name)
+            # Prepend engine explicitly for clarity in test runner output
+            engine_prefix = "OL_" if llm['engine'] == "ollama" else ("VL_" if llm['engine'] == "vllm" else "")
+            display_parts.append(f"{engine_prefix}{name}")
             
         if self.cat['tts']: 
             display_parts.append(self.cat['tts']['id'].upper())
@@ -353,7 +344,9 @@ class LifecycleManager:
         services_to_start = [s for s in required_services if health_snapshot.get(s['port'], {}).get('status') != "ON"]
         for s in services_to_start:
             spawn_ts = time.strftime("%H%M%S")
-            log_path = os.path.join(log_dir, f"svc_{s['type']}_{s['id'].replace(':', '-').replace('/', '--')}_{spawn_ts}.log")
+            from utils.config import safe_filename
+            safe_sid = safe_filename(s['id'])
+            log_path = os.path.join(log_dir, f"svc_{s['type']}_{safe_sid}_{spawn_ts}.log")
             if self.on_phase: self.on_phase(f"log_path:{s['type']}:{log_path}")
             
             f_log = open(log_path, "w")

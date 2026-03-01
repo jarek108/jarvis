@@ -10,15 +10,6 @@ class LLMAdapter(NodeAdapter):
         port = binding['port']
         model_id = binding['id'].split('#')[0]
         
-        # vLLM requires the full canonical ID (e.g. Qwen/Qwen2-VL-...)
-        if binding['engine'] == "vllm":
-            from utils.config import resolve_canonical_id
-            model_id = resolve_canonical_id(model_id, engine="vllm")
-        else:
-            # Ollama/Stubs cleanup
-            model_id = model_id.replace("OL_", "").replace("VL_", "")
-            if binding['engine'] == "ollama": model_id = model_id.lower()
-        
         # 1. Collect inputs from all streams
         resolved_inputs = {}
         for in_id, stream in input_streams.items():

@@ -59,44 +59,28 @@ class PipelineResolver:
             return {"models": [], "external": 0.0}
 
     def get_model_capabilities(self, model_id, engine):
-        """Looks up capabilities in the calibration registry with lenient matching."""
-        prefix = "vl_" if engine == "vllm" else ("ol_" if engine == "ollama" else "")
-        if engine == "native":
-            if "whisper" in model_id.lower(): prefix = "stt_"
-            elif "chatterbox" in model_id.lower(): prefix = "tts_"
+        """Looks up capabilities in the calibration registry."""
+        from .config import safe_filename
         
-        # Sanitize and normalize target
-        target = model_id.lower().split('#')[0]
-        # Aggressive case-insensitive prefix stripping to handle 'OL_VL_' weirdness
-        while target.startswith("ol_") or target.startswith("vl_") or target.startswith("stt_") or target.startswith("tts_"):
-            if target.startswith("ol_"): target = target[3:]
-            elif target.startswith("vl_"): target = target[3:]
-            elif target.startswith("stt_"): target = target[4:]
-            elif target.startswith("tts_"): target = target[4:]
-            
-        target = target.replace(':', '-').replace('/', '--')
-        
-        # Clean target for fuzzy matching (remove common suffixes)
-        clean_target = target.replace('-instruct', '').replace('-fp16', '').replace('-q4_k_m', '').replace('.', '').replace('-', '')
-
         caps = []
-        # 1. Direct match attempt
-        cal_path = os.path.join(self.cal_dir, f"{prefix}{target}.yaml")
+        safe_id = safe_filename(model_id)
+        
+        # 1. Direct match using standard naming convention
+        cal_path = os.path.join(self.cal_dir, f"{engine}_{safe_id}.yaml")
+        
+        # Fallback to legacy prefix format if migration is incomplete
+        if not os.path.exists(cal_path):
+            legacy_prefix = "vl_" if engine == "vllm" else ("ol_" if engine == "ollama" else "")
+            if engine == "native":
+                if "whisper" in model_id.lower(): legacy_prefix = "stt_"
+                elif "chatterbox" in model_id.lower(): legacy_prefix = "tts_"
+            cal_path = os.path.join(self.cal_dir, f"{legacy_prefix}{safe_id}.yaml")
+            
         if os.path.exists(cal_path):
             with open(cal_path, "r") as f:
                 caps = yaml.safe_load(f).get("capabilities", [])
 
-        # 2. Fuzzy match in calibration directory
-        if not caps and os.path.exists(self.cal_dir):
-            for f in os.listdir(self.cal_dir):
-                if f.startswith(prefix) and f.endswith(".yaml"):
-                    f_name = f.lower().replace('.yaml', '')[len(prefix):].replace('.', '').replace('-', '')
-                    if clean_target in f_name or f_name in clean_target:
-                        with open(os.path.join(self.cal_dir, f), "r") as yaml_f:
-                            caps = yaml.safe_load(yaml_f).get("capabilities", [])
-                            break
-        
-        # 3. Engine-based defaults (ENSURE IN/OUT are present)
+        # 2. Engine-based defaults (ENSURE IN/OUT are present)
         if engine == "ollama" or engine == "vllm":
             if not caps: caps = ["text_in", "text_out"]
             if "vl" in model_id.lower() and "image_in" not in caps:

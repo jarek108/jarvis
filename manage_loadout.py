@@ -126,7 +126,9 @@ def apply_loadout(name, loud=False, soft=False):
         else: port = None
         
         if port:
-            log_path = os.path.join(session_dir, f"svc_{stype}_{sid.replace(':', '-').replace('/', '--')}.log")
+            from utils.config import safe_filename
+            safe_sid = safe_filename(sid)
+            log_path = os.path.join(session_dir, f"svc_{stype}_{safe_sid}.log")
             svc_entry = {
                 "id": sid, "engine": engine, "port": port, 
                 "params": params, "log_path": log_path, "type": stype
@@ -209,8 +211,6 @@ def apply_loadout(name, loud=False, soft=False):
                 wait_for_port(port)
 
         elif engine == "vllm":
-            from utils.config import resolve_canonical_id
-            canonical_id = resolve_canonical_id(sid, engine="vllm")
             num_ctx = params.get('num_ctx') or params.get('max_model_len') or 16384
             
             # Verify Docker Daemon
@@ -250,7 +250,7 @@ def apply_loadout(name, loud=False, soft=False):
                 "-p", f"{port}:8000",
                 "-v", f"{hf_cache}:/root/.cache/huggingface",
                 "vllm/vllm-openai",
-                "--model", canonical_id,
+                "--model", sid,
                 "--gpu-memory-utilization", str(round(vllm_util, 3)),
                 "--max-model-len", str(num_ctx)
             ]
