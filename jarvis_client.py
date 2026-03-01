@@ -97,7 +97,12 @@ class JarvisController:
                 self.runnability = self.resolver.check_runnability(self.current_pipeline, self.current_strategy, external_health=self.health_state)
                 
                 # 3. Update UI
-                self.ui_queue.put({"type": "health_update", "health": self.health_state, "runnability": self.runnability})
+                self.ui_queue.put({
+                    "type": "health_update", 
+                    "health": self.health_state, 
+                    "runnability": self.runnability,
+                    "active_models": active_models
+                })
             except Exception as e:
                 logger.error(f"Status Polling Error: {e}")
             time.sleep(1.5)
@@ -236,26 +241,46 @@ class JarvisApp(ctk.CTk):
             widget.destroy()
         self.service_widgets = {}
 
-    def update_health_ui(self, health, runnability):
-        # 1. Update Service Sidebar (Only for models in current loadout)
-        # We also need to purge widgets that are no longer relevant
-        current_labels = [info['label'] for info in health.values()]
-        for label in list(self.service_widgets.keys()):
-            if label not in current_labels:
-                # This should be handled by on_loadout_change clearing, 
-                # but this is a safety net
-                pass
+    def update_health_ui(self, health, runnability, active_models=None):
+        # 1. Update Service Sidebar (Precise Model List)
+        models_to_render = active_models if active_models else []
+        
+        # Determine if we need to purge widgets for models no longer in loadout
+        current_mids = [m['id'] for m in models_to_render]
+        for mid in list(self.service_widgets.keys()):
+            if mid not in current_mids:
+                self.service_widgets[mid]['frame'].destroy()
+                del self.service_widgets[mid]
 
-        for port, info in health.items():
-            label = info['label']
-            if label not in self.service_widgets:
-                f = ctk.CTkFrame(self.health_frame, fg_color="transparent")
-                f.pack(fill="x", pady=2)
-                lamp = ctk.CTkLabel(f, text="●", font=("Arial", 18))
-                lamp.pack(side="left", padx=5)
-                name = ctk.CTkLabel(f, text=label[:22], font=("Consolas", 12))
-                name.pack(side="left")
-                self.service_widgets[label] = {"lamp": lamp, "name": name, "frame": f}
+        for m in models_to_render:
+            mid = m['id']
+            port = m['port']
+            info = health.get(port, {"status": "OFF", "info": None})
+            
+            if mid not in self.service_widgets:
+                f = ctk.CTkFrame(self.health_frame, fg_color="#12161E", corner_radius=6)
+                f.pack(fill="x", pady=4, padx=5)
+                
+                # Header: Lamp + ID
+                header = ctk.CTkFrame(f, fg_color="transparent")
+                header.pack(fill="x", padx=5, pady=(5, 0))
+                lamp = ctk.CTkLabel(header, text="●", font=("Arial", 18))
+                lamp.pack(side="left", padx=2)
+                name = ctk.CTkLabel(header, text=mid, font=("Consolas", 12, "bold"), anchor="w", justify="left")
+                name.pack(side="left", fill="x", expand=True)
+                
+                # Subtext: Engine + Caps
+                caps_str = " | ".join(m.get('capabilities', []))
+                subtext = ctk.CTkLabel(f, text=f"{m['engine'].upper()} • {caps_str}", font=("Consolas", 10), text_color=GRAY_COLOR, anchor="w")
+                subtext.pack(fill="x", padx=25, pady=(0, 2))
+                
+                # Params: num_ctx, etc.
+                if m.get('params'):
+                    p_str = " ".join([f"{k}:{v}" for k, v in m['params'].items()])
+                    params = ctk.CTkLabel(f, text=p_str, font=("Consolas", 9), text_color="#5A6070", anchor="w", wraplength=180)
+                    params.pack(fill="x", padx=25, pady=(0, 5))
+                
+                self.service_widgets[mid] = {"lamp": lamp, "frame": f}
             
             color = GRAY_COLOR
             if info['status'] == "ON": color = SUCCESS_COLOR
@@ -263,7 +288,7 @@ class JarvisApp(ctk.CTk):
             elif info['status'] == "STARTUP": color = WARNING_COLOR
             elif info['status'] == "BUSY": color = ACCENT_COLOR
             
-            self.service_widgets[label]['lamp'].configure(text_color=color)
+            self.service_widgets[mid]['lamp'].configure(text_color=color)
 
         # 2. Update Loadout Dropdown Color
         if self.controller.current_loadout == "NONE":
@@ -290,7 +315,7 @@ class JarvisApp(ctk.CTk):
             elif msg['type'] == "state":
                 if msg.get('recording'): self.record_btn.configure(fg_color=ERROR_COLOR, text="RECORDING...")
             elif msg['type'] == "health_update":
-                self.update_health_ui(msg['health'], msg['runnability'])
+                self.update_health_ui(msg['health'], msg['runnability'], active_models=msg.get('active_models'))
         self.after(100, self.poll_queue)
 
 if __name__ == "__main__":
