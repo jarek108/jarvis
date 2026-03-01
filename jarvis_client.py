@@ -507,6 +507,17 @@ class JarvisApp(ctk.CTk):
             widget.destroy()
         self.service_widgets = {}
 
+        # Capture current hardware context for instant UI refresh
+        try:
+            registry_data = self.controller.resolver.get_live_models()
+            vram_snap = {
+                "used": utils.get_gpu_vram_usage(),
+                "total": utils.get_gpu_total_vram(),
+                "external": registry_data.get("external", 0.0)
+            }
+        except:
+            vram_snap = None
+
         if val != "NONE":
             try:
                 # Load and parse the selected loadout immediately for the UI
@@ -524,6 +535,7 @@ class JarvisApp(ctk.CTk):
                     for i, m_str in enumerate(model_strings):
                         m_data = parse_model_string(m_str)
                         if m_data:
+                            # Use unique mock ports to avoid collision in the status dict
                             mock_port = -1 - i
                             instant_models.append({
                                 "id": m_data['id'], "engine": m_data['engine'], "params": m_data['params'],
@@ -532,14 +544,16 @@ class JarvisApp(ctk.CTk):
                             })
                             instant_health[mock_port] = {"status": "STARTUP", "info": "Initializing..."}
                     
-                    # Force immediate UI render with instant models
-                    self.update_health_ui(instant_health, {"runnable": False, "errors": ["Loading..."]}, active_models=instant_models)
+                    # Force immediate UI render with instant models AND hardware context
+                    self.update_health_ui(instant_health, {"runnable": False, "errors": ["Loading..."]}, 
+                                         active_models=instant_models, vram=vram_snap)
             except Exception as e:
                 logger.error(f"Instant UI refresh failed: {e}")
+        else:
+            self.transition_lock = False
+            self.update_health_ui({}, {"runnable": False, "errors": ["Offline"]}, active_models=[], vram=vram_snap)
 
         # 3. Defer Heavy Operations
-        # Return control to Tkinter immediately so it can draw the Yellow models.
-        # Fire the backend logic 100ms later.
         def execute_backend_changes():
             self.controller.trigger_loadout_change(val)
             self.update_graph_view()
@@ -637,16 +651,7 @@ class JarvisApp(ctk.CTk):
         self.bind("<Button-1>", close_menu, add="+")
 
     def update_health_ui(self, health, runnability, active_models=None, vram=None):
-        # 3. Transition Logic: If we are in transition, don't allow empty polling updates 
-        # to clear the models we just "instantly" listed.
-        if self.transition_lock and active_models is not None and not active_models:
-            return
-        
-        # Release lock once we get a real update with models
-        if active_models:
-            self.transition_lock = False
-
-        # 1. Update VRAM Monitor
+        # 1. Update VRAM Monitor (ALWAYS update hardware state)
         if vram:
             used, total, external = vram['used'], vram['total'], vram.get('external', 0.0)
             model_vram = max(0, used - external)
@@ -666,7 +671,7 @@ class JarvisApp(ctk.CTk):
             model_w = min(bar_max_w - ext_w, model_w)
             
             self.vram_bar_ext.configure(width=ext_w)
-            self.vram_bar_model.place(x=ext_w, y=0) # Shift model bar to start after external
+            self.vram_bar_model.place(x=ext_w, y=0) 
             self.vram_bar_model.configure(width=model_w)
             
             # Dynamic bar color for model usage if very high
@@ -674,7 +679,14 @@ class JarvisApp(ctk.CTk):
             elif pct > 0.85: self.vram_bar_model.configure(fg_color=WARNING_COLOR)
             else: self.vram_bar_model.configure(fg_color=ACCENT_COLOR)
 
-        # 2. Update Service Sidebar (Precise Model List)
+        # 2. Transition Logic (Only blocks model list clearing)
+        if self.transition_lock and active_models is not None and not active_models:
+            return
+        
+        if active_models:
+            self.transition_lock = False
+
+        # 3. Update Service Sidebar (Precise Model List)
         models_to_render = active_models if active_models else []
         
         # Determine if we need to purge widgets for models no longer in loadout
