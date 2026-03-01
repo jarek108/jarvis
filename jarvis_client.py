@@ -318,8 +318,15 @@ class JarvisApp(ctk.CTk):
         else:
             self.selected_mid = mid
             self.switch_to_log(mid)
-        # Force UI update to show border change immediately
-        # The next health update will also refresh it
+        self._update_selection_ui()
+
+    def _update_selection_ui(self):
+        """Immediately updates the visual state (borders/colors) of model cards based on selection."""
+        for mid, widgets in self.service_widgets.items():
+            if mid == self.selected_mid:
+                widgets['frame'].configure(border_width=2, border_color=SUCCESS_COLOR, fg_color="#1A202C")
+            else:
+                widgets['frame'].configure(border_width=0, fg_color="#12161E")
 
     def update_health_ui(self, health, runnability, active_models=None, vram=None):
         # 1. Update VRAM Monitor
@@ -433,13 +440,10 @@ class JarvisApp(ctk.CTk):
             elif info['status'] == "BUSY": color = ACCENT_COLOR
             self.service_widgets[mid]['lamp'].configure(text_color=color)
 
-            # Update Selection Border
-            if mid == self.selected_mid:
-                self.service_widgets[mid]['frame'].configure(border_width=2, border_color=SUCCESS_COLOR, fg_color="#1A202C")
-            else:
-                self.service_widgets[mid]['frame'].configure(border_width=0, fg_color="#12161E")
+        # 3. Apply Selection Styling
+        self._update_selection_ui()
 
-        # 3. Update Loadout Dropdown Color
+        # 4. Update Loadout Dropdown Color
         if self.controller.current_loadout == "NONE":
             self.loadout_opt.configure(fg_color=GRAY_COLOR)
         elif all(s['status'] == "ON" or s['status'] == "BUSY" for s in health.values()):
@@ -449,24 +453,7 @@ class JarvisApp(ctk.CTk):
         else:
             self.loadout_opt.configure(fg_color=ACCENT_COLOR)
 
-        # 4. Update Record Button
-        if runnability.get('runnable'):
-            self.record_btn.configure(state="normal", fg_color=ACCENT_COLOR, text="HOLD TO TALK")
-        else:
-            err = runnability['errors'][0] if runnability['errors'] else "Offline"
-            self.record_btn.configure(state="disabled", fg_color=GRAY_COLOR, text=f"OFFLINE: {err}")
-
-        # 3. Update Loadout Dropdown Color
-        if self.controller.current_loadout == "NONE":
-            self.loadout_opt.configure(fg_color=GRAY_COLOR)
-        elif all(s['status'] == "ON" or s['status'] == "BUSY" for s in health.values()):
-            self.loadout_opt.configure(fg_color=SUCCESS_COLOR)
-        elif any(s['status'] == "STARTUP" for s in health.values()):
-            self.loadout_opt.configure(fg_color=WARNING_COLOR)
-        else:
-            self.loadout_opt.configure(fg_color=ACCENT_COLOR)
-
-        # 4. Update Record Button
+        # 5. Update Record Button
         if runnability.get('runnable'):
             self.record_btn.configure(state="normal", fg_color=ACCENT_COLOR, text="HOLD TO TALK")
         else:
