@@ -531,14 +531,17 @@ class JarvisApp(ctk.CTk):
                     
                     # Force immediate UI render with instant models
                     self.update_health_ui(instant_health, {"runnable": False, "errors": ["Loading..."]}, active_models=instant_models)
-                    # FORCE DRAW before proceeding to backend
-                    self.update() 
             except Exception as e:
                 logger.error(f"Instant UI refresh failed: {e}")
 
-        # 3. Trigger Backend Change
-        self.controller.trigger_loadout_change(val)
-        self.update_graph_view()
+        # 3. Defer Heavy Operations
+        # Return control to Tkinter immediately so it can draw the Yellow models.
+        # Fire the backend logic 100ms later.
+        def execute_backend_changes():
+            self.controller.trigger_loadout_change(val)
+            self.update_graph_view()
+            
+        self.after(100, execute_backend_changes)
 
     def update_graph_view(self):
         try:
