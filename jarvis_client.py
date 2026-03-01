@@ -181,7 +181,15 @@ class JarvisApp(ctk.CTk):
         # --- SIDEBAR ---
         self.sidebar = ctk.CTkFrame(self, width=250, corner_radius=0, fg_color="#080C14")
         self.sidebar.grid(row=0, column=0, rowspan=3, sticky="nsew")
-        ctk.CTkLabel(self.sidebar, text="INFERENCE CLUSTER", font=("Impact", 20), text_color=ACCENT_COLOR).pack(pady=20)
+        
+        # Loadout Selection at the Top
+        ctk.CTkLabel(self.sidebar, text="LOADOUT", font=("Impact", 18), text_color=ACCENT_COLOR).pack(pady=(20, 5))
+        loadouts = ["NONE"] + list_all_loadouts()
+        self.loadout_var = ctk.StringVar(value=self.controller.current_loadout)
+        self.loadout_opt = ctk.CTkOptionMenu(self.sidebar, values=loadouts, variable=self.loadout_var, command=self.on_loadout_change, width=200)
+        self.loadout_opt.pack(pady=(0, 20), padx=10)
+
+        ctk.CTkLabel(self.sidebar, text="ACTIVE MODELS", font=("Impact", 16), text_color=GRAY_COLOR).pack(pady=(10, 5))
         self.health_frame = ctk.CTkFrame(self.sidebar, fg_color="transparent")
         self.health_frame.pack(fill="both", expand=True, padx=10)
         self.service_widgets = {}
@@ -204,13 +212,6 @@ class JarvisApp(ctk.CTk):
         self.strategy_opt = ctk.CTkOptionMenu(self.header, values=strategies, variable=self.strategy_var, command=self.on_config_change)
         self.strategy_opt.pack(side="left", padx=10)
 
-        # Loadout
-        ctk.CTkLabel(self.header, text="Loadout:").pack(side="left", padx=(20, 5))
-        loadouts = ["NONE"] + list_all_loadouts()
-        self.loadout_var = ctk.StringVar(value=self.controller.current_loadout)
-        self.loadout_opt = ctk.CTkOptionMenu(self.header, values=loadouts, variable=self.loadout_var, command=self.on_loadout_change)
-        self.loadout_opt.pack(side="left", padx=10)
-
         # --- MAIN ---
         self.terminal = ctk.CTkTextbox(self, font=("Consolas", 13), fg_color=BG_COLOR, text_color=TEXT_COLOR)
         self.terminal.grid(row=1, column=1, sticky="nsew", padx=15, pady=15)
@@ -230,9 +231,21 @@ class JarvisApp(ctk.CTk):
 
     def on_loadout_change(self, val):
         self.controller.trigger_loadout_change(val)
+        # Clear health frame on change to force a fresh rebuild
+        for widget in self.health_frame.winfo_children():
+            widget.destroy()
+        self.service_widgets = {}
 
     def update_health_ui(self, health, runnability):
-        # 1. Update Service Sidebar
+        # 1. Update Service Sidebar (Only for models in current loadout)
+        # We also need to purge widgets that are no longer relevant
+        current_labels = [info['label'] for info in health.values()]
+        for label in list(self.service_widgets.keys()):
+            if label not in current_labels:
+                # This should be handled by on_loadout_change clearing, 
+                # but this is a safety net
+                pass
+
         for port, info in health.items():
             label = info['label']
             if label not in self.service_widgets:
@@ -240,20 +253,22 @@ class JarvisApp(ctk.CTk):
                 f.pack(fill="x", pady=2)
                 lamp = ctk.CTkLabel(f, text="●", font=("Arial", 18))
                 lamp.pack(side="left", padx=5)
-                name = ctk.CTkLabel(f, text=label[:18], font=("Consolas", 12))
+                name = ctk.CTkLabel(f, text=label[:22], font=("Consolas", 12))
                 name.pack(side="left")
-                self.service_widgets[label] = {"lamp": lamp, "name": name}
+                self.service_widgets[label] = {"lamp": lamp, "name": name, "frame": f}
             
             color = GRAY_COLOR
             if info['status'] == "ON": color = SUCCESS_COLOR
             elif info['status'] == "OFF": color = ERROR_COLOR
             elif info['status'] == "STARTUP": color = WARNING_COLOR
+            elif info['status'] == "BUSY": color = ACCENT_COLOR
+            
             self.service_widgets[label]['lamp'].configure(text_color=color)
 
         # 2. Update Loadout Dropdown Color
         if self.controller.current_loadout == "NONE":
             self.loadout_opt.configure(fg_color=GRAY_COLOR)
-        elif all(s['status'] == "ON" for s in health.values() if s['type'] != "broker"):
+        elif all(s['status'] == "ON" or s['status'] == "BUSY" for s in health.values()):
             self.loadout_opt.configure(fg_color=SUCCESS_COLOR)
         elif any(s['status'] == "STARTUP" for s in health.values()):
             self.loadout_opt.configure(fg_color=WARNING_COLOR)
