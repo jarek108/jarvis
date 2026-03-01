@@ -378,9 +378,10 @@ class JarvisApp(ctk.CTk):
         self.queue = queue.Queue()
         self.controller = JarvisController(self.queue)
         
-        # State for Log Viewing
+        # State for Log Viewing and Transitions
         self.selected_mid = None
         self.last_log_content = ""
+        self.transition_lock = False
         
         self.setup_ui()
         self.update_graph_view()
@@ -493,6 +494,7 @@ class JarvisApp(ctk.CTk):
             logger.info(f"Loadout '{val}' is already active. No action taken.")
             return
 
+        self.transition_lock = True # Prevent background polling from clearing UI
         self.controller.trigger_loadout_change(val)
         self.selected_mid = None # Reset selection
         self.switch_to_terminal()
@@ -517,12 +519,11 @@ class JarvisApp(ctk.CTk):
                     instant_health = {}
                     
                     from utils.config import parse_model_string
-                    for m_str in model_strings:
+                    for i, m_str in enumerate(model_strings):
                         m_data = parse_model_string(m_str)
                         if m_data:
-                            # We don't have ports yet, but we want to show the NAMES
-                            # Use a mock port for the UI keying
-                            mock_port = 0
+                            # Use unique mock ports to avoid collision in the status dict
+                            mock_port = -1 - i
                             instant_models.append({
                                 "id": m_data['id'],
                                 "engine": m_data['engine'],
@@ -532,7 +533,7 @@ class JarvisApp(ctk.CTk):
                             })
                             instant_health[mock_port] = {"status": "STARTUP", "info": "Initializing..."}
                     
-                    # Push an immediate health update to the local queue
+                    # Force immediate UI render with instant models
                     self.update_health_ui(instant_health, {"runnable": False, "errors": ["Loading..."]}, active_models=instant_models)
             except Exception as e:
                 logger.error(f"Instant UI refresh failed: {e}")
@@ -569,7 +570,8 @@ class JarvisApp(ctk.CTk):
     def _update_log_viewer_loop(self):
         if self.selected_mid:
             # Find the model info in controller's resolver
-            active_models = self.controller.resolver.get_live_models()
+            registry_data = self.controller.resolver.get_live_models()
+            active_models = registry_data.get("models", [])
             m = next((m for m in active_models if m['id'] == self.selected_mid), None)
             if m and m.get('log_path') and os.path.exists(m['log_path']):
                 try:
@@ -629,6 +631,15 @@ class JarvisApp(ctk.CTk):
         self.bind("<Button-1>", close_menu, add="+")
 
     def update_health_ui(self, health, runnability, active_models=None, vram=None):
+        # 3. Transition Logic: If we are in transition, don't allow empty polling updates 
+        # to clear the models we just "instantly" listed.
+        if self.transition_lock and active_models is not None and not active_models:
+            return
+        
+        # Release lock once we get a real update with models
+        if active_models:
+            self.transition_lock = False
+
         # 1. Update VRAM Monitor
         if vram:
             used, total, external = vram['used'], vram['total'], vram.get('external', 0.0)
