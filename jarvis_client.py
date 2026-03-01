@@ -60,11 +60,6 @@ class JarvisController:
         self.load_checkpoint()
         
         # Force system state to match UI "NONE" state
-        # Capture current VRAM as initial external and seed a fresh registry
-        initial_external = utils.get_gpu_vram_usage()
-        from manage_loadout import save_runtime_registry
-        save_runtime_registry([], external_vram=initial_external)
-            
         def init_cleanup():
             self.ui_queue.put({"type": "log", "msg": "🧹 Cleaning up previous session state...", "tag": "system"})
             kill_loadout("all")
@@ -658,6 +653,12 @@ class JarvisApp(ctk.CTk):
         # 1. Update VRAM Monitor (ALWAYS update hardware state)
         if vram:
             used, total, external = vram['used'], vram['total'], vram.get('external', 0.0)
+            
+            # FLOATING BASELINE FIX: If system usage dropped below our captured external baseline,
+            # it means the external load was released. Update baseline to prevent negative math.
+            if used < external:
+                external = used
+            
             model_vram = max(0, used - external)
             pct = used / total if total > 0 else 0
             
