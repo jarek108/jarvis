@@ -43,46 +43,29 @@ class LifecycleManager:
         self.missing_models = []
         self.uncalibrated_models = []
 
-    def _parse_flags(self, entry):
-        """Parses a model string like 'model_id#flag1#flag2' into a flags_dict."""
-        if not isinstance(entry, str): return {}
-        parts = entry.split('#')
-        flags = {}
-        for f in parts[1:]:
-            if '=' in f:
-                k, v = f.split('=', 1)
-                flags[k.lower()] = v
-            else:
-                flags[f.lower()] = True
-        return flags
-
     def identify_models(self):
-        """Categorizes list of strings into STT, TTS, and LLM components, preserving flags."""
+        """Categorizes list of strings into STT, TTS, and LLM components using shared parsing logic."""
         categorized = {"stt": None, "tts": None, "llm": None}
-        for m in self.models:
-            clean_id = m.split('#')[0]
-            m_upper = m.upper()
-            flags = self._parse_flags(m)
+        from utils.config import parse_model_string
+        
+        for m_str in self.models:
+            svc = parse_model_string(m_str, self.cfg['stt_loadout'], self.cfg['tts_loadout'])
+            if not svc: continue
             
-            if clean_id in self.cfg['stt_loadout']:
-                categorized['stt'] = {"id": clean_id, "flags": flags}
-            elif clean_id in self.cfg['tts_loadout']:
-                categorized['tts'] = {"id": clean_id, "flags": flags}
-            elif m_upper.startswith("OL_") or m_upper.startswith("VL_") or m_upper.startswith("VLLM:"):
-                # Explicit LLM Prefixes (Case Insensitive)
-                engine = "ollama"
-                model_id = clean_id
-                if m_upper.startswith("VL_"):
-                    engine = "vllm"
-                    model_id = clean_id[3:]
-                elif m_upper.startswith("VLLM:"):
-                    engine = "vllm"
-                    model_id = clean_id[5:]
-                elif m_upper.startswith("OL_"):
-                    engine = "ollama"
-                    model_id = clean_id[3:]
-                
-                categorized['llm'] = {"engine": engine, "model": model_id, "original": clean_id, "flags": flags}
+            # Map back to LifecycleManager's expected 'cat' format
+            stype = "llm"
+            if svc['id'] in self.cfg['stt_loadout']: stype = "stt"
+            elif svc['id'] in self.cfg['tts_loadout']: stype = "tts"
+            
+            if stype == "llm":
+                categorized['llm'] = {
+                    "engine": svc['engine'], 
+                    "model": svc['id'], 
+                    "original": m_str.split('#')[0], 
+                    "flags": svc['params']
+                }
+            else:
+                categorized[stype] = {"id": svc['id'], "flags": svc['params']}
         return categorized
 
     def check_availability(self):
