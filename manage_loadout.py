@@ -299,8 +299,13 @@ def kill_loadout(target):
     if target == "all":
         kill_all_jarvis_services()
         # Clear registry
-        registry_path = os.path.join(os.getcwd(), "model_calibrations", "runtime_registry.json")
-        if os.path.exists(registry_path): os.remove(registry_path)
+        registry_path = os.path.join(get_project_root(), "model_calibrations", "runtime_registry.json")
+        if os.path.exists(registry_path): 
+            try:
+                os.remove(registry_path)
+                logger.info("🗑️ Cleared runtime registry.")
+            except Exception as e:
+                logger.error(f"Failed to clear registry: {e}")
     else:
         # Simple port-based kill for now
         logger.warning(f"Targeted kill for '{target}' not yet updated for Loadout 2.0. Use 'all'.")
