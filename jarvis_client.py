@@ -93,15 +93,20 @@ class JarvisController:
                 active_ports = [m['port'] for m in active_models]
                 self.health_state = get_system_health(ports=active_ports)
                 
-                # 2. Check Logical Runnability (Passing existing health to avoid double-poll)
+                # 2. Get Hardware Metrics
+                vram_used = utils.get_gpu_vram_usage()
+                vram_total = utils.get_gpu_total_vram()
+
+                # 3. Check Logical Runnability (Passing existing health to avoid double-poll)
                 self.runnability = self.resolver.check_runnability(self.current_pipeline, self.current_strategy, external_health=self.health_state)
                 
-                # 3. Update UI
+                # 4. Update UI
                 self.ui_queue.put({
                     "type": "health_update", 
                     "health": self.health_state, 
                     "runnability": self.runnability,
-                    "active_models": active_models
+                    "active_models": active_models,
+                    "vram": {"used": vram_used, "total": vram_total}
                 })
             except Exception as e:
                 logger.error(f"Status Polling Error: {e}")
@@ -192,7 +197,14 @@ class JarvisApp(ctk.CTk):
         loadouts = ["NONE"] + list_all_loadouts()
         self.loadout_var = ctk.StringVar(value=self.controller.current_loadout)
         self.loadout_opt = ctk.CTkOptionMenu(self.sidebar, values=loadouts, variable=self.loadout_var, command=self.on_loadout_change, width=200)
-        self.loadout_opt.pack(pady=(0, 20), padx=10)
+        self.loadout_opt.pack(pady=(0, 10), padx=10)
+
+        # VRAM Monitor
+        self.vram_label = ctk.CTkLabel(self.sidebar, text="VRAM: 0.0 / 0.0 GB", font=("Consolas", 11), text_color=GRAY_COLOR)
+        self.vram_label.pack(pady=(5, 0))
+        self.vram_bar = ctk.CTkProgressBar(self.sidebar, width=200, height=8, fg_color="#1A1E26", progress_color=ACCENT_COLOR)
+        self.vram_bar.pack(pady=(2, 20))
+        self.vram_bar.set(0)
 
         ctk.CTkLabel(self.sidebar, text="ACTIVE MODELS", font=("Impact", 16), text_color=GRAY_COLOR).pack(pady=(10, 5))
         self.health_frame = ctk.CTkFrame(self.sidebar, fg_color="transparent")
@@ -241,8 +253,19 @@ class JarvisApp(ctk.CTk):
             widget.destroy()
         self.service_widgets = {}
 
-    def update_health_ui(self, health, runnability, active_models=None):
-        # 1. Update Service Sidebar (Precise Model List)
+    def update_health_ui(self, health, runnability, active_models=None, vram=None):
+        # 1. Update VRAM Monitor
+        if vram:
+            used, total = vram['used'], vram['total']
+            pct = used / total if total > 0 else 0
+            self.vram_label.configure(text=f"VRAM: {used:.1f} / {total:.1f} GB ({int(pct*100)}%)")
+            self.vram_bar.set(pct)
+            # Dynamic bar color
+            if pct > 0.9: self.vram_bar.configure(progress_color=ERROR_COLOR)
+            elif pct > 0.75: self.vram_bar.configure(progress_color=WARNING_COLOR)
+            else: self.vram_bar.configure(progress_color=ACCENT_COLOR)
+
+        # 2. Update Service Sidebar (Precise Model List)
         models_to_render = active_models if active_models else []
         
         # Determine if we need to purge widgets for models no longer in loadout
@@ -278,12 +301,16 @@ class JarvisApp(ctk.CTk):
                 subtext = ctk.CTkLabel(f, text=cap_text, font=("Consolas", 10), text_color="#A0A0A0", anchor="w")
                 subtext.pack(fill="x", padx=28, pady=(0, 2))
                 
-                # Streaming Status
+                # Streaming Indicator: Output-Stream ●
+                stream_frame = ctk.CTkFrame(f, fg_color="transparent")
+                stream_frame.pack(fill="x", padx=28, pady=(0, 2))
+                
                 is_llm = m['engine'] in ['ollama', 'vllm']
                 streaming = m.get('params', {}).get('stream', True if is_llm else False)
-                stream_text = "STREAMING: ON" if streaming else "STREAMING: OFF"
-                stream_label = ctk.CTkLabel(f, text=f"{m['engine'].upper()} • {stream_text}", font=("Consolas", 10, "italic"), text_color="#707070", anchor="w")
-                stream_label.pack(fill="x", padx=28, pady=(0, 2))
+                stream_color = SUCCESS_COLOR if streaming else ERROR_COLOR
+                
+                ctk.CTkLabel(stream_frame, text=f"{m['engine'].upper()} • Output-Stream: ", font=("Consolas", 10), text_color="#707070").pack(side="left")
+                ctk.CTkLabel(stream_frame, text="●", font=("Arial", 12), text_color=stream_color).pack(side="left")
 
                 # Params (Filtered)
                 params_dict = m.get('params', {}).copy()
@@ -307,7 +334,7 @@ class JarvisApp(ctk.CTk):
             
             self.service_widgets[mid]['lamp'].configure(text_color=color)
 
-        # 2. Update Loadout Dropdown Color
+        # 3. Update Loadout Dropdown Color
         if self.controller.current_loadout == "NONE":
             self.loadout_opt.configure(fg_color=GRAY_COLOR)
         elif all(s['status'] == "ON" or s['status'] == "BUSY" for s in health.values()):
@@ -317,7 +344,7 @@ class JarvisApp(ctk.CTk):
         else:
             self.loadout_opt.configure(fg_color=ACCENT_COLOR)
 
-        # 3. Update Record Button
+        # 4. Update Record Button
         if runnability.get('runnable'):
             self.record_btn.configure(state="normal", fg_color=ACCENT_COLOR, text="HOLD TO TALK")
         else:
@@ -332,7 +359,12 @@ class JarvisApp(ctk.CTk):
             elif msg['type'] == "state":
                 if msg.get('recording'): self.record_btn.configure(fg_color=ERROR_COLOR, text="RECORDING...")
             elif msg['type'] == "health_update":
-                self.update_health_ui(msg['health'], msg['runnability'], active_models=msg.get('active_models'))
+                self.update_health_ui(
+                    msg['health'], 
+                    msg['runnability'], 
+                    active_models=msg.get('active_models'),
+                    vram=msg.get('vram')
+                )
         self.after(100, self.poll_queue)
 
 if __name__ == "__main__":
