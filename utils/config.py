@@ -4,21 +4,23 @@ import sys
 
 _config_cache = None
 
+def get_project_root():
+    """Returns the absolute path to the project root directory."""
+    return os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
 def load_config():
     global _config_cache
     if _config_cache is not None:
         return _config_cache
         
-    base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    config_path = os.path.join(base_dir, "config.yaml")
+    config_path = os.path.join(get_project_root(), "config.yaml")
     with open(config_path, "r") as f:
         _config_cache = yaml.safe_load(f)
     return _config_cache
 
 def list_all_loadouts(include_experimental=False):
     """Lists all available loadout names from the loadouts.yaml file."""
-    project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    loadouts_file = os.path.join(project_root, "loadouts.yaml")
+    loadouts_file = os.path.join(get_project_root(), "loadouts.yaml")
     if not os.path.exists(loadouts_file):
         return []
     

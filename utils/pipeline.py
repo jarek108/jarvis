@@ -10,17 +10,19 @@ from loguru import logger
 import utils
 from .pipeline_adapters import get_adapter
 
+from utils.config import get_project_root
+
 class PipelineResolver:
-    def __init__(self, project_root, base_dir=None):
-        self.project_root = project_root
+    def __init__(self, project_root=None, base_dir=None):
+        self.project_root = project_root if project_root else get_project_root()
         # ISOLATION: Define explicit directories for different graph artifacts
         if base_dir:
-            self.pipelines_dir = base_dir if os.path.isabs(base_dir) else os.path.join(project_root, base_dir)
+            self.pipelines_dir = base_dir if os.path.isabs(base_dir) else os.path.join(self.project_root, base_dir)
         else:
-            self.pipelines_dir = os.path.join(project_root, "pipelines")
+            self.pipelines_dir = os.path.join(self.project_root, "pipelines")
             
-        self.strategies_dir = os.path.join(project_root, "strategies")
-        self.cal_dir = os.path.join(project_root, "model_calibrations")
+        self.strategies_dir = os.path.join(self.project_root, "strategies")
+        self.cal_dir = os.path.join(self.project_root, "model_calibrations")
         self.registry_path = os.path.join(self.cal_dir, "runtime_registry.json")
 
     def load_yaml(self, name, folder=None):
@@ -39,13 +41,20 @@ class PipelineResolver:
         if not os.path.exists(self.registry_path):
             return []
         try:
-            with open(self.registry_path, "r") as f:
-                data = json.load(f)
+            with open(self.registry_path, "r", encoding="utf-8") as f:
+                content = f.read().strip()
+                if not content: return []
+                data = json.loads(content)
                 models = data.get("active_loadout", [])
                 for m in models:
-                    m['capabilities'] = self.get_model_capabilities(m['id'], m['engine'])
+                    try:
+                        m['capabilities'] = self.get_model_capabilities(m['id'], m['engine'])
+                    except Exception as e:
+                        logger.error(f"Error getting caps for {m['id']}: {e}")
+                        m['capabilities'] = []
                 return models
-        except:
+        except Exception as e:
+            logger.error(f"Error reading registry: {e}")
             return []
 
     def get_model_capabilities(self, model_id, engine):

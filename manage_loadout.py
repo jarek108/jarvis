@@ -19,7 +19,8 @@ from utils import (
     get_system_health, load_config, kill_process_on_port, wait_for_port, 
     start_server, is_vllm_docker_running, stop_vllm_docker, 
     kill_all_jarvis_services, get_gpu_vram_usage, resolve_path,
-    get_hf_home, get_ollama_models, get_model_calibration, get_gpu_total_vram
+    get_hf_home, get_ollama_models, get_model_calibration, get_gpu_total_vram,
+    get_project_root
 )
 from utils.console import GREEN, RED, YELLOW, GRAY, RESET, BOLD, CYAN
 
@@ -48,19 +49,20 @@ def print_status():
     
     print("="*LINE_LEN + "\n")
 
-def save_runtime_registry(services, project_root):
-    registry_path = os.path.join(project_root, "model_calibrations", "runtime_registry.json")
+def save_runtime_registry(services, project_root=None):
+    root = project_root if project_root else get_project_root()
+    registry_path = os.path.join(root, "model_calibrations", "runtime_registry.json")
     data = {
         "active_loadout": services,
         "last_updated": time.strftime("%Y-%m-%d %H:%M:%S")
     }
-    with open(registry_path, "w") as f:
+    with open(registry_path, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2)
     logger.info(f"📝 Runtime registry updated at {registry_path}")
 
 def apply_loadout(name, loud=False, soft=False):
     cfg = load_config()
-    project_root = os.getcwd()
+    project_root = get_project_root()
     loadouts_file = os.path.join(project_root, "loadouts.yaml")
     
     if not os.path.exists(loadouts_file):
@@ -92,12 +94,12 @@ def apply_loadout(name, loud=False, soft=False):
     active_services = []
     
     for m_str in model_strings:
-        svc = parse_model_string(m_str)
-        if not svc: continue
+        svc_data = parse_model_string(m_str)
+        if not svc_data: continue
         
-        sid = svc['id']
-        engine = svc['engine']
-        params = svc['params']
+        sid = svc_data['id']
+        engine = svc_data['engine']
+        params = svc_data['params']
         
         # Resolve ports and logs
         stype = "llm"
@@ -115,11 +117,25 @@ def apply_loadout(name, loud=False, soft=False):
         
         if port:
             log_path = os.path.join(session_dir, f"svc_{stype}_{sid.replace(':', '-').replace('/', '--')}.log")
-            active_services.append({
+            svc_entry = {
                 "id": sid, "engine": engine, "port": port, 
                 "params": params, "log_path": log_path, "type": stype
-            })
+            }
+            
+            # Pre-calculate required GB for VLM/LLM
+            if engine == "vllm":
+                total_vram = get_gpu_total_vram()
+                base_gb, cost_10k = get_model_calibration(sid, engine="vllm")
+                num_ctx = params.get('num_ctx') or params.get('max_model_len') or 16384
+                if base_gb is not None:
+                    svc_entry['required_gb'] = round(base_gb + ((num_ctx / 10000.0) * cost_10k), 2)
+                else:
+                    vllm_util = params.get('gpu_memory_utilization', 0.4)
+                    svc_entry['required_gb'] = round(vllm_util * total_vram, 2)
+
+            active_services.append(svc_entry)
     
+    # Save registry IMMEDIATELY so UI shows "STARTUP" for all models
     save_runtime_registry(active_services, project_root)
 
     # 3. Surgical Purge
@@ -157,21 +173,9 @@ def apply_loadout(name, loud=False, soft=False):
             f_head.write(f"[Lifecycle] Engine: {engine}\n")
             f_head.write(f"[Lifecycle] Port: {port}\n")
             f_head.write(f"[Lifecycle] Params: {params}\n")
-            
-            if engine == "vllm":
-                total_vram = get_gpu_total_vram()
-                base_gb, cost_10k = get_model_calibration(sid, engine="vllm")
-                num_ctx = params.get('num_ctx') or params.get('max_model_len') or 16384
-                if base_gb is not None:
-                    required_gb = base_gb + ((num_ctx / 10000.0) * cost_10k)
-                    vllm_util = (required_gb / total_vram) + 0.05
-                    svc['required_gb'] = round(required_gb, 2)
-                    f_head.write(f"[Lifecycle] SmartAllocator: {base_gb}GB base + {num_ctx} ctx. Required: {svc['required_gb']}GB. Util: {round(vllm_util, 3)}\n")
-                else:
-                    vllm_util = params.get('gpu_memory_utilization', 0.4)
-                    svc['required_gb'] = round(vllm_util * total_vram, 2)
-                    f_head.write(f"[Lifecycle] WARNING: No calibration found. Using default util: {vllm_util}\n")
-                f_head.write("-" * 40 + "\n\n")
+            if 'required_gb' in svc:
+                f_head.write(f"[Lifecycle] SmartAllocator: Required VRAM: {svc['required_gb']} GB\n")
+            f_head.write("-" * 40 + "\n\n")
 
         if engine == "ollama":
             if not wait_for_port(port, timeout=1):
@@ -187,6 +191,14 @@ def apply_loadout(name, loud=False, soft=False):
             canonical_id = resolve_canonical_id(sid, engine="vllm")
             num_ctx = params.get('num_ctx') or params.get('max_model_len') or 16384
             
+            # Calculate utilization for docker command
+            total_vram = get_gpu_total_vram()
+            if 'required_gb' in svc:
+                vllm_util = (svc['required_gb'] / total_vram) + 0.05
+            else:
+                vllm_util = params.get('gpu_memory_utilization', 0.4)
+            vllm_util = min(0.95, max(0.1, vllm_util))
+
             if is_vllm_docker_running():
                 stop_vllm_docker()
             
@@ -232,8 +244,6 @@ def apply_loadout(name, loud=False, soft=False):
                 start_server(cmd, loud=loud, log_file=log_file)
                 wait_for_port(port, timeout=120)
 
-    # Final registry save to capture required_gb
-    save_runtime_registry(active_services, project_root)
 
 
 def kill_loadout(target):
