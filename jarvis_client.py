@@ -329,7 +329,7 @@ class JarvisApp(ctk.CTk):
                 outputs = [c.replace("_out", "") for c in caps if c.endswith("_out")]
                 
                 cap_text = f"IN: {', '.join(inputs)} | OUT: {', '.join(outputs)}"
-                subtext = ctk.CTkLabel(f, text=cap_text, font=("Consolas", 10), text_color="#A0A0A0", anchor="w")
+                subtext = ctk.CTkLabel(f, text=cap_text, font=("Consolas", 10), text_color="#D0D0D0", anchor="w")
                 subtext.pack(fill="x", padx=28, pady=(0, 2))
                 subtext.bind("<Button-1>", on_click)
                 
@@ -345,7 +345,7 @@ class JarvisApp(ctk.CTk):
                 engine_str = m['engine'].upper()
                 if m.get('required_gb'): engine_str += f" ({m['required_gb']} GB)"
                 
-                e_lbl = ctk.CTkLabel(stream_frame, text=f"{engine_str} • Out-Stream: ", font=("Consolas", 10), text_color="#707070")
+                e_lbl = ctk.CTkLabel(stream_frame, text=f"{engine_str} • Out-Stream: ", font=("Consolas", 10), text_color="#B0B0B0")
                 e_lbl.pack(side="left")
                 e_lbl.bind("<Button-1>", on_click)
                 
@@ -360,7 +360,7 @@ class JarvisApp(ctk.CTk):
                 
                 if params_dict:
                     p_str = " ".join([f"{k}:{v}" for k, v in params_dict.items()])
-                    params_box = ctk.CTkTextbox(f, font=("Consolas", 9), height=35, fg_color="transparent", text_color="#808080", border_width=0, activate_scrollbars=False)
+                    params_box = ctk.CTkTextbox(f, font=("Consolas", 9), height=35, fg_color="transparent", text_color="#A0A0A0", border_width=0, activate_scrollbars=False)
                     params_box.insert("1.0", p_str)
                     params_box.configure(state="disabled")
                     params_box.pack(fill="x", padx=28, pady=(0, 8))
