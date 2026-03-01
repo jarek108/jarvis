@@ -134,6 +134,11 @@ class JarvisController:
             time.sleep(1.5)
 
     def trigger_loadout_change(self, loadout_id):
+        # 1. Skip if same loadout already active (unless it's NONE, then we allow re-kill)
+        if loadout_id != "NONE" and loadout_id == self.current_loadout:
+            logger.info(f"Loadout '{loadout_id}' already active. Skipping application.")
+            return
+
         self.current_loadout = loadout_id
         self.save_checkpoint()
         
@@ -466,13 +471,55 @@ class JarvisApp(ctk.CTk):
         self.update_graph_view()
 
     def on_loadout_change(self, val):
+        # 1. Guard against redundant re-selection
+        if val != "NONE" and val == self.controller.current_loadout:
+            logger.info(f"Loadout '{val}' is already active. No action taken.")
+            return
+
         self.controller.trigger_loadout_change(val)
         self.selected_mid = None # Reset selection
         self.switch_to_terminal()
-        # Clear health frame on change to force a fresh rebuild
+        
+        # 2. Instant UI Refresh: Populate models in STARTUP state immediately
+        # Clear existing widgets
         for widget in self.health_frame.winfo_children():
             widget.destroy()
         self.service_widgets = {}
+
+        if val != "NONE":
+            try:
+                # Load and parse the selected loadout immediately for the UI
+                loadouts_path = os.path.join(self.project_root, "loadouts.yaml")
+                with open(loadouts_path, "r") as f:
+                    all_loadouts = yaml.safe_load(f)
+                
+                target = all_loadouts.get(val)
+                if target:
+                    model_strings = target.get('models', []) if isinstance(target, dict) else target
+                    instant_models = []
+                    instant_health = {}
+                    
+                    from utils.config import parse_model_string
+                    for m_str in model_strings:
+                        m_data = parse_model_string(m_str)
+                        if m_data:
+                            # We don't have ports yet, but we want to show the NAMES
+                            # Use a mock port for the UI keying
+                            mock_port = 0
+                            instant_models.append({
+                                "id": m_data['id'],
+                                "engine": m_data['engine'],
+                                "params": m_data['params'],
+                                "port": mock_port,
+                                "capabilities": self.controller.resolver.get_model_capabilities(m_data['id'], m_data['engine'])
+                            })
+                            instant_health[mock_port] = {"status": "STARTUP", "info": "Initializing..."}
+                    
+                    # Push an immediate health update to the local queue
+                    self.update_health_ui(instant_health, {"runnable": False, "errors": ["Loading..."]}, active_models=instant_models)
+            except Exception as e:
+                logger.error(f"Instant UI refresh failed: {e}")
+
         self.update_graph_view()
 
     def update_graph_view(self):
