@@ -20,7 +20,7 @@ from utils import (
     start_server, is_vllm_docker_running, stop_vllm_docker, 
     kill_all_jarvis_services, get_gpu_vram_usage, resolve_path,
     get_hf_home, get_ollama_models, get_model_calibration, get_gpu_total_vram,
-    get_project_root
+    get_project_root, log_msg
 )
 from utils.console import GREEN, RED, YELLOW, GRAY, RESET, BOLD, CYAN
 
@@ -68,7 +68,7 @@ def save_runtime_registry(services, project_root=None, external_vram=None):
     }
     with open(registry_path, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2)
-    logger.info(f"📝 Runtime registry updated at {registry_path}")
+    log_msg(f"Runtime registry updated at {registry_path}")
 
 def apply_loadout(name, loud=False, soft=False):
     cfg = load_config()
@@ -76,14 +76,14 @@ def apply_loadout(name, loud=False, soft=False):
     loadouts_file = os.path.join(project_root, "system_config", "loadouts.yaml")
     
     if not os.path.exists(loadouts_file):
-        logger.error(f"Loadouts file not found: {loadouts_file}")
+        log_msg(f"Loadouts file not found: {loadouts_file}", level="error")
         return
 
     with open(loadouts_file, "r") as f:
         all_loadouts = yaml.safe_load(f)
 
     if name not in all_loadouts:
-        logger.error(f"Loadout '{name}' not found in loadouts.yaml")
+        log_msg(f"Loadout '{name}' not found in loadouts.yaml", level="error")
         return
 
     target = all_loadouts[name]
@@ -91,17 +91,18 @@ def apply_loadout(name, loud=False, soft=False):
     model_strings = target.get('models', []) if isinstance(target, dict) else target
     description = target.get('desc', name) if isinstance(target, dict) else name
 
-    logger.info(f"Applying Loadout: {description}")
+    log_msg(f"Applying Loadout: {description}")
     
     # 1. Initialize Session Directory
     session_id = f"RUN_{time.strftime('%Y%m%d_%H%M%S')}"
     session_dir = os.path.join(project_root, "logs", "sessions", session_id)
     os.makedirs(session_dir, exist_ok=True)
-    logger.info(f"📁 Initialized Loadout Session: {session_id}")
+    log_msg(f"Initialized Loadout Session: {session_id}")
     
     # 1.1 Perform Log Cleanup
     from utils import cleanup_old_logs
     cleanup_old_logs()
+    print() # SEPARATION
 
     # 2. Pre-calculate active_services with ports and per-model session logs
     from utils.config import parse_model_string
@@ -165,13 +166,13 @@ def apply_loadout(name, loud=False, soft=False):
     # 3. Surgical Purge and External Capture
     external_vram = None
     if not soft:
-        logger.warning("Performing strict global purge...")
+        log_msg("Performing strict global purge...", level="warning")
         kill_all_jarvis_services()
         time.sleep(1.5)
         external_vram = get_gpu_vram_usage()
-        logger.info(f"📉 System External VRAM: {external_vram:.1f} GB")
+        log_msg(f"System External VRAM: {external_vram:.1f} GB")
     else:
-        logger.info("Soft switch: Purging only replaced service types...")
+        log_msg("Soft switch: Purging only replaced service types...")
         stt_ports = list(cfg['stt_loadout'].values())
         tts_ports = list(cfg['tts_loadout'].values())
         vllm_port = cfg['ports'].get('vllm')
@@ -180,6 +181,7 @@ def apply_loadout(name, loud=False, soft=False):
 
     # Save registry IMMEDIATELY so UI shows "STARTUP" for all models
     save_runtime_registry(active_services, project_root, external_vram=external_vram)
+    print() # SEPARATION
 
     # 4. Service Startup with Lifecycle Headers
     python_exe = resolve_path(cfg['paths']['venv_python'])
@@ -193,7 +195,7 @@ def apply_loadout(name, loud=False, soft=False):
         params = svc['params']
         log_path = svc['log_path']
         
-        logger.info(f"⚙️ Setting up service: {sid} ({engine})")
+        log_msg(f"Setting up service: {sid} ({engine})")
         
         # Initialize Log with Physics Header
         with open(log_path, "w", encoding="utf-8") as f_head:
@@ -207,7 +209,7 @@ def apply_loadout(name, loud=False, soft=False):
 
         if engine == "ollama":
             if not wait_for_port(port, timeout=1):
-                logger.info(f"🚀 Starting Ollama...")
+                log_msg(f"Starting Ollama...")
                 os.environ['OLLAMA_MODELS'] = get_ollama_models()
                 # Redirect Ollama output to its session log
                 log_file = open(log_path, "a", encoding="utf-8")
@@ -222,7 +224,7 @@ def apply_loadout(name, loud=False, soft=False):
             if not is_docker_daemon_running():
                 with open(log_path, "a", encoding="utf-8") as f_err:
                     f_err.write("ERROR: Docker daemon is not running. Cannot start vLLM.\n")
-                logger.error(f"❌ Docker daemon is down. Skipping vLLM: {sid}")
+                log_msg(f"Docker daemon is down. Skipping vLLM: {sid}", level="error")
                 continue
 
             # Calculate utilization for docker command
@@ -247,7 +249,7 @@ def apply_loadout(name, loud=False, soft=False):
             if is_vllm_docker_running():
                 stop_vllm_docker()
             
-            logger.info(f"🚀 Starting vLLM Docker [{sid}]...")
+            log_msg(f"Starting vLLM Docker [{sid}]...")
             hf_cache = get_hf_home()
             cmd = [
                 "docker", "run", "--gpus", "all", "-d", 
@@ -273,7 +275,7 @@ def apply_loadout(name, loud=False, soft=False):
         elif engine == "native":
             log_file = open(log_path, "a", encoding="utf-8")
             if "whisper" in sid.lower():
-                logger.info(f"🚀 Starting STT Server [{sid}]...")
+                log_msg(f"Starting STT Server [{sid}]...")
                 os.environ['HF_HOME'] = get_hf_home()
                 cmd = [python_exe, stt_script, "--port", str(port), "--model", sid]
                 for k, v in params.items(): cmd.extend([f"--{k}", str(v)])
@@ -282,12 +284,13 @@ def apply_loadout(name, loud=False, soft=False):
                 
             elif "chatterbox" in sid.lower():
                 variant = sid.replace("chatterbox-", "")
-                logger.info(f"🚀 Starting TTS Server [{sid}]...")
+                log_msg(f"Starting TTS Server [{sid}]...")
                 os.environ['HF_HOME'] = get_hf_home()
                 cmd = [python_exe, tts_script, "--port", str(port), "--variant", variant]
                 for k, v in params.items(): cmd.extend([f"--{k}", str(v)])
                 start_server(cmd, loud=loud, log_file=log_file)
                 wait_for_port(port, timeout=120)
+    print() # SEPARATION
 
 
 

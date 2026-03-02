@@ -142,7 +142,13 @@ class PipelineExecutor:
             tasks = []
             for nid, node in bound_graph.items():
                 if node['type'] in ['processing', 'sink']:
-                    in_qs = {d: queues[d] for d in node.get('inputs', [])}
+                    # Build input queue list, explicitly including system_prompt if defined
+                    input_ids = node.get('inputs', []).copy()
+                    sys_prompt_id = node.get('system_prompt')
+                    if sys_prompt_id and sys_prompt_id not in input_ids:
+                        input_ids.append(sys_prompt_id)
+                        
+                    in_qs = {d: queues[d] for d in input_ids if d in queues}
                     tasks.append(self.execute_node(nid, node, in_qs, queues, session))
 
             await asyncio.gather(*tasks)

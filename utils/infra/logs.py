@@ -36,6 +36,18 @@ def get_ollama_log_path():
     if os.name == 'nt': return os.path.join(os.environ.get('LOCALAPPDATA', ''), 'Ollama', 'server.log')
     return os.path.expanduser('~/.ollama/logs/server.log')
 
+def log_msg(msg, tag="system", level="info"):
+    """Timestamped logging helper."""
+    from loguru import logger
+    timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
+    formatted = f"[{timestamp}] [{tag.upper()}] {msg}"
+    
+    if level == "info": logger.info(formatted)
+    elif level == "warning": logger.warning(formatted)
+    elif level == "error": logger.error(formatted)
+    elif level == "debug": logger.debug(formatted)
+    return formatted
+
 def cleanup_old_logs():
     """Deletes RUN_ directories in logs/sessions and tests/logs older than configured retention period."""
     import shutil

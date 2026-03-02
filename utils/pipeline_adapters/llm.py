@@ -33,17 +33,28 @@ class LLMAdapter(NodeAdapter):
 
         # 2. Build Prompt
         layout = node_config.get('context_layout')
+        sys_prompt_id = node_config.get('system_prompt')
+        sys_prompt_content = resolved_inputs.get(sys_prompt_id) if sys_prompt_id else None
+        
+        # Filter out system prompt from regular inputs if it was dynamically added
+        other_inputs = {k: v for k, v in resolved_inputs.items() if k != sys_prompt_id}
+
         if layout:
             prompt = layout
-            for in_id, val in resolved_inputs.items():
+            for in_id, val in other_inputs.items():
                 prompt = prompt.replace("{{" + in_id + "}}", val)
         else:
             # Default: Merge all non-empty inputs
-            prompt = "\n".join([v for v in resolved_inputs.values() if v]) or "Hello"
+            prompt = "\n".join([v for v in other_inputs.values() if v]) or "Hello"
+
+        messages = []
+        if sys_prompt_content:
+            messages.append({"role": "system", "content": sys_prompt_content})
+        messages.append({"role": "user", "content": prompt})
 
         payload = {
             "model": model_id,
-            "messages": [{"role": "user", "content": prompt}],
+            "messages": messages,
             "stream": node_config.get('output_streaming', False)
         }
         

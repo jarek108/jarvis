@@ -20,6 +20,7 @@ from test_utils import (
     init_session, RichDashboard, AccumulatingReporter,
     save_artifact, trigger_report_generation, run_test_lifecycle
 )
+from utils import log_msg
 from utils.engine import PipelineResolver, PipelineExecutor
 
 class PipelineTestRunner:
@@ -49,7 +50,7 @@ class PipelineTestRunner:
         inputs = {}
         scen_def = self.integration_scenarios.get(sid)
         if not scen_def:
-            self.log(f"❌ Scenario '{sid}' not found in core.yaml")
+            self.log(f"Scenario '{sid}' not found in core.yaml", level="error")
             return False
 
         for turn in scen_def.get('turns', []):
@@ -78,7 +79,7 @@ class PipelineTestRunner:
             bound_graph = self.resolver.resolve(pid, mid)
             success = asyncio.run(self.executor.run(bound_graph, inputs))
         except Exception as e:
-            self.log(f"❌ Resolution/Execution Error: {e}")
+            self.log(f"Resolution/Execution Error: {e}", level="error")
             success = False
             # Create dummy metrics for failed resolution
             node_metrics = {"SYSTEM": {"error": str(e)}}
@@ -141,9 +142,9 @@ class PipelineTestRunner:
         if self.reporter: self.reporter.report(res_obj)
         return success
 
-    def log(self, msg):
-        if self.dashboard: self.dashboard.log(msg)
-        else: logger.info(msg)
+    def log(self, msg, level="info"):
+        fmt_msg = log_msg(msg, tag="runner", level=level)
+        if self.dashboard: self.dashboard.log(fmt_msg)
 
     def run_all(self, args):
         structure = {}
@@ -204,7 +205,7 @@ class PipelineTestRunner:
                     try:
                         from manage_loadout import save_runtime_registry
                         save_runtime_registry(services, project_root, external_vram=v_ext)
-                    except Exception as e: self.log(f"Failed to update registry: {e}")
+                    except Exception as e: self.log(f"Failed to update registry: {e}", level="error")
 
                 def execution_wrapper():
                     # At this point v_static has been assigned by run_test_lifecycle
@@ -238,6 +239,8 @@ class PipelineTestRunner:
                 
                 loadout_results = [r for r in self.reporter.results if r.get('loadout_id') == l_id]
                 save_artifact(domain, [{"loadout": l_id, "scenarios": loadout_results, "status": status.upper()}], session_dir=self.session_dir)
+                self.log(f"Finalized loadout: {l_id}")
+                print() # SEPARATION
 
             if self.dashboard: self.dashboard.finalize_domain(domain)
 
@@ -266,6 +269,8 @@ def main():
         with open(os.path.join(session_dir, "system_info.yaml"), "r") as f: system_info = yaml.safe_load(f)
         dashboard.finalize_boot(session_id, system_info)
         dashboard.vram_total = utils.get_gpu_total_vram()
+        
+        log_msg(f"Started session: {session_id}", tag="runner")
 
         def dashboard_capture(res):
             if not isinstance(res, dict): return
@@ -282,10 +287,11 @@ def main():
                 dashboard.current_status = "Generating Report..."
                 report_path = trigger_report_generation(upload=True, session_dir=session_dir)
                 dashboard.report_url, dashboard.current_status = report_path, "Finished"
+                log_msg(f"Report generated: {report_path}", tag="runner")
                 time.sleep(1)
             except Exception as e:
                 import traceback
-                dashboard.log(f"CRITICAL ERROR: {e}")
+                log_msg(f"CRITICAL ERROR: {e}", tag="runner", level="error")
                 with open(os.path.join(session_dir, "crash.log"), "w") as f: traceback.print_exc(file=f)
 
         worker = threading.Thread(target=execution_worker, daemon=True)
