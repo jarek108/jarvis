@@ -13,14 +13,14 @@ def load_config():
     if _config_cache is not None:
         return _config_cache
         
-    config_path = os.path.join(get_project_root(), "config.yaml")
+    config_path = os.path.join(get_project_root(), "system_config", "config.yaml")
     with open(config_path, "r") as f:
         _config_cache = yaml.safe_load(f)
     return _config_cache
 
 def list_all_loadouts(include_experimental=False):
     """Lists all available loadout names from the loadouts.yaml file."""
-    loadouts_file = os.path.join(get_project_root(), "loadouts.yaml")
+    loadouts_file = os.path.join(get_project_root(), "system_config", "loadouts.yaml")
     if not os.path.exists(loadouts_file):
         return []
     
