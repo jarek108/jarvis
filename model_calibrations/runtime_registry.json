@@ -1,26 +1,12 @@
 {
   "active_loadout": [
     {
-      "id": "vllm_QuantTrio/Qwen3-VL-30B-A3B-Instruct-AWQ#CTX=16384#IMG_LIM=8",
+      "id": "vllm_Qwen/Qwen2.5-0.5B-Instruct#CTX=16384#IMG_LIM=8",
       "engine": "vllm",
       "port": 8300,
-      "params": {
-        "stream": true
-      }
-    },
-    {
-      "id": "faster-whisper-base",
-      "engine": "native",
-      "port": 8101,
-      "params": {}
-    },
-    {
-      "id": "chatterbox-multilingual",
-      "engine": "native",
-      "port": 8201,
       "params": {}
     }
   ],
-  "system_external_vram": 2.921875,
-  "last_updated": "2026-03-01 23:50:33"
+  "system_external_vram": 2.822265625,
+  "last_updated": "2026-03-02 00:04:45"
 }

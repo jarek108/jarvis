@@ -222,6 +222,10 @@ def init_session(plan_path):
     session_dir = os.path.join(project_root, "tests", "logs", session_id)
     os.makedirs(session_dir, exist_ok=True)
     
+    # Perform Log Cleanup
+    from utils import cleanup_old_logs
+    cleanup_old_logs()
+    
     system_info = gather_system_info(plan_path)
     with open(os.path.join(session_dir, "system_info.yaml"), "w", encoding="utf-8") as f:
         yaml.dump(system_info, f, sort_keys=False)

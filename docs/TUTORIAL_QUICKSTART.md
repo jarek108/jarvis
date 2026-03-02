@@ -18,19 +18,22 @@ This guide covers the minimal steps to get Jarvis running on a Windows 10/11 sys
 
 ## 2. Installation
 
-### Clone & Venv
+### Clone & Bootstrap
+Jarvis provides an automated bootstrap script to handle the complex Blackwell/CUDA 12.8 dependency tree.
 ```powershell
 git clone https://github.com/your/jarvis.git
 cd jarvis
-python -m venv jarvis-venv
-.\jarvis-venv\Scripts\Activate.ps1
+
+# Run the unified setup script
+python setup/setup_env.py
 ```
 
-### Install Dependencies
-This process pulls ~8GB of PyTorch/CUDA libraries.
+### Manual Installation (Optional)
+If you prefer manual control, you can use the hardware-specific snapshot:
 ```powershell
-pip install --upgrade pip
-pip install -r requirements.txt
+python -m venv jarvis-venv
+.\jarvis-venv\Scripts\Activate.ps1
+pip install -r setup/requirements_5090_snapshot_20260301.txt
 ```
 
 ### Environment Variables

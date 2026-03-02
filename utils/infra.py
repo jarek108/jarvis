@@ -304,3 +304,41 @@ def get_vllm_logs():
 def get_ollama_log_path():
     if os.name == 'nt': return os.path.join(os.environ.get('LOCALAPPDATA', ''), 'Ollama', 'server.log')
     return os.path.expanduser('~/.ollama/logs/server.log')
+
+def cleanup_old_logs():
+    """
+    Deletes RUN_ directories in logs/sessions and tests/logs older than configured retention period.
+    """
+    import shutil
+    cfg = load_config()
+    retention_days = cfg.get('system', {}).get('log_retention_days', 7)
+    if retention_days < 0: return
+    
+    project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    log_dirs = [
+        os.path.join(project_root, "logs", "sessions"),
+        os.path.join(project_root, "tests", "logs")
+    ]
+    
+    now = time.time()
+    retention_seconds = retention_days * 86400
+    deleted_count = 0
+    
+    for base_dir in log_dirs:
+        if not os.path.exists(base_dir): continue
+        for entry in os.listdir(base_dir):
+            if not entry.startswith("RUN_"): continue
+            path = os.path.join(base_dir, entry)
+            if not os.path.isdir(path): continue
+            
+            # Use folder modification time
+            if (now - os.path.getmtime(path)) > retention_seconds:
+                try:
+                    shutil.rmtree(path)
+                    deleted_count += 1
+                except: pass
+    
+    if deleted_count > 0:
+        # We don't use loguru here to avoid circular imports if infra is imported early
+        print(f"  ↳ 🧹 Log Retention Policy: Cleaned up {deleted_count} old session directories.")
+

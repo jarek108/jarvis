@@ -42,3 +42,11 @@ The Jarvis reporting engine is designed to be resilient. If a benchmark run fail
 *   **WPS/CPS**: Derived from the character/word count of the input or result text and the inference duration.
 
 This ensures that legacy logs can be re-processed into modern, data-rich reports.
+
+## 6. Log Retention Policy
+To prevent local storage bloat from hundreds of historical runs, Jarvis enforces an automatic cleanup policy:
+
+*   **Trigger**: Cleanup runs during every session initialization (Loadout application or Test start).
+*   **Logic**: Any folder starting with `RUN_` in `logs/sessions/` or `tests/logs/` with a modification time older than the configured threshold is deleted.
+*   **Configuration**: Managed via `system.log_retention_days` in `config.yaml`.
+*   **Opt-out**: Set `log_retention_days: -1` to disable automatic deletion.

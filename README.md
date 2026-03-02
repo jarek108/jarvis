@@ -34,11 +34,12 @@ Jarvis interacts with your environment through prioritized data channels, focusi
 ## 🛠️ Quick Start
 
 ### 1. Installation
-See [docs/TUTORIAL_QUICKSTART.md](docs/TUTORIAL_QUICKSTART.md) for detailed environment setup.
+Jarvis requires a specialized environment for NVIDIA Blackwell hardware.
 ```powershell
-# Short version (if you have Python 3.10 + CUDA 12.8 ready)
-pip install -r requirements.txt 
+# Run the automated bootstrap script
+python setup/setup_env.py
 ```
+For manual installation or troubleshooting, see [docs/TUTORIAL_QUICKSTART.md](docs/TUTORIAL_QUICKSTART.md).
 
 ### 2. Infrastructure Management
 Use the loadout manager to start or stop the Jarvis cluster.

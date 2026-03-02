@@ -13,7 +13,10 @@ def run_cmd(cmd, env=None):
 def main():
     print("🚀 Bootstrapping Jarvis Environment...\n")
     
-    venv_dir = "jarvis-venv"
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    project_root = os.path.dirname(script_dir)
+    venv_dir = os.path.join(project_root, "jarvis-venv")
+    requirements_path = os.path.join(script_dir, "requirements.txt")
     
     # 1. Create VENV if it doesn't exist
     if not os.path.exists(venv_dir):
@@ -35,9 +38,9 @@ def main():
     print("\n📦 Upgrading pip, setuptools, and wheel...")
     run_cmd([python_exe, "-m", "pip", "install", "--upgrade", "pip", "setuptools", "wheel"])
 
-    # 3. Install core dependencies (This will pull generic torch 2.6.0 via chatterbox)
+    # 3. Install core dependencies
     print("\n📦 Installing Project Requirements...")
-    run_cmd([python_exe, "-m", "pip", "install", "-r", "requirements.txt"])
+    run_cmd([python_exe, "-m", "pip", "install", "-r", requirements_path])
 
     # 4. Surgically Overwrite PyTorch with Nightly CUDA Stack (Blackwell Support)
     print("\n📦 Optimizing PyTorch for NVIDIA Blackwell (RTX 5090 / CUDA 12.8)...")

@@ -6,7 +6,9 @@ This document explains the settings available in the `config.yaml` file, which c
 ```yaml
 device: cuda  # Primary compute device ("cuda" or "cpu")
 system:
+  log_retention_days: 7     # Automatically delete RUN_ folders older than X days
   health_check_interval: 1.0  # Seconds between status polls in the dashboard
+  llm_warmup_timeout: 500     # Max seconds to wait for model to hot-load
 ```
 
 ## 2. Paths

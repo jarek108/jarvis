@@ -98,6 +98,10 @@ def apply_loadout(name, loud=False, soft=False):
     session_dir = os.path.join(project_root, "logs", "sessions", session_id)
     os.makedirs(session_dir, exist_ok=True)
     logger.info(f"📁 Initialized Loadout Session: {session_id}")
+    
+    # 1.1 Perform Log Cleanup
+    from utils import cleanup_old_logs
+    cleanup_old_logs()
 
     # 2. Pre-calculate active_services with ports and per-model session logs
     from utils.config import parse_model_string
