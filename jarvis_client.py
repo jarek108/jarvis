@@ -17,8 +17,8 @@ if script_dir not in sys.path:
 
 import utils
 from utils import load_config, list_all_loadouts, get_system_health, kill_all_jarvis_services, kill_process_on_port
-from utils.pipeline import PipelineResolver, PipelineExecutor
-from utils.edge_sensors import AudioSensor
+from utils.engine import PipelineResolver, PipelineExecutor
+from utils.edge import AudioSensor
 
 from manage_loadout import apply_loadout, kill_loadout, restart_service, kill_service
 

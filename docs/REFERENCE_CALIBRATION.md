@@ -2,17 +2,17 @@
 
 Technical specifications for the Jarvis Model Physics system.
 
-## 1. CLI: `utils/calibrate_models.py`
+## 1. CLI: `tools/calibrate_models.py`
 
 The primary tool for extracting physical constants from engine logs.
 
 ### Usage
 ```powershell
 # Auto-detect engine and model ID from log
-python utils/calibrate_models.py [PATH]
+python tools/calibrate_models.py [PATH]
 
 # Explicitly calibrate all logs in a directory
-python utils/calibrate_models.py tests/logs/RUN_20260225_183014/
+python tools/calibrate_models.py tests/logs/RUN_20260225_183014/
 ```
 
 ### Positional Arguments
@@ -61,7 +61,7 @@ During a test run or system initialization, the `LifecycleManager` may report sp
 *   **Engine**: vLLM strictly requires calibration.
 *   **Meaning**: The requested model has no corresponding `.yaml` in `model_calibrations/`.
 *   **Action**: Jarvis will **skip** the test scenario.
-*   **Fix**: Run the model once manually to generate a log, then run `python utils/calibrate_models.py [your_log]`.
+*   **Fix**: Run the model once manually to generate a log, then run `python tools/calibrate_models.py [your_log]`.
 
 ---
 

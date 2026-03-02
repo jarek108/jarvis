@@ -41,7 +41,7 @@ Common issues and solutions for the Jarvis infrastructure.
     2.  Capture that log.
     3.  Run the calibration tool:
         ```powershell
-        python utils/calibrate_models.py path/to/log
+        python tools/calibrate_models.py path/to/log
         ```
 
 ### "OOM" (Out of Memory)

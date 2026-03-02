@@ -20,7 +20,7 @@ from test_utils import (
     init_session, RichDashboard, AccumulatingReporter,
     save_artifact, trigger_report_generation, run_test_lifecycle
 )
-from utils.pipeline import PipelineResolver, PipelineExecutor
+from utils.engine import PipelineResolver, PipelineExecutor
 
 class PipelineTestRunner:
     def __init__(self, plan_path, dashboard=None, session_dir=None, reporter=None):
@@ -99,7 +99,7 @@ class PipelineTestRunner:
             json.dump(self.executor.trace, f, indent=2)
 
         # 4. Post-hoc Metric Evaluation (Node-Driven)
-        from utils.pipeline_evaluator import TraceEvaluator
+        from test_utils.pipeline_evaluator import TraceEvaluator
         evaluator = TraceEvaluator(self.project_root, self.executor.trace)
         
         expected = None

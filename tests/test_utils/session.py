@@ -167,7 +167,7 @@ def gather_system_info(plan_path):
             plan_content = yaml.safe_load(f)
 
     # Initial RAM and VRAM snapshots
-    import utils.vram
+    from utils.edge import vram
     
     mem = psutil.virtual_memory()
     total_ram = cache.get('ram_total_gb')
@@ -179,10 +179,10 @@ def gather_system_info(plan_path):
     
     total_vram = cache.get('vram_total_gb')
     if not total_vram:
-        total_vram = round(utils.vram.get_gpu_total_vram(), 2)
+        total_vram = round(vram.get_gpu_total_vram(), 2)
         save_system_cache({'vram_total_gb': total_vram})
         
-    used_vram = round(utils.vram.get_gpu_vram_usage(), 2)
+    used_vram = round(vram.get_gpu_vram_usage(), 2)
 
     d_status, d_ver, d_root = get_docker_info()
     o_status, o_ver = get_ollama_info()

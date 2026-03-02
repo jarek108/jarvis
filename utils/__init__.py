@@ -6,10 +6,13 @@ from .infra import (
     get_system_health, get_system_health_async, kill_jarvis_ports, wait_for_ports_parallel,
     is_docker_daemon_running, get_ollama_log_path, get_service_status, cleanup_old_logs
 )
-from .vram import (
+from .edge import (
     get_vram_estimation, get_ollama_vram, get_loaded_ollama_models,
-    get_gpu_vram_usage, get_gpu_total_vram, check_ollama_offload
+    get_gpu_vram_usage, get_gpu_total_vram, check_ollama_offload,
+    AudioSensor, ScreenSensor, ClipboardSensor,
+    AudioActuator, KeyboardActuator, NotificationActuator
 )
+from .engine import PipelineResolver, PipelineExecutor, chunk_by_delimiter
 from .llm import check_and_pull_model, warmup_llm, is_model_local
 from .console import (
     ensure_utf8_output, 

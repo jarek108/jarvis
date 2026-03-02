@@ -6,7 +6,7 @@ script_dir = os.path.dirname(os.path.abspath(__file__))
 project_root = os.path.dirname(os.path.dirname(script_dir))
 sys.path.insert(0, project_root)
 
-from utils.pipeline import PipelineResolver
+from utils.engine import PipelineResolver
 from utils import load_config
 
 def main():

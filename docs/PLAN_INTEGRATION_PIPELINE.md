@@ -69,7 +69,7 @@
 ### 3.3. Resource Manager (`models/resource.py`)
 *   **Port Logic**: Refactor `tests/test_utils/lifecycle.py` logic into a reusable `ResourceManager` class that can be used by BOTH the new Pipeline and the old Test Runner (eventually).
 *   **Functionality**:
-    *   Calculate VRAM delta using `utils/calibrate_models.py`.
+    *   Calculate VRAM delta using `tools/calibrate_models.py`.
     *   Evict non-sticky models.
     *   Spin up/down Docker containers or Processes.
 

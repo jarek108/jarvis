@@ -12,7 +12,7 @@ class SinkAdapter(NodeAdapter):
         logger.info(f"🏁 Sink Node '{node_id}' ({role}) executing.")
         
         # Import edge logic (lazy load to avoid dependencies on server)
-        from utils.edge_actuators import AudioActuator, KeyboardActuator, NotificationActuator
+        from utils.edge import AudioActuator, KeyboardActuator, NotificationActuator
         
         async for in_id, stream in input_streams.items():
             async for packet in stream:

@@ -5,7 +5,7 @@ class UtilityAdapter(NodeAdapter):
         op = node_config.get('operation')
         
         if op == 'chunk_by_delimiter':
-            from utils.transformers import chunk_by_delimiter
+            from utils.engine import chunk_by_delimiter
             delimiters = node_config.get('delimiters', '.?!')
             
             # Pick first input stream for chunking

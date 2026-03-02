@@ -134,13 +134,13 @@ Calibration translates raw logs into the physical constants Jarvis needs for VRA
 1.  Run the model once to generate a log file.
 2.  Run the calibrator:
     ```powershell
-    python utils/calibrate_models.py path/to/your.log
+    python tools/calibrate_models.py path/to/your.log
     ```
 
 ### How to Refresh the Entire Physics Database
 Use this after a hardware upgrade (e.g., more VRAM) or a major engine update (Ollama/vLLM version bump).
 ```powershell
-python utils/calibrate_models.py model_calibrations/source_logs/
+python tools/calibrate_models.py model_calibrations/source_logs/
 ```
 
 ### How to Verify a Specification

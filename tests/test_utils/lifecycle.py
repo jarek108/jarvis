@@ -441,7 +441,7 @@ def run_test_lifecycle(domain, setup_name, models, purge_on_entry, purge_on_exit
 
             if setup_time == -1:
                 if manager.uncalibrated_models:
-                    err_msg = f"Skipped: Missing calibration for vLLM models: {', '.join(manager.uncalibrated_models)}. Run 'python utils/calibrate_models.py' first."
+                    err_msg = f"Skipped: Missing calibration for vLLM models: {', '.join(manager.uncalibrated_models)}. Run 'python tools/calibrate_models.py' first."
                     status = "UNCALIBRATED"
                 else:
                     err_msg = f"Missing model files: {', '.join(manager.missing_models)}"

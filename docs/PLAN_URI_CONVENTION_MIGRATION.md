@@ -12,12 +12,18 @@ The error `huggingface_hub.errors.HFValidationError: Cannot have -- or .. in rep
 
 ### Phase 1: Unify YAML Configurations (Test Plans)
 All configurations in `tests/plans/*.yaml` must be updated to use strict URIs with Canonical IDs.
-*   **vLLM:** `VL_qwen--qwen2-vl-2b-instruct#stream` $ightarrow$ `vllm://Qwen/Qwen2-VL-2B-Instruct#stream`
-*   **vLLM (QuantTrio):** `VL_quanttrio--qwen3-vl-30b-a3b-instruct-awq#stream` $ightarrow$ `vllm://QuantTrio/Qwen3-VL-30B-A3B-Instruct-AWQ#stream`
-*   **Ollama:** `OL_qwen2.5:0.5b` $ightarrow$ `ollama://qwen2.5:0.5b`
-*   **Ollama (GPT):** `OL_gpt-oss-20b` $ightarrow$ `ollama://gpt-oss-20b`
-*   **Native STT:** `faster-whisper-tiny` $ightarrow$ `native://faster-whisper-tiny`
-*   **Native TTS:** `chatterbox-turbo` $ightarrow$ `native://chatterbox-turbo`
+*   **vLLM:** `VL_qwen--qwen2-vl-2b-instruct#stream` $
+ightarrow$ `vllm://Qwen/Qwen2-VL-2B-Instruct#stream`
+*   **vLLM (QuantTrio):** `VL_quanttrio--qwen3-vl-30b-a3b-instruct-awq#stream` $
+ightarrow$ `vllm://QuantTrio/Qwen3-VL-30B-A3B-Instruct-AWQ#stream`
+*   **Ollama:** `OL_qwen2.5:0.5b` $
+ightarrow$ `ollama://qwen2.5:0.5b`
+*   **Ollama (GPT):** `OL_gpt-oss-20b` $
+ightarrow$ `ollama://gpt-oss-20b`
+*   **Native STT:** `faster-whisper-tiny` $
+ightarrow$ `native://faster-whisper-tiny`
+*   **Native TTS:** `chatterbox-turbo` $
+ightarrow$ `native://chatterbox-turbo`
 
 ### Phase 2: Refactor Test Infrastructure (`lifecycle.py`)
 The test runner must be updated to treat the `engine://` URI as the absolute source of truth.

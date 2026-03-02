@@ -26,7 +26,7 @@ Now, use the **Zero-Config** calibration tool to translate that log into a physi
 ```powershell
 # Simply point the script to the log file. 
 # It will auto-detect the engine and the model name.
-python utils/calibrate_models.py C:\Path\To\Your\startup.log
+python tools/calibrate_models.py C:\Path\To\Your\startup.log
 ```
 
 > **Note**: For vLLM models, this step is **MANDATORY**. Jarvis will refuse to run a vLLM model that has not been calibrated.
