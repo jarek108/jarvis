@@ -75,3 +75,29 @@ mock:
   execution_range: [0.3, 1.0]
   cleanup_range: [1.0, 3.0]
   failure_chance: 0.1
+# --- UI Configuration ---
+ui:
+  theme: "dark"
+  colors:
+    bg: "#0B0F19"
+    accent: "#00D1FF"
+    text: "#E0E0E0"
+    gray: "#2A2F3E"
+    success: "#00FF94"
+    error: "#FF4B4B"
+    warning: "#FFD700"
+    purple: "#BF40BF"
+  graph:
+    node:
+      width: 160
+      height: 60
+      radius: 8
+      bg_color: "#12161E"
+      selected_bg_color: "#1A202C"
+    font:
+      primary: ["Consolas", 10, "bold"]
+      secondary: ["Consolas", 8, "normal"]
+    edge:
+      width: 2
+      color: "#2A2F3E"
+      arrow_shape: [8, 10, 3]

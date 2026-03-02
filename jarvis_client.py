@@ -22,15 +22,6 @@ from utils.edge import AudioSensor
 
 from manage_loadout import apply_loadout, kill_loadout, restart_service, kill_service
 
-# --- UI CONSTANTS ---
-BG_COLOR = "#0B0F19"
-ACCENT_COLOR = "#00D1FF"
-TEXT_COLOR = "#E0E0E0"
-GRAY_COLOR = "#2A2F3E"
-SUCCESS_COLOR = "#00FF94"
-ERROR_COLOR = "#FF4B4B"
-WARNING_COLOR = "#FFD700"
-
 CHECKPOINT_PATH = os.path.join(script_dir, ".cache", "checkpoint-client.json")
 
 ctk.set_appearance_mode("dark")
@@ -214,9 +205,10 @@ class JarvisController:
         asyncio.run(run_and_monitor())
 
 class PipelineGraphWidget(ctk.CTkFrame):
-    def __init__(self, master, **kwargs):
+    def __init__(self, master, ui_config, **kwargs):
         super().__init__(master, **kwargs)
-        self.canvas = ctk.CTkCanvas(self, bg="#080C14", highlightthickness=0)
+        self.ui_cfg = ui_config
+        self.canvas = ctk.CTkCanvas(self, bg=self.ui_cfg['colors']['bg'], highlightthickness=0)
         self.canvas.pack(fill="both", expand=True)
         self.nodes = {}
         self.edges = []
@@ -268,15 +260,19 @@ class PipelineGraphWidget(ctk.CTkFrame):
         ]
         return self.canvas.create_polygon(points, fill=color, outline=outline_color, width=outline_width, smooth=True)
 
-    def draw_edge(self, x1, y1, x2, y2, color="#2A2F3E", style=None):
+    def draw_edge(self, x1, y1, x2, y2, color=None, style=None):
+        if color is None: color = self.ui_cfg['graph']['edge']['color']
+        width = self.ui_cfg['graph']['edge']['width']
+        ashape = tuple(self.ui_cfg['graph']['edge']['arrow_shape'])
+        
         # Draw an angled or curved line with an arrowhead
         ctrl_x = (x1 + x2) / 2
-        return self.canvas.create_line(x1, y1, ctrl_x, y1, ctrl_x, y2, x2, y2, fill=color, width=2, arrow=ctk.LAST, smooth=True, dash=style)
+        return self.canvas.create_line(x1, y1, ctrl_x, y1, ctrl_x, y2, x2, y2, fill=color, width=width, arrow=ctk.LAST, arrowshape=ashape, smooth=True, dash=style)
 
     def draw_graph(self):
         self.canvas.delete("all")
         if not hasattr(self, 'bound_graph') or not self.bound_graph:
-            self.canvas.create_text(self.winfo_width()/2, self.winfo_height()/2, text="No Pipeline Loaded", fill=GRAY_COLOR, font=("Consolas", 14))
+            self.canvas.create_text(self.winfo_width()/2, self.winfo_height()/2, text="No Pipeline Loaded", fill=self.ui_cfg['colors']['gray'], font=("Consolas", 14))
             return
 
         w, h = self.winfo_width(), self.winfo_height()
@@ -296,7 +292,8 @@ class PipelineGraphWidget(ctk.CTkFrame):
             else: tiers[1].append(nid) # Fallback
 
         # Calculate coordinates
-        node_w, node_h = 160, 60
+        node_cfg = self.ui_cfg['graph']['node']
+        node_w, node_h, r = node_cfg['width'], node_cfg['height'], node_cfg['radius']
         margin_x = w / 5
         self.nodes = {}
 
@@ -316,13 +313,21 @@ class PipelineGraphWidget(ctk.CTkFrame):
         # 2. Draw Edges
         for nid, ndata in self.nodes.items():
             node = ndata['data']
+            
+            # Standard Inputs
             inputs = node.get('inputs', [])
             for src_id in inputs:
                 if src_id in self.nodes:
                     src = self.nodes[src_id]
-                    # Arrow from right edge of source to left edge of target
                     dash = (4, 4) if node.get('role') == 'memory' else None
                     self.draw_edge(src['bbox'][2], src['y'], ndata['bbox'][0], ndata['y'], style=dash)
+            
+            # System Prompt Connection (Specialized)
+            sys_prompt_id = node.get('system_prompt')
+            if sys_prompt_id and sys_prompt_id in self.nodes:
+                src = self.nodes[sys_prompt_id]
+                # Draw purple dotted line for system prompt
+                self.draw_edge(src['bbox'][2], src['y'], ndata['bbox'][0], ndata['y'], color=self.ui_cfg['colors']['purple'], style=(2, 2))
 
         # 3. Draw Nodes
         for nid, ndata in self.nodes.items():
@@ -332,42 +337,54 @@ class PipelineGraphWidget(ctk.CTkFrame):
             
             # Styling based on state and selection
             is_selected = (nid == self.selected_node_id)
-            bg_color = "#12161E"
-            outline_color = SUCCESS_COLOR if is_selected else "#2A2F3E"
+            bg_color = node_cfg['bg_color']
+            outline_color = self.ui_cfg['colors']['success'] if is_selected else self.ui_cfg['colors']['gray']
             outline_w = 2 if is_selected else 1
             
             ntype = node.get('type')
             role = node.get('role', ntype)
             binding = node.get('binding')
             
-            if ntype == 'source': outline_color = ACCENT_COLOR
-            elif ntype == 'sink': outline_color = WARNING_COLOR
+            if ntype == 'source': 
+                # Check if this node is used as a system_prompt anywhere
+                is_sys_prompt = any(n.get('system_prompt') == nid for n in self.bound_graph.values())
+                outline_color = self.ui_cfg['colors']['purple'] if is_sys_prompt else self.ui_cfg['colors']['accent']
+            elif ntype == 'sink': outline_color = self.ui_cfg['colors']['warning']
             elif ntype == 'processing' and role != 'utility' and not binding:
                 # Flag unbound required models
-                outline_color = ERROR_COLOR
+                outline_color = self.ui_cfg['colors']['error']
                 outline_w = 2
 
-            self.draw_rounded_rect(bx1, by1, node_w, node_h, 8, bg_color, outline_color, outline_w)
+            self.draw_rounded_rect(bx1, by1, node_w, node_h, r, bg_color, outline_color, outline_w)
             
             # Text Content
-            self.canvas.create_text(cx, cy - 10, text=nid[:20], fill="#FFFFFF", font=("Consolas", 10, "bold"))
+            f_pri = tuple(self.ui_cfg['graph']['font']['primary'])
+            f_sec = tuple(self.ui_cfg['graph']['font']['secondary'])
+            
+            self.canvas.create_text(cx, cy - 10, text=nid[:20], fill="#FFFFFF", font=f_pri)
             
             if binding:
                 subtext = binding.get('id', 'Unknown')
-                self.canvas.create_text(cx, cy + 10, text=subtext[:22], fill=SUCCESS_COLOR, font=("Consolas", 8))
+                self.canvas.create_text(cx, cy + 10, text=subtext[:22], fill=self.ui_cfg['colors']['success'], font=f_sec)
             elif ntype == 'processing' and role != 'utility':
-                self.canvas.create_text(cx, cy + 10, text="[UNBOUND]", fill=ERROR_COLOR, font=("Consolas", 8, "bold"))
+                self.canvas.create_text(cx, cy + 10, text="[UNBOUND]", fill=self.ui_cfg['colors']['error'], font=f_pri)
             else:
-                self.canvas.create_text(cx, cy + 10, text=f"[{role.upper()}]", fill=GRAY_COLOR, font=("Consolas", 8))
+                self.canvas.create_text(cx, cy + 10, text=f"[{role.upper()}]", fill=self.ui_cfg['colors']['gray'], font=f_sec)
 
 class JarvisApp(ctk.CTk):
     def __init__(self):
         super().__init__()
         self.title("JARVIS CORE CONSOLE")
         self.geometry("1200x850")
-        self.configure(fg_color=BG_COLOR)
+        
         self.queue = queue.Queue()
         self.controller = JarvisController(self.queue)
+        
+        # Load UI Config dynamically
+        self.ui_cfg = self.controller.cfg.get('ui', {})
+        self.colors = self.ui_cfg.get('colors', {})
+        
+        self.configure(fg_color=self.colors.get('bg', '#0B0F19'))
         
         # State for Log Viewing and Transitions
         self.selected_mid = None
@@ -388,7 +405,7 @@ class JarvisApp(ctk.CTk):
         self.sidebar.grid(row=0, column=0, rowspan=3, sticky="nsew")
         
         # Loadout Selection at the Top
-        ctk.CTkLabel(self.sidebar, text="LOADOUT", font=("Impact", 18), text_color=ACCENT_COLOR).pack(pady=(20, 5))
+        ctk.CTkLabel(self.sidebar, text="LOADOUT", font=("Impact", 18), text_color=self.colors.get('accent')).pack(pady=(20, 5))
         loadouts = ["NONE"] + list_all_loadouts()
         self.loadout_var = ctk.StringVar(value=self.controller.current_loadout)
         self.loadout_opt = ctk.CTkOptionMenu(self.sidebar, values=loadouts, variable=self.loadout_var, command=self.on_loadout_change, width=200)
@@ -408,7 +425,7 @@ class JarvisApp(ctk.CTk):
         self.v_lbl_model.pack(side="left")
         self.v_lbl_3 = ctk.CTkLabel(self.vram_container, text=" + ", font=("Consolas", 11), text_color="#D0D0D0")
         self.v_lbl_3.pack(side="left")
-        self.v_lbl_ext = ctk.CTkLabel(self.vram_container, text="0.0 ext", font=("Consolas", 11, "bold"), text_color=WARNING_COLOR)
+        self.v_lbl_ext = ctk.CTkLabel(self.vram_container, text="0.0 ext", font=("Consolas", 11, "bold"), text_color=self.colors.get('warning'))
         self.v_lbl_ext.pack(side="left")
         self.v_lbl_4 = ctk.CTkLabel(self.vram_container, text=") / ", font=("Consolas", 11), text_color="#D0D0D0")
         self.v_lbl_4.pack(side="left")
@@ -418,9 +435,9 @@ class JarvisApp(ctk.CTk):
         # Layered VRAM Bar
         self.vram_bar_bg = ctk.CTkFrame(self.sidebar, width=200, height=8, fg_color="#10141B", corner_radius=4)
         self.vram_bar_bg.pack(pady=(2, 20))
-        self.vram_bar_ext = ctk.CTkFrame(self.vram_bar_bg, width=0, height=8, fg_color=WARNING_COLOR, corner_radius=4)
+        self.vram_bar_ext = ctk.CTkFrame(self.vram_bar_bg, width=0, height=8, fg_color=self.colors.get('warning'), corner_radius=4)
         self.vram_bar_ext.place(x=0, y=0)
-        self.vram_bar_model = ctk.CTkFrame(self.vram_bar_bg, width=0, height=8, fg_color=ACCENT_COLOR, corner_radius=4)
+        self.vram_bar_model = ctk.CTkFrame(self.vram_bar_bg, width=0, height=8, fg_color=self.colors.get('accent'), corner_radius=4)
         self.vram_bar_model.place(x=0, y=0)
 
         ctk.CTkLabel(self.sidebar, text="ACTIVE MODELS", font=("Impact", 16), text_color="#E0E0E0").pack(pady=(10, 5))
@@ -447,7 +464,7 @@ class JarvisApp(ctk.CTk):
         self.strategy_opt.pack(side="left", padx=10)
 
         # Mode Indicator
-        self.mode_label = ctk.CTkLabel(self.header, text="MODE: TERMINAL", font=("Consolas", 12, "bold"), text_color=ACCENT_COLOR)
+        self.mode_label = ctk.CTkLabel(self.header, text="MODE: TERMINAL", font=("Consolas", 12, "bold"), text_color=self.colors.get('accent'))
         self.mode_label.pack(side="right", padx=20)
 
         # --- MAIN DISPLAY AREA ---
@@ -458,7 +475,7 @@ class JarvisApp(ctk.CTk):
         self.main_area.grid_rowconfigure(0, weight=1)
 
         # 1. Pipeline Graph
-        self.graph_widget = PipelineGraphWidget(self.main_area)
+        self.graph_widget = PipelineGraphWidget(self.main_area, self.ui_cfg)
         self.graph_widget.grid(row=0, column=0, sticky="nsew", padx=(0, 10))
 
         # 2. Console Container (Terminal or Log Viewer)
@@ -467,7 +484,7 @@ class JarvisApp(ctk.CTk):
         self.console_container.grid_columnconfigure(0, weight=1)
         self.console_container.grid_rowconfigure(0, weight=1)
 
-        self.terminal = ctk.CTkTextbox(self.console_container, font=("Consolas", 13), fg_color=BG_COLOR, text_color=TEXT_COLOR)
+        self.terminal = ctk.CTkTextbox(self.console_container, font=("Consolas", 13), fg_color=self.colors.get('bg'), text_color=self.colors.get('text'))
         self.terminal.grid(row=0, column=0, sticky="nsew")
         
         self.log_viewer = ctk.CTkTextbox(self.console_container, font=("Consolas", 11), fg_color="#05080F", text_color="#A0A0A0")
@@ -476,7 +493,7 @@ class JarvisApp(ctk.CTk):
         # --- FOOTER ---
         self.footer = ctk.CTkFrame(self, height=120, fg_color="#0D1117")
         self.footer.grid(row=2, column=1, sticky="ew")
-        self.record_btn = ctk.CTkButton(self.footer, text="HOLD TO TALK", font=("Impact", 24), height=60, fg_color=ACCENT_COLOR, text_color="black")
+        self.record_btn = ctk.CTkButton(self.footer, text="HOLD TO TALK", font=("Impact", 24), height=60, fg_color=self.colors.get('accent'), text_color="black")
         self.record_btn.pack(pady=20, padx=20, fill="x")
         self.record_btn.bind("<Button-1>", lambda e: self.controller.start_recording())
         self.record_btn.bind("<ButtonRelease-1>", lambda e: self.controller.stop_recording())
@@ -579,7 +596,7 @@ class JarvisApp(ctk.CTk):
     def switch_to_log(self, mid):
         self.terminal.grid_remove()
         self.log_viewer.grid(row=0, column=0, sticky="nsew")
-        self.mode_label.configure(text=f"LOG: {mid}", text_color=SUCCESS_COLOR)
+        self.mode_label.configure(text=f"LOG: {mid}", text_color=self.colors.get('success'))
         self.log_viewer.delete("1.0", "end")
         self.last_log_content = ""
 
@@ -620,12 +637,12 @@ class JarvisApp(ctk.CTk):
         """Immediately updates the visual state (borders/colors) of model cards based on selection."""
         for mid, widgets in self.service_widgets.items():
             if mid == self.selected_mid:
-                widgets['frame'].configure(border_width=2, border_color=SUCCESS_COLOR, fg_color="#1A202C")
+                widgets['frame'].configure(border_width=2, border_color=self.colors.get('success'), fg_color="#1A202C")
             else:
                 widgets['frame'].configure(border_width=0, fg_color="#12161E")
 
     def on_right_click(self, event, m):
-        menu = ctk.CTkFrame(self, fg_color="#1A1E26", border_width=1, border_color=ACCENT_COLOR)
+        menu = ctk.CTkFrame(self, fg_color="#1A1E26", border_width=1, border_color=self.colors.get('accent'))
         
         def close_menu(e=None): menu.place_forget()
         
@@ -639,7 +656,7 @@ class JarvisApp(ctk.CTk):
         ctk.CTkButton(menu, text="Restart", fg_color="transparent", anchor="w", height=30, hover_color="#2A2F3E",
                       command=lambda: [self.controller.trigger_service_restart(m['id']), close_menu()]).pack(fill="x", padx=2, pady=2)
         
-        ctk.CTkButton(menu, text="Close", fg_color="transparent", anchor="w", height=30, hover_color="#2A2F3E", text_color=ERROR_COLOR,
+        ctk.CTkButton(menu, text="Close", fg_color="transparent", anchor="w", height=30, hover_color="#2A2F3E", text_color=self.colors.get('error'),
                       command=lambda: [self.controller.trigger_service_kill(m['id']), close_menu()]).pack(fill="x", padx=2, pady=2)
 
         # Close menu when mouse leaves or clicks elsewhere
@@ -679,9 +696,9 @@ class JarvisApp(ctk.CTk):
             self.vram_bar_model.configure(width=model_w)
             
             # Dynamic bar color for model usage if very high
-            if pct > 0.95: self.vram_bar_model.configure(fg_color=ERROR_COLOR)
-            elif pct > 0.85: self.vram_bar_model.configure(fg_color=WARNING_COLOR)
-            else: self.vram_bar_model.configure(fg_color=ACCENT_COLOR)
+            if pct > 0.95: self.vram_bar_model.configure(fg_color=self.colors.get('error'))
+            elif pct > 0.85: self.vram_bar_model.configure(fg_color=self.colors.get('warning'))
+            else: self.vram_bar_model.configure(fg_color=self.colors.get('accent'))
 
         # 2. Transition Logic (Only blocks model list clearing)
         if self.transition_lock and active_models is not None and not active_models:
@@ -759,7 +776,7 @@ class JarvisApp(ctk.CTk):
                 
                 is_llm = m['engine'] in ['ollama', 'vllm']
                 streaming = m.get('params', {}).get('stream', True if is_llm else False)
-                stream_color = SUCCESS_COLOR if streaming else ERROR_COLOR
+                stream_color = self.colors.get('success') if streaming else self.colors.get('error')
                 
                 engine_str = m['engine'].upper()
                 if m.get('required_gb'): engine_str += f" ({m['required_gb']} GB)"
@@ -794,11 +811,11 @@ class JarvisApp(ctk.CTk):
 
             
             # Update Status Lamp
-            color = GRAY_COLOR
-            if info['status'] == "ON": color = SUCCESS_COLOR
-            elif info['status'] == "OFF": color = ERROR_COLOR
-            elif info['status'] == "STARTUP": color = WARNING_COLOR
-            elif info['status'] == "BUSY": color = ACCENT_COLOR
+            color = self.colors.get('gray')
+            if info['status'] == "ON": color = self.colors.get('success')
+            elif info['status'] == "OFF": color = self.colors.get('error')
+            elif info['status'] == "STARTUP": color = self.colors.get('warning')
+            elif info['status'] == "BUSY": color = self.colors.get('accent')
             self.service_widgets[mid]['lamp'].configure(text_color=color)
 
         # 3. Apply Selection Styling
@@ -806,17 +823,17 @@ class JarvisApp(ctk.CTk):
 
         # 4. Update Loadout Dropdown Color
         if self.controller.current_loadout == "NONE":
-            self.loadout_opt.configure(fg_color=GRAY_COLOR)
+            self.loadout_opt.configure(fg_color=self.colors.get('gray'))
         elif all(s['status'] == "ON" or s['status'] == "BUSY" for s in health.values()):
-            self.loadout_opt.configure(fg_color=SUCCESS_COLOR, text_color="black")
+            self.loadout_opt.configure(fg_color=self.colors.get('success'), text_color="black")
         elif any(s['status'] == "STARTUP" for s in health.values()):
             self.loadout_opt.configure(fg_color="#CCAA00", text_color="white")
         else:
-            self.loadout_opt.configure(fg_color=ACCENT_COLOR, text_color="black")
+            self.loadout_opt.configure(fg_color=self.colors.get('accent'), text_color="black")
 
         # 5. Update Record Button
         if runnability.get('runnable'):
-            self.record_btn.configure(state="normal", fg_color=ACCENT_COLOR, text="HOLD TO TALK")
+            self.record_btn.configure(state="normal", fg_color=self.colors.get('accent'), text="HOLD TO TALK")
         else:
             errors = runnability.get('errors', [])
             if not errors:
@@ -830,7 +847,7 @@ class JarvisApp(ctk.CTk):
                 else:
                     err_msg = f"{len(errors)} Services Failed"
             
-            self.record_btn.configure(state="disabled", fg_color=GRAY_COLOR, text=f"OFFLINE: {err_msg}")
+            self.record_btn.configure(state="disabled", fg_color=self.colors.get('gray'), text=f"OFFLINE: {err_msg}")
 
     def poll_queue(self):
         while not self.queue.empty():
@@ -838,7 +855,7 @@ class JarvisApp(ctk.CTk):
             if msg['type'] == "log":
                 self.terminal.insert("end", f"{msg['msg']}\n"); self.terminal.see("end")
             elif msg['type'] == "state":
-                if msg.get('recording'): self.record_btn.configure(fg_color=ERROR_COLOR, text="RECORDING...")
+                if msg.get('recording'): self.record_btn.configure(fg_color=self.colors.get('error'), text="RECORDING...")
             elif msg['type'] == "health_update":
                 self.update_health_ui(
                     msg['health'], 
