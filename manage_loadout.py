@@ -51,7 +51,7 @@ def print_status():
 
 def save_runtime_registry(services, project_root=None, external_vram=None):
     root = project_root if project_root else get_project_root()
-    registry_path = os.path.join(root, "model_calibrations", "runtime_registry.json")
+    registry_path = os.path.join(root, "system_config", "model_calibrations", "runtime_registry.json")
     
     # Preserve existing external if not provided
     current_external = 0.0
@@ -295,7 +295,7 @@ def kill_service(sid):
     """Surgically kills a service and removes it from the registry."""
     cfg = load_config()
     project_root = get_project_root()
-    registry_path = os.path.join(project_root, "model_calibrations", "runtime_registry.json")
+    registry_path = os.path.join(root, "system_config", "model_calibrations", "runtime_registry.json")
     
     if not os.path.exists(registry_path): return
     

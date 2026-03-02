@@ -106,7 +106,7 @@ class LifecycleManager:
                 llm_port = self.cfg['ports']['ollama'] if engine == "ollama" else self.cfg['ports'].get('vllm', 8300)
                 cmd = [self.python_exe, stub_script, "--port", str(llm_port)]
                 health = f"http://127.0.0.1:{llm_port}/health"
-                required.append({"type": "llm", "id": f"STUB-{original_id}", "port": llm_port, "cmd": cmd, "health": health})
+                required.append({"type": "llm", "id": model, "res_id": f"STUB-{original_id}", "port": llm_port, "cmd": cmd, "health": health})
             elif engine == "ollama":
                 # --- START OLLAMA GUARDRAIL ---
                 try:
@@ -136,7 +136,7 @@ class LifecycleManager:
                 # ---------------------------------
 
                 required.append({
-                    "type": "llm", "id": res_id, "port": self.cfg['ports']['ollama'],
+                    "type": "llm", "id": model, "res_id": res_id, "port": self.cfg['ports']['ollama'],
                     "cmd": ["ollama", "serve"], "health": f"http://127.0.0.1:{self.cfg['ports']['ollama']}/api/tags"
                 })
             elif engine == "vllm":
@@ -213,7 +213,7 @@ class LifecycleManager:
                     "--allowed-local-media-path", "/data"
                 ]
                 required.append({
-                    "type": "llm", "id": res_id, "port": vllm_port,
+                    "type": "llm", "id": model, "res_id": res_id, "port": vllm_port,
                     "cmd": cmd, "health": f"http://127.0.0.1:{vllm_port}/v1/models"
                 })
 
@@ -225,7 +225,7 @@ class LifecycleManager:
             cmd = [self.python_exe, stt_script, "--port", str(stt_port), "--model", stt_id]
             if self.benchmark_mode: cmd.append("--benchmark-mode")
             if self.stub_mode: cmd.append("--stub")
-            required.append({"type": "stt", "id": stt_id, "port": stt_port, "cmd": cmd, "health": f"http://127.0.0.1:{stt_port}/health"})
+            required.append({"type": "stt", "id": stt_id, "res_id": stt_id.upper(), "port": stt_port, "cmd": cmd, "health": f"http://127.0.0.1:{stt_port}/health"})
 
         # 3. TTS
         if self.cat['tts'] and (domain in ["tts", "sts"] or self.full):
@@ -235,7 +235,7 @@ class LifecycleManager:
             cmd = [self.python_exe, tts_script, "--port", str(tts_port), "--variant", tts_id]
             if self.benchmark_mode: cmd.append("--benchmark-mode")
             if self.stub_mode: cmd.append("--stub")
-            required.append({"type": "tts", "id": tts_id, "port": tts_port, "cmd": cmd, "health": f"http://127.0.0.1:{tts_port}/health"})
+            required.append({"type": "tts", "id": tts_id, "res_id": tts_id.upper(), "port": tts_port, "cmd": cmd, "health": f"http://127.0.0.1:{tts_port}/health"})
 
         # 4. STS
         if domain == "sts":
@@ -255,41 +255,11 @@ class LifecycleManager:
             })
         return required
 
-    def format_models_for_display(self):
-        display_parts = []
-        if self.cat['stt']: 
-            display_parts.append(self.cat['stt']['id'].upper())
-        
-        if self.cat['llm']:
-            llm = self.cat['llm']
-            flags = llm.get('flags', {})
-            name = llm['model'].upper()
-            
-            if flags.get('nativevideo') or self.kwargs.get('nativevideo'):
-                name += "#NATIVE"
-            
-            if flags.get('stream') or self.full: 
-                name += "#STREAM"
-            
-            ctx = flags.get('ctx')
-            if not ctx:
-                if llm['engine'] == "ollama": ctx = 4096
-                else: ctx = self.cfg.get('vllm', {}).get('default_context_size', 16384)
-            name += f"#CTX={ctx}"
-            
-            if llm['engine'] == "vllm":
-                img_lim = flags.get('img_lim') or 8
-                vid_lim = flags.get('vid_lim')
-                if img_lim and int(img_lim) > 1: name += f"#IMG_LIM={img_lim}"
-                if vid_lim and int(vid_lim) > 1: name += f"#VID_LIM={vid_lim}"
-
-            # Prepend engine explicitly for clarity in test runner output
-            engine_prefix = f"{llm['engine']}_" if llm['engine'] else ""
-            display_parts.append(f"{engine_prefix}{name}")
-            
-        if self.cat['tts']: 
-            display_parts.append(self.cat['tts']['id'].upper())
-        return " + ".join(display_parts) or self.setup_name.upper()
+    def format_models_for_display(self, domain=None):
+        required = self.get_required_services(domain)
+        # Use res_id if available, otherwise fallback to upper id
+        parts = [s.get('res_id', s['id'].upper()) for s in required if s['type'] != 'sts']
+        return " + ".join(parts) or self.setup_name.upper()
 
     def reconcile(self, domain):
         ensure_utf8_output()
@@ -409,13 +379,18 @@ class LifecycleManager:
         required = self.get_required_services(domain)
         entries = []
         for s in required:
+            if s['type'] == 'sts': continue
+            
             engine = s['type']
             if engine == "llm":
                 engine = self.cat['llm']['engine'] if self.cat['llm'] else "ollama"
             elif engine in ["stt", "tts"]:
                 engine = "native"
+            
             entries.append({
-                "id": s['id'], "engine": engine, "port": s['port'],
+                "id": s['id'], # Canonical ID for capability matching
+                "engine": engine, 
+                "port": s['port'],
                 "params": self.cat.get(s['type'], {}).get('flags', {}) if s['type'] in self.cat and self.cat[s['type']] else {}
             })
         return entries
@@ -423,7 +398,7 @@ class LifecycleManager:
 def run_test_lifecycle(domain, setup_name, models, purge_on_entry, purge_on_exit, full, test_func, benchmark_mode=False, force_download=False, track_prior_vram=True, session_dir=None, on_phase=None, stub_mode=False, reporter=None, on_ready=None, **kwargs):
     ensure_utf8_output()
     manager = LifecycleManager(setup_name, models=models, purge_on_entry=purge_on_entry, purge_on_exit=purge_on_exit, full=full, benchmark_mode=benchmark_mode, force_download=force_download, track_prior_vram=track_prior_vram, session_dir=session_dir, on_phase=on_phase, stub_mode=stub_mode, **kwargs)
-    model_display = manager.format_models_for_display()
+    model_display = manager.format_models_for_display(domain=domain)
     f = LiveFilter()
     
     log_dir = session_dir if session_dir else os.path.join(manager.project_root, "tests", "artifacts", "logs")
@@ -483,3 +458,4 @@ def run_test_lifecycle(domain, setup_name, models, purge_on_entry, purge_on_exit
                 traceback.print_exc(file=lf)
                 
             return 0, cleanup_time, 0.0, model_display, 0.0, 0.0
+

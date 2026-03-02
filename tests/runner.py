@@ -160,7 +160,8 @@ class PipelineTestRunner:
             
             structure[domain]['total'] += len(scenarios) * len(loadouts)
             for l in loadouts:
-                l_id = "_".join([m.replace(":", "-").replace("/", "--") for m in l]) if isinstance(l, list) else (str(l).replace(":", "-").replace("/", "--") if l else "Live")
+                from utils.config import safe_filename
+                l_id = "_".join([safe_filename(m) for m in l]) if isinstance(l, list) else (safe_filename(str(l)) if l else "Live")
                 if l_id not in structure[domain]['loadouts']:
                     structure[domain]['loadouts'][l_id] = {"status": "pending", "done": 0, "total": len(scenarios), "duration": 0, "errors": 0, "phase": None, "models": l if isinstance(l, list) else ([str(l)] if l else ["Default"])}
 
@@ -181,7 +182,8 @@ class PipelineTestRunner:
             if self.dashboard: self.dashboard.current_domain = domain.upper()
 
             for l in loadouts:
-                l_id = "_".join([m.replace(":", "-").replace("/", "--") for m in l]) if isinstance(l, list) else (str(l).replace(":", "-").replace("/", "--") if l else "Live")
+                from utils.config import safe_filename
+                l_id = "_".join([safe_filename(m) for m in l]) if isinstance(l, list) else (safe_filename(str(l)) if l else "Live")
                 if self.dashboard: self.dashboard.current_loadout = l_id
 
                 models = l if isinstance(l, list) else ([l] if l else [])

@@ -1,7 +1,7 @@
 {
   "active_loadout": [
     {
-      "id": "STUB-ollama://qwen2.5:0.5b",
+      "id": "qwen2.5:0.5b",
       "engine": "ollama",
       "port": 11434,
       "params": {}
@@ -13,6 +13,6 @@
       "params": {}
     }
   ],
-  "system_external_vram": 1.201171875,
-  "last_updated": "2026-03-02 08:05:07"
+  "system_external_vram": 2.1103515625,
+  "last_updated": "2026-03-02 09:01:49"
 }

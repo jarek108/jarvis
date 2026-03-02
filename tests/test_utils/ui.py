@@ -344,7 +344,7 @@ class RichDashboard:
                         l_text.append(m, style=l_color)
                     else:
                         m_lower = m.lower()
-                        m_type = "llm" if any(x in m_lower for x in ["ol_", "vl_", "vllm:"]) else \
+                        m_type = "llm" if any(x in m_lower for x in ["ollama", "vllm", "ol_", "vl_"]) else \
                                  ("stt" if "whisper" in m_lower else \
                                  ("tts" if "chatterbox" in m_lower else None))
                         
