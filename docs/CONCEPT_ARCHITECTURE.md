@@ -9,7 +9,7 @@ Jarvis is a high-performance Speech-to-Speech (STS) and Vision-Language (VLM) as
 - **LLM/VLM Engines**:
     - **Ollama**: Native low-latency inference.
     - **vLLM**: High-throughput Dockerized serving on port `8300`.
-- **STS Pipeline**: The central orchestrator (`sts_server.py`) that manages the STT -> LLM -> TTS flow.
+- **STS Pipeline**: The central orchestrator (`PipelineExecutor`) that dynamically manages the STT -> LLM -> TTS flow based on YAML configurations.
 
 ## The Processing Graph
 
@@ -28,16 +28,15 @@ The system architecture treats "Pipelines" (like STS or Visual Sentry) as direct
 ## Directory Structure
 
 ```text
-/loadouts/          # Production presets for the functioning app
+/system_config/     # Core configuration, loadouts, pipelines, and strategies
+/docs/              # Project documentation (Diátaxis)
+/logs/              # Runtime session logs and execution artifacts
 /servers/           # Component server implementations
-/tests/             # Test runner and domain suites
-  /sts/
-    test_setups.yaml # Test matrix for STS
-  /llm/
-    test_setups.yaml # Test matrix for LLM
-  ...
-/logs/              # Runtime logs
-/jarvis-venv/       # Python environment (Gold version)
+/setup/             # Environment bootstrapping logic
+/tests/             # Unified test runner and scenarios
+/utils/             # Core engine, infra, and edge interaction modules
+/tools/             # CLI utilities like calibrate_models.py
+/jarvis-venv/       # Python environment
 ```
 
 ## Testing & Benchmarking

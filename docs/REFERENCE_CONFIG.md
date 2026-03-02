@@ -1,6 +1,6 @@
-# Configuration Reference (`config.yaml`)
+# Configuration Reference (`system_config/config.yaml`)
 
-This document explains the settings available in the `config.yaml` file, which controls the behavior of the Jarvis infrastructure.
+This document explains the settings available in the `system_config/config.yaml` file, which controls the behavior of the Jarvis infrastructure.
 
 ## 1. System Settings
 ```yaml

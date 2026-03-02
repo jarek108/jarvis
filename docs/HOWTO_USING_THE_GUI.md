@@ -46,5 +46,5 @@ Jarvis uses a 10-second ring buffer. This means if you start speaking *just befo
 ## 4. Troubleshooting the UI
 
 *   **No Audio**: Check if another application (like Discord or Zoom) has exclusive control over the microphone.
-*   **Laggy Response**: Verify that your GPU is not being throttled and that the `sts_server.py` is reachable on port `8002`.
+*   **Laggy Response**: Verify that your GPU is not being throttled. Check the VRAM monitor in the sidebar to ensure you haven't exceeded your GPU's capacity.
 *   **GUI Not Opening**: Ensure `customtkinter` and `PIL` are installed in your `jarvis-venv`.

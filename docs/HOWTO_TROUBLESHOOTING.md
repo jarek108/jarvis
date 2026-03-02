@@ -21,7 +21,7 @@ Common issues and solutions for the Jarvis infrastructure.
 *   **Cause:** vLLM is taking too long to load weights or compile CUDA graphs.
 *   **Fix:**
     1.  Check `docker logs -f vllm-server` to see if it's stuck or downloading.
-    2.  Increase `model_startup_timeout` in `config.yaml`.
+    2.  Increase `model_startup_timeout` in `system_config/config.yaml`.
 
 ## 2. Models & Inference
 
@@ -48,7 +48,7 @@ Common issues and solutions for the Jarvis infrastructure.
 *   **Symptom:** `svc_*.log` shows CUDA OOM error.
 *   **Fix:**
     *   **Ollama:** Reduce context window or unload other models (`ollama stop model`).
-    *   **vLLM:** Verify the model has been calibrated (`model_calibrations/`). If the calculated VRAM requirement exceeds your GPU capacity, lower the `default_context_size` in `config.yaml`.
+    *   **vLLM:** Verify the model has been calibrated (`model_calibrations/`). If the calculated VRAM requirement exceeds your GPU capacity, lower the `default_context_size` in `system_config/config.yaml`.
 
 ## 3. Google Drive Reporting
 

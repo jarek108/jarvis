@@ -92,8 +92,8 @@ To enable streaming for a specific model loadout, append the `#stream` flag to t
 execution:
   - domain: llm
     loadouts:
-      - ["OL_qwen2.5:0.5b"]          # Runs Batch
-      - ["OL_qwen2.5:0.5b#stream"]   # Runs Streaming
+      - ["ollama://qwen2.5:0.5b"]          # Runs Batch
+      - ["ollama://qwen2.5:0.5b#stream"]   # Runs Streaming
 ```
 
 ### Reporting
@@ -119,7 +119,7 @@ For Vision-Language Models (especially `Qwen3-VL`), you can tune memory and cont
 execution:
   - domain: vlm
     loadouts:
-      - ["VL_QuantTrio/Qwen3-VL-30B-A3B-Instruct-AWQ#nativevideo#stream#ctx=16384"]
+      - ["vllm://QuantTrio/Qwen3-VL-30B-A3B-Instruct-AWQ#nativevideo#stream#ctx=16384"]
 ```
 
 For a deep dive on why these parameters matter (and why VRAM usage looks static), see **[VRAM Tuning](analysis/VRAM_TUNING.md)**.
@@ -140,10 +140,10 @@ Calibration translates raw logs into the physical constants Jarvis needs for VRA
 ### How to Refresh the Entire Physics Database
 Use this after a hardware upgrade (e.g., more VRAM) or a major engine update (Ollama/vLLM version bump).
 ```powershell
-python tools/calibrate_models.py model_calibrations/source_logs/
+python tools/calibrate_models.py system_config/model_calibrations/source_logs/
 ```
 
 ### How to Verify a Specification
-1.  Open `model_calibrations/[model_id].yaml`.
+1.  Open `system_config/model_calibrations/[engine]_[safe_id].yaml`.
 2.  Check if `base_vram_gb` matches your model's weight size.
 3.  For more details, see the **[Calibration Reference](REFERENCE_CALIBRATION.md)** and the **[Model Physics Concept](CONCEPT_MODEL_PHYSICS.md)**.

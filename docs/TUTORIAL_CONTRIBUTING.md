@@ -33,7 +33,7 @@ When model names are used in file paths (logs, audio artifacts), illegal charact
 Jarvis development often involves multi-file refactors (Logic + Tests + Docs). Follow these steps for every commit:
 
 1.  **Verification**: Run the project-specific linting or type-checking if available.
-2.  **Audit**: Run `git status` to ensure renames, deletions, and research artifacts (e.g., `research/` or `utils/test_*.py`) are not left behind.
+2.  **Audit**: Run `git status` to ensure renames, deletions, and WIP artifacts (e.g., transient files or test scripts in `utils/`) are not left behind.
 3.  **Staging**: Use inclusive staging (e.g., `git add -A`) unless atomic commits are specifically requested.
 4.  **Messaging**: Focus on **why** the change was made, not just **what** was changed.
 

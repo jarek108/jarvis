@@ -85,7 +85,7 @@ To pass runtime parameters to the test runner (without affecting the engine load
 *   **Example:** `OL_qwen2.5:0.5b#stream` loads `OL_qwen2.5:0.5b` but executes tests with `stream=True`.
 
 ### Test Setups (`test_setups.yaml`)
-Tests are driven by lists of model IDs. The `LifecycleManager` identifies the engine based on the prefix and the `config.yaml` port definitions.
+Tests are driven by lists of model IDs. The `LifecycleManager` identifies the engine based on the prefix and the `system_config/config.yaml` port definitions.
 
 ---
 

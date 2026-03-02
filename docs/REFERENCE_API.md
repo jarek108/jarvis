@@ -21,7 +21,7 @@ The system categorizes all inputs and outputs into specific "Channels." These na
 | **Screen** | `vid` | ✔ | | **P3** | Live display monitoring. |
 
 ## 1. Speech-to-Text (STT) Server
-**Default Port:** `8100` (Tiny), `8101` (Base), etc. (See `config.yaml`)
+**Default Port:** `8100` (Tiny), `8101` (Base), etc. (See `system_config/config.yaml`)
 
 ### `POST /transcribe`
 Transcribes audio to text.

@@ -4,14 +4,14 @@
 
 ## 1. Current System Capabilities (The Foundation)
 
-Our existing backend infrastructure (`sts_server.py`) has been rigorously benchmarked and optimized. It currently supports a linear **Speech-to-Speech (STS)** pipeline.
+Our backend infrastructure has been rigorously benchmarked and optimized. It currently supports complex flows through an embedded **PipelineExecutor**.
 
 ### Backend Primitives
 *   **Speech-to-Text (STT)**: Low-latency streaming transcription via `faster-whisper`.
 *   **Text-to-Speech (TTS)**: High-fidelity, real-time synthesis via `chatterbox`.
 *   **LLM Inference**: High-throughput text generation via `vLLM` (native) and `Ollama`.
 *   **Vision (VLM)**: Capability to process images and video frames via `QuantTrio` and `Qwen-VL`.
-*   **Orchestrator**: A unified server that manages the flow of Audio $\rightarrow$ Text $\rightarrow$ Audio.
+*   **Orchestrator**: A unified flow graph engine (`PipelineExecutor`) that manages paths like Audio $\rightarrow$ Text $\rightarrow$ Audio.
 
 ### Performance Profile
 *   **Latency**: STT/TTS latency is negligible (<200ms). LLM TTFT is <50ms.
