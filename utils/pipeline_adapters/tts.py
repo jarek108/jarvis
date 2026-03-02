@@ -24,7 +24,7 @@ class TTSAdapter(NodeAdapter):
                 full_audio += await resp.read()
         
         if full_audio:
-            out_path = os.path.join(self.project_root, node_config.get('output', f"buffers/{node_id}.wav"))
+            out_path = self.resolve_path(node_config.get('output'), f"{node_id}.wav")
             os.makedirs(os.path.dirname(out_path), exist_ok=True)
             with open(out_path, 'wb') as f: f.write(full_audio)
             await output_queue.put(self.create_packet("audio_path", out_path))

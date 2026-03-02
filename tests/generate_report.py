@@ -27,8 +27,10 @@ def get_gdrive_service():
         creds = None
         tests_dir = os.path.dirname(os.path.abspath(__file__))
         project_root = os.path.dirname(tests_dir)
-        pickle_path = os.path.join(project_root, 'token.pickle')
-        creds_path = os.path.join(project_root, 'credentials.json')
+        cache_dir = os.path.join(project_root, '.cache')
+        os.makedirs(cache_dir, exist_ok=True)
+        pickle_path = os.path.join(cache_dir, 'token.pickle')
+        creds_path = os.path.join(cache_dir, 'credentials.json')
         if os.path.exists(pickle_path):
             with open(pickle_path, 'rb') as token: creds = pickle.load(token)
         if not creds or not creds.valid:

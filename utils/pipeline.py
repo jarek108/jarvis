@@ -187,13 +187,22 @@ class PipelineResolver:
         return report
 
 class PipelineExecutor:
-    def __init__(self, project_root, dashboard=None):
+    def __init__(self, project_root, dashboard=None, session_dir=None):
         self.project_root = project_root
+        self.session_dir = session_dir
         self.results = {}     # Node-id -> Consolidated results (for UI/debugging)
         self.timings = {}     # Node-id -> {start, end, duration}
         self.trace = []       # Global Flight Recorder (Packet metadata)
         self.dashboard = dashboard
         self.vram_peak = 0.0
+
+    def resolve_path(self, path, default_filename=None):
+        """Resolves a path relative to session_dir if available, otherwise project_root."""
+        if not path and not default_filename: return None
+        p = path if path else default_filename
+        if os.path.isabs(p): return p
+        base = self.session_dir if self.session_dir else self.project_root
+        return os.path.normpath(os.path.join(base, p))
 
     def log(self, msg):
         logger.info(msg)
@@ -249,7 +258,7 @@ class PipelineExecutor:
 
             # 2. Get Specialized Adapter
             role = node.get('role', 'llm')
-            adapter = get_adapter(role, self.project_root)
+            adapter = get_adapter(role, self.project_root, session_dir=self.session_dir)
             
             self.log(f"  -> {node_id} (Running {role} adapter)")
 
@@ -285,10 +294,23 @@ class PipelineExecutor:
             for nid, node in bound_graph.items():
                 if node['type'] in ['input', 'source']:
                     val = scenario_inputs.get(nid) or node.get('path')
-                    if val and isinstance(val, str) and os.path.exists(os.path.join(self.project_root, val)):
-                        bp = os.path.join(self.project_root, node.get('buffer', f"buffers/{nid}.tmp"))
-                        os.makedirs(os.path.dirname(bp), exist_ok=True); shutil.copy(os.path.join(self.project_root, val), bp)
-                        val = bp
+                    
+                    # Resolve input path (e.g. prompts/sentry_persona.txt)
+                    # These are usually in pipelines/prompts/ now
+                    if val and isinstance(val, str):
+                        # Try relative to project root first (standard for prompts/tests data)
+                        p_abs = os.path.join(self.project_root, val)
+                        if not os.path.exists(p_abs):
+                            # Maybe it was moved to pipelines/prompts?
+                            if val.startswith("prompts/"):
+                                p_abs = os.path.join(self.project_root, "pipelines", val)
+                        
+                        if os.path.exists(p_abs):
+                            # Provision buffer in session_dir
+                            bp = self.resolve_path(node.get('buffer'), f"{nid}.tmp")
+                            os.makedirs(os.path.dirname(bp), exist_ok=True)
+                            shutil.copy(p_abs, bp)
+                            val = bp
                     
                     self.results[nid] = val
                     p = {"type": "input_source", "content": val, "ts": time.perf_counter()}

@@ -70,6 +70,7 @@ ENV/
 .vscode/
 
 # Jarvis Execution Artifacts
+.cache/
 buffers/
 tests/logs/
 tests/artifacts/*.xlsx

@@ -4,7 +4,7 @@ nodes:
   - id: input_mic
     type: input
     source: device_stream
-    buffer: "buffers/user_voice.wav"
+    buffer: "user_voice.wav"
 
   - id: proc_stt
     type: processing
@@ -12,3 +12,5 @@ nodes:
     capabilities: [audio_in, text_out]
     inputs: 
       - input_mic
+
+

@@ -5,7 +5,7 @@ from .utility import UtilityAdapter
 from .memory import MemoryAdapter
 from .sink import SinkAdapter
 
-def get_adapter(role, project_root):
+def get_adapter(role, project_root, session_dir=None):
     """Factory to return the correct adapter based on node role."""
     adapters = {
         "stt": STTAdapter,
@@ -28,4 +28,4 @@ def get_adapter(role, project_root):
         else:
             raise ValueError(f"No adapter found for role: {role}")
             
-    return adapter_class(project_root)
+    return adapter_class(project_root, session_dir=session_dir)

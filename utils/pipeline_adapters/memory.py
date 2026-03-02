@@ -1,3 +1,4 @@
+import os
 from .base import NodeAdapter
 from loguru import logger
 
@@ -10,7 +11,7 @@ class MemoryAdapter(NodeAdapter):
         logger.info(f"🧠 Memory Node '{node_id}' executing.")
         
         # 1. Resolve storage path
-        storage_path = os.path.join(self.project_root, node_config.get('path', 'buffers/session_history.txt'))
+        storage_path = self.resolve_path(node_config.get('path'), 'session_history.txt')
         os.makedirs(os.path.dirname(storage_path), exist_ok=True)
         
         # 2. READ current state (if no input, we just yield the existing file)

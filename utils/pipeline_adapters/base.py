@@ -6,8 +6,21 @@ class NodeAdapter(abc.ABC):
     Standard interface for all Jarvis Pipeline Nodes.
     Adapters are modality-specific but follow a uniform execution pattern.
     """
-    def __init__(self, project_root):
+    def __init__(self, project_root, session_dir=None):
         self.project_root = project_root
+        self.session_dir = session_dir
+
+    def resolve_path(self, path, default_filename=None):
+        """Resolves a path relative to session_dir if available, otherwise project_root."""
+        if not path and not default_filename: return None
+        p = path if path else default_filename
+        
+        # If absolute, return as is
+        if os.path.isabs(p): return p
+        
+        # If session_dir is provided, use it as base
+        base = self.session_dir if self.session_dir else self.project_root
+        return os.path.normpath(os.path.join(base, p))
 
     @abc.abstractmethod
     async def run(self, node_id, node_config, input_streams, output_queue, session):

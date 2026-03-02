@@ -27,10 +27,11 @@ class PipelineTestRunner:
         with open(plan_path, "r") as f:
             self.plan = yaml.safe_load(f)
         self.project_root = project_root
+        self.session_dir = session_dir
         # ISOLATION: Point resolver to absolute tests/pipelines/ directory
         base_pipelines_dir = os.path.join(self.project_root, "tests", "pipelines")
         self.resolver = PipelineResolver(self.project_root, base_dir=base_pipelines_dir)
-        self.executor = PipelineExecutor(project_root, dashboard=dashboard)
+        self.executor = PipelineExecutor(self.project_root, dashboard=dashboard, session_dir=self.session_dir)
         self.integration_scenarios = self.load_scenarios()
         self.dashboard = dashboard
         self.session_dir = session_dir

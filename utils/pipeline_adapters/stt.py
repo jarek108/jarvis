@@ -20,7 +20,7 @@ class STTAdapter(NodeAdapter):
 
         # Robust Path Resolution
         if not os.path.exists(audio_path):
-            abs_path = os.path.join(self.project_root, audio_path)
+            abs_path = self.resolve_path(audio_path)
             if os.path.exists(abs_path):
                 audio_path = abs_path
             else:

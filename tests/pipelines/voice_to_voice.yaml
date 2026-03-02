@@ -5,7 +5,7 @@ nodes:
     type: source
     role: file_reader
     capabilities: [text_out]
-    path: "prompts/sts_persona.txt"
+    path: "pipelines/prompts/sts_persona.txt"
 
   - id: input_mic
     type: source
@@ -49,3 +49,5 @@ nodes:
     capabilities: [audio_in]
     inputs:
       - proc_tts
+
+

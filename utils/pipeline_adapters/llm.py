@@ -18,10 +18,15 @@ class LLMAdapter(NodeAdapter):
                 # Accumulate content (LLM currently needs full prompt to start)
                 val = packet.get('content', '')
                 if val:
-                    if isinstance(val, str) and os.path.exists(val):
-                        # If it's a file path (like system prompt), read it
-                        with open(val, 'r', encoding='utf-8', errors='ignore') as f:
-                            content += f.read()
+                    if isinstance(val, str):
+                        # Attempt resolution if it looks like a path
+                        p_res = self.resolve_path(val)
+                        if os.path.exists(p_res):
+                            # If it's a file path (like system prompt), read it
+                            with open(p_res, 'r', encoding='utf-8', errors='ignore') as f:
+                                content += f.read()
+                        else:
+                            content += str(val)
                     else:
                         content += str(val)
             resolved_inputs[in_id] = content

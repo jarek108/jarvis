@@ -31,7 +31,7 @@ SUCCESS_COLOR = "#00FF94"
 ERROR_COLOR = "#FF4B4B"
 WARNING_COLOR = "#FFD700"
 
-CHECKPOINT_PATH = os.path.join(script_dir, "checkpoint-client.json")
+CHECKPOINT_PATH = os.path.join(script_dir, ".cache", "checkpoint-client.json")
 
 ctk.set_appearance_mode("dark")
 
@@ -46,14 +46,11 @@ class JarvisController:
             self.ui_queue.put({"type": "log", "msg": message.record["message"], "tag": "system"})
         logger.add(ui_sink, format="{message}", level="INFO")
 
-        # 2. Embedded Flow Engine
-        self.resolver = PipelineResolver(self.project_root)
-        self.executor = PipelineExecutor(self.project_root)
-        
-        # 2. Edge Hardware Adapters
-        self.audio_sensor = AudioSensor()
-        
         # 3. State
+        self.current_session_id = f"CLIENT_{time.strftime('%Y%m%d_%H%M%S')}"
+        self.session_dir = os.path.join(script_dir, "logs", "sessions", self.current_session_id)
+        os.makedirs(self.session_dir, exist_ok=True)
+        
         self.current_pipeline = "voice_to_voice"
         self.current_strategy = "fast_interaction"
         self.current_loadout = "NONE"
@@ -70,9 +67,9 @@ class JarvisController:
         self.health_state = {}
         self.runnability = {"runnable": False, "errors": ["Initializing..."], "map": {}}
         
-        # Logs dir
-        self.log_dir = os.path.join(self.project_root, "logs")
-        os.makedirs(self.log_dir, exist_ok=True)
+        # 4. Embedded Flow Engine (Session Aware)
+        self.resolver = PipelineResolver(self.project_root)
+        self.executor = PipelineExecutor(self.project_root, session_dir=self.session_dir)
         
         threading.Thread(target=self._status_polling_loop, daemon=True).start()
 
@@ -189,7 +186,7 @@ class JarvisController:
         threading.Thread(target=self._run_pipeline_local, args=(audio_data,), daemon=True).start()
 
     def _run_pipeline_local(self, audio_data):
-        temp_audio = os.path.join(self.project_root, "buffers", "user_voice.wav")
+        temp_audio = os.path.join(self.session_dir, "user_voice.wav")
         os.makedirs(os.path.dirname(temp_audio), exist_ok=True)
         with open(temp_audio, "wb") as f: f.write(audio_data)
 

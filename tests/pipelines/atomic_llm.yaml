@@ -4,7 +4,7 @@ nodes:
   - id: input_instruction
     type: input
     source: user_interface
-    buffer: "buffers/instruction.txt"
+    buffer: "instruction.txt"
 
   - id: proc_llm
     type: processing
@@ -12,3 +12,5 @@ nodes:
     capabilities: [text_in, text_out]
     inputs: 
       - input_instruction
+
+

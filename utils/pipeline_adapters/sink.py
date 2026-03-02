@@ -21,13 +21,15 @@ class SinkAdapter(NodeAdapter):
 
                 # 1. AUDIO PLAYBACK
                 if role == "audio_playback":
-                    if isinstance(content, str) and os.path.exists(content):
-                        # Play from file path
-                        import soundfile as sf
-                        import sounddevice as sd
-                        data, fs = sf.read(content)
-                        sd.play(data, fs)
-                        sd.wait()
+                    if isinstance(content, str):
+                        p_res = self.resolve_path(content)
+                        if os.path.exists(p_res):
+                            # Play from file path
+                            import soundfile as sf
+                            import sounddevice as sd
+                            data, fs = sf.read(p_res)
+                            sd.play(data, fs)
+                            sd.wait()
                     
                 # 2. KEYBOARD EMULATION
                 elif role == "keyboard_typer":
