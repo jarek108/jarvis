@@ -19,12 +19,11 @@ class PipelineResolver:
         if base_dir:
             self.pipelines_dir = base_dir if os.path.isabs(base_dir) else os.path.join(self.project_root, base_dir)
         else:
-            self.pipelines_dir = os.path.join(self.project_root, "pipelines")
-            
-        self.strategies_dir = os.path.join(self.project_root, "strategies")
-        self.cal_dir = os.path.join(self.project_root, "model_calibrations")
-        self.registry_path = os.path.join(self.cal_dir, "runtime_registry.json")
+            self.pipelines_dir = os.path.join(self.project_root, "system_config", "pipelines")
 
+        self.strategies_dir = os.path.join(self.project_root, "system_config", "strategies")
+        self.cal_dir = os.path.join(self.project_root, "system_config", "model_calibrations")
+        self.registry_path = os.path.join(self.cal_dir, "runtime_registry.json")
     def load_yaml(self, name, folder=None):
         """Loads a YAML from the configured absolute base_dir or a specified folder."""
         clean_name = name.replace(".yaml", "")

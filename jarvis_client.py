@@ -434,14 +434,14 @@ class JarvisApp(ctk.CTk):
         
         # Pipeline
         ctk.CTkLabel(self.header, text="Pipeline:").pack(side="left", padx=(20, 5))
-        pipes = [f.replace(".yaml", "") for f in os.listdir(os.path.join(script_dir, "pipelines")) if f.endswith(".yaml")]
+        pipes = [f.replace(".yaml", "") for f in os.listdir(os.path.join(script_dir, "system_config", "pipelines")) if f.endswith(".yaml")]
         self.pipe_var = ctk.StringVar(value=self.controller.current_pipeline)
         self.pipe_opt = ctk.CTkOptionMenu(self.header, values=pipes, variable=self.pipe_var, command=self.on_config_change)
         self.pipe_opt.pack(side="left", padx=10)
 
         # Strategy
         ctk.CTkLabel(self.header, text="Strategy:").pack(side="left", padx=(20, 5))
-        strategies = [f.replace(".yaml", "") for f in os.listdir(os.path.join(script_dir, "strategies")) if f.endswith(".yaml")]
+        strategies = [f.replace(".yaml", "") for f in os.listdir(os.path.join(script_dir, "system_config", "strategies")) if f.endswith(".yaml")]
         self.strategy_var = ctk.StringVar(value=self.controller.current_strategy)
         self.strategy_opt = ctk.CTkOptionMenu(self.header, values=strategies, variable=self.strategy_var, command=self.on_config_change)
         self.strategy_opt.pack(side="left", padx=10)

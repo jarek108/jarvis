@@ -75,11 +75,11 @@ def parse_model_string(entry, stt_registry=None, tts_registry=None):
 
 def get_model_calibration(model_id, engine="vllm"):
     """
-    Retrieves physics constants for a specific model from model_calibrations/.
+    Retrieves physics constants for a specific model from system_config/model_calibrations/.
     Returns (base_vram, kv_cost_per_10k) or None.
     """
     project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    cal_dir = os.path.join(project_root, "model_calibrations")
+    cal_dir = os.path.join(project_root, "system_config", "model_calibrations")
     
     # Use standard safe filename generator
     safe_id = safe_filename(model_id)

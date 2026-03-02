@@ -49,7 +49,7 @@ class LifecycleManager:
         from utils.config import parse_model_string
         
         for m_str in self.models:
-            svc = parse_model_string(m_str, self.cfg['stt_loadout'], self.cfg['tts_loadout'])
+            svc = parse_model_string(m_str)
             if not svc: continue
             
             # Map back to LifecycleManager's expected 'cat' format

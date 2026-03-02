@@ -73,7 +73,7 @@ def save_runtime_registry(services, project_root=None, external_vram=None):
 def apply_loadout(name, loud=False, soft=False):
     cfg = load_config()
     project_root = get_project_root()
-    loadouts_file = os.path.join(project_root, "loadouts.yaml")
+    loadouts_file = os.path.join(project_root, "system_config", "loadouts.yaml")
     
     if not os.path.exists(loadouts_file):
         logger.error(f"Loadouts file not found: {loadouts_file}")
