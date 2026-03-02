@@ -45,6 +45,7 @@ class JarvisController:
         self.current_pipeline = "voice_to_voice"
         self.current_strategy = "fast_interaction"
         self.current_loadout = "NONE"
+        self.node_positions = {} # Scoped per pipeline: { pid: { nid: [x,y] } }
         self.load_checkpoint()
         
         # Force system state to match UI "NONE" state
@@ -74,6 +75,8 @@ class JarvisController:
                     data = json.load(f)
                     self.current_pipeline = data.get("pipeline", self.current_pipeline)
                     self.current_strategy = data.get("strategy", self.current_strategy)
+                    self.node_positions = data.get("node_positions", {})
+                    # Force NONE on startup
                     self.current_loadout = "NONE"
             except: pass
 
@@ -83,22 +86,38 @@ class JarvisController:
                 json.dump({
                     "pipeline": self.current_pipeline, 
                     "strategy": self.current_strategy,
-                    "loadout": self.current_loadout
+                    "loadout": self.current_loadout,
+                    "node_positions": self.node_positions
                 }, f)
         except: pass
+
+    def update_node_positions(self, pipeline_id, positions):
+        """Updates and saves manual node positions for a specific pipeline."""
+        self.node_positions[pipeline_id] = positions
+        self.save_checkpoint()
 
     def _status_polling_loop(self):
         while self.is_polling:
             try:
+                # 1. Get Physical Health for ACTIVE LOADOUT ONLY (Fast Path)
                 registry_data = self.resolver.get_live_models()
                 active_models = registry_data.get("models", [])
                 system_external_vram = registry_data.get("external", 0.0)
+                
                 active_ports = [m['port'] for m in active_models if m.get('port')]
+                
+                # Map ports to log paths for error detection
                 log_map = {m['port']: m['log_path'] for m in active_models if m.get('log_path') and m.get('port')}
                 self.health_state = get_system_health(ports=active_ports, log_paths=log_map)
+                
+                # 2. Get Hardware Metrics
                 vram_used = utils.get_gpu_vram_usage()
                 vram_total = utils.get_gpu_total_vram()
+
+                # 3. Check Logical Runnability (Passing existing health to avoid double-poll)
                 self.runnability = self.resolver.check_runnability(self.current_pipeline, self.current_strategy, external_health=self.health_state)
+                
+                # 4. Update UI
                 self.ui_queue.put({
                     "type": "health_update", 
                     "health": self.health_state, 
@@ -111,10 +130,14 @@ class JarvisController:
             time.sleep(1.5)
 
     def trigger_loadout_change(self, loadout_id):
+        # 1. Skip if same loadout already active (unless it's NONE, then we allow re-kill)
         if loadout_id != "NONE" and loadout_id == self.current_loadout:
+            logger.info(f"Loadout '{loadout_id}' already active. Skipping application.")
             return
+
         self.current_loadout = loadout_id
         self.save_checkpoint()
+        
         def task():
             if loadout_id == "NONE":
                 self.ui_queue.put({"type": "log", "msg": "☢️ KILLING ALL SERVICES...", "tag": "system"})
@@ -122,10 +145,12 @@ class JarvisController:
             else:
                 self.ui_queue.put({"type": "log", "msg": f"⚙️ APPLYING LOADOUT: {loadout_id}", "tag": "system"})
                 try:
+                    # Apply loadout using existing logic (Soft apply to avoid full kill if possible)
                     apply_loadout(loadout_id, soft=True)
                     self.ui_queue.put({"type": "log", "msg": "✅ LOADOUT APPLIED", "tag": "system"})
                 except Exception as e:
                     self.ui_queue.put({"type": "log", "msg": f"❌ LOADOUT ERROR: {e}", "tag": "system"})
+
         threading.Thread(target=task, daemon=True).start()
 
     def trigger_service_restart(self, sid):
@@ -166,12 +191,15 @@ class JarvisController:
         temp_audio = os.path.join(self.session_dir, "user_voice.wav")
         os.makedirs(os.path.dirname(temp_audio), exist_ok=True)
         with open(temp_audio, "wb") as f: f.write(audio_data)
+
         try:
             bound_graph = self.resolver.resolve(self.current_pipeline, self.current_strategy)
         except Exception as e:
             self.ui_queue.put({"type": "log", "msg": f"Resolution Error: {e}", "tag": "system"})
             return
+
         inputs = {"input_mic": temp_audio}
+
         async def run_and_monitor():
             exec_task = asyncio.create_task(self.executor.run(bound_graph, inputs))
             last_idx = 0
@@ -184,39 +212,46 @@ class JarvisController:
                         if ptype in ["text_token", "text_sentence", "text_final"]:
                             self.ui_queue.put({"type": "log", "msg": str(content), "tag": "assistant"})
                 await asyncio.sleep(0.05)
+        
         asyncio.run(run_and_monitor())
 
 class PipelineGraphWidget(ctk.CTkFrame):
-    def __init__(self, master, ui_config, **kwargs):
+    def __init__(self, master, ui_config, initial_positions=None, **kwargs):
         super().__init__(master, **kwargs)
         self.ui_cfg = ui_config
         self.canvas = ctk.CTkCanvas(self, bg=self.ui_cfg['colors']['bg'], highlightthickness=0)
         self.canvas.pack(fill="both", expand=True)
         self.nodes = {}
         self.edges = []
-        self.manual_positions = {}
+        
+        # Interaction State
+        self.manual_positions = initial_positions or {} # nid -> (x, y)
         self.dragging_node_id = None
         self.drag_offset = (0, 0)
         self.has_dragged = False
+        
         self.canvas.bind("<Configure>", self.on_resize)
         self.canvas.bind("<ButtonPress-1>", self.on_press)
         self.canvas.bind("<B1-Motion>", self.on_drag)
         self.canvas.bind("<ButtonRelease-1>", self.on_release)
+        
         self.on_node_click_callback = None
+        self.on_positions_changed_callback = None
         self.selected_node_id = None
 
     def on_resize(self, event):
         self.draw_graph()
 
-    def set_graph_data(self, bound_graph):
+    def set_graph_data(self, bound_graph, manual_positions=None):
         self.bound_graph = bound_graph
-        self.manual_positions = {}
+        self.manual_positions = manual_positions or {}
         self.draw_graph()
 
     def on_press(self, event):
         x, y = event.x, event.y
         self.dragging_node_id = None
         self.has_dragged = False
+        
         for nid, data in self.nodes.items():
             bx1, by1, bx2, by2 = data['bbox']
             if bx1 <= x <= bx2 and by1 <= y <= by2:
@@ -227,18 +262,24 @@ class PipelineGraphWidget(ctk.CTkFrame):
     def on_drag(self, event):
         if not self.dragging_node_id: return
         self.has_dragged = True
+        
         new_x = event.x + self.drag_offset[0]
         new_y = event.y + self.drag_offset[1]
+        
+        # Clamp to canvas
         w, h = self.winfo_width(), self.winfo_height()
         node_cfg = self.ui_cfg['graph']['node']
         nw, nh = node_cfg['width'], node_cfg['height']
+        
         new_x = max(nw/2, min(w - nw/2, new_x))
         new_y = max(nh/2, min(h - nh/2, new_y))
+        
         self.manual_positions[self.dragging_node_id] = (new_x, new_y)
         self.draw_graph()
 
     def on_release(self, event):
         if not self.has_dragged and self.dragging_node_id:
+            # Handle selection if it was just a click
             if self.selected_node_id == self.dragging_node_id:
                 self.selected_node_id = None
             else:
@@ -246,17 +287,37 @@ class PipelineGraphWidget(ctk.CTkFrame):
             self.draw_graph()
             if self.on_node_click_callback:
                 self.on_node_click_callback(self.selected_node_id)
+        
+        if self.has_dragged and self.on_positions_changed_callback:
+            self.on_positions_changed_callback(self.manual_positions)
+
         self.dragging_node_id = None
         self.has_dragged = False
 
     def draw_rounded_rect(self, x, y, w, h, r, color, outline_color="", outline_width=0):
-        points = [x+r, y, x+w-r, y, x+w, y, x+w, y+r, x+w, y+h-r, x+w, y+h, x+w-r, y+h, x+r, y+h, x, y+h, x, y+h-r, x, y+r, x, y]
+        # Create a rounded rectangle using lines and arcs
+        points = [
+            x+r, y,
+            x+w-r, y,
+            x+w, y,
+            x+w, y+r,
+            x+w, y+h-r,
+            x+w, y+h,
+            x+w-r, y+h,
+            x+r, y+h,
+            x, y+h,
+            x, y+h-r,
+            x, y+r,
+            x, y
+        ]
         return self.canvas.create_polygon(points, fill=color, outline=outline_color, width=outline_width, smooth=True)
 
     def draw_edge(self, x1, y1, x2, y2, color=None, style=None):
         if color is None: color = self.ui_cfg['graph']['edge']['color']
         width = self.ui_cfg['graph']['edge']['width']
         ashape = tuple(self.ui_cfg['graph']['edge']['arrow_shape'])
+        
+        # Draw an angled or curved line with an arrowhead
         ctrl_x = (x1 + x2) / 2
         return self.canvas.create_line(x1, y1, ctrl_x, y1, ctrl_x, y2, x2, y2, fill=color, width=width, arrow=ctk.LAST, arrowshape=ashape, smooth=True, dash=style)
 
@@ -265,9 +326,14 @@ class PipelineGraphWidget(ctk.CTkFrame):
         if not hasattr(self, 'bound_graph') or not self.bound_graph:
             self.canvas.create_text(self.winfo_width()/2, self.winfo_height()/2, text="No Pipeline Loaded", fill=self.ui_cfg['colors']['gray'], font=("Consolas", 14))
             return
+
         w, h = self.winfo_width(), self.winfo_height()
         if w <= 1 or h <= 1: return
+
+        # 1. Layout Engine (Simple Tiered Grid based on implicit roles)
         tiers = {0: [], 1: [], 2: [], 3: []}
+        
+        # Categorize nodes by role/type to assign tiers
         for nid, node in self.bound_graph.items():
             ntype = node.get('type')
             role = node.get('role', '')
@@ -275,53 +341,79 @@ class PipelineGraphWidget(ctk.CTkFrame):
             elif role == 'utility': tiers[1].append(nid)
             elif ntype == 'processing' and role != 'utility': tiers[2].append(nid)
             elif ntype == 'sink': tiers[3].append(nid)
-            else: tiers[1].append(nid)
+            else: tiers[1].append(nid) # Fallback
+
+        # Calculate coordinates
         node_cfg = self.ui_cfg['graph']['node']
         node_w, node_h, r = node_cfg['width'], node_cfg['height'], node_cfg['radius']
         margin_x = w / 5
         self.nodes = {}
+
         for tier_idx, nodes_in_tier in tiers.items():
             if not nodes_in_tier: continue
             cx_default = margin_x * (tier_idx + 1)
             spacing_y = h / (len(nodes_in_tier) + 1)
+            
             for i, nid in enumerate(nodes_in_tier):
                 cy_default = spacing_y * (i + 1)
+                
+                # Use manual position if exists, otherwise tiered default
                 cx, cy = self.manual_positions.get(nid, (cx_default, cy_default))
+                
                 self.nodes[nid] = {
                     'x': cx, 'y': cy,
                     'bbox': (cx - node_w/2, cy - node_h/2, cx + node_w/2, cy + node_h/2),
                     'data': self.bound_graph[nid]
                 }
+
+        # 2. Draw Edges
         for nid, ndata in self.nodes.items():
             node = ndata['data']
+            
+            # Standard Inputs
             inputs = node.get('inputs', [])
             for src_id in inputs:
                 if src_id in self.nodes:
                     src = self.nodes[src_id]
                     dash = (4, 4) if node.get('role') == 'memory' else None
                     self.draw_edge(src['bbox'][2], src['y'], ndata['bbox'][0], ndata['y'], style=dash)
+            
+            # System Prompt Connection (Specialized)
             sys_prompt_id = node.get('system_prompt')
             if sys_prompt_id and sys_prompt_id in self.nodes:
                 src = self.nodes[sys_prompt_id]
+                # Draw purple dotted line for system prompt
                 self.draw_edge(src['bbox'][2], src['y'], ndata['bbox'][0], ndata['y'], color=self.ui_cfg['colors']['purple'], style=(2, 2))
+
+        # 3. Draw Nodes
         for nid, ndata in self.nodes.items():
             node = ndata['data']
             cx, cy = ndata['x'], ndata['y']
             bx1, by1, bx2, by2 = ndata['bbox']
+            
+            # Styling based on state and selection
             is_selected = (nid == self.selected_node_id)
             bg_color = node_cfg['bg_color']
             outline_color = self.ui_cfg['colors']['success'] if is_selected else self.ui_cfg['colors']['gray']
             outline_w = 2 if is_selected else 1
+            
             ntype = node.get('type')
             role = node.get('role', ntype)
             binding = node.get('binding')
+            
             if ntype == 'source': 
+                # Check if this node is used as a system_prompt anywhere
                 is_sys_prompt = any(n.get('system_prompt') == nid for n in self.bound_graph.values())
                 outline_color = self.ui_cfg['colors']['purple'] if is_sys_prompt else self.ui_cfg['colors']['accent']
             elif ntype == 'sink': outline_color = self.ui_cfg['colors']['warning']
             elif ntype == 'processing' and role != 'utility' and not binding:
-                outline_color = self.ui_cfg['colors']['error']; outline_w = 2
+                # Flag unbound required models
+                outline_color = self.ui_cfg['colors']['error']
+                outline_w = 2
+
             self.draw_rounded_rect(bx1, by1, node_w, node_h, r, bg_color, outline_color, outline_w)
+            
+            # Text Content
             f_pri, f_sec = tuple(self.ui_cfg['graph']['font']['primary']), tuple(self.ui_cfg['graph']['font']['secondary'])
             self.canvas.create_text(cx, cy - 10, text=nid[:20], fill="#FFFFFF", font=f_pri)
             if binding:
@@ -337,14 +429,21 @@ class JarvisApp(ctk.CTk):
         super().__init__()
         self.title("JARVIS CORE CONSOLE")
         self.geometry("1200x850")
+        
         self.queue = queue.Queue()
         self.controller = JarvisController(self.queue)
+        
+        # Load UI Config dynamically
         self.ui_cfg = self.controller.cfg.get('ui', {})
         self.colors = self.ui_cfg.get('colors', {})
+        
         self.configure(fg_color=self.colors.get('bg', '#0B0F19'))
+        
+        # State for Log Viewing and Transitions
         self.selected_mid = None
         self.last_log_content = ""
         self.transition_lock = False
+        
         self.setup_ui()
         self.update_graph_view()
         self.poll_queue()
@@ -353,15 +452,22 @@ class JarvisApp(ctk.CTk):
     def setup_ui(self):
         self.grid_columnconfigure(1, weight=1)
         self.grid_rowconfigure(1, weight=1)
+
+        # --- SIDEBAR ---
         self.sidebar = ctk.CTkFrame(self, width=250, corner_radius=0, fg_color="#080C14")
         self.sidebar.grid(row=0, column=0, rowspan=3, sticky="nsew")
+        
+        # Loadout Selection at the Top
         ctk.CTkLabel(self.sidebar, text="LOADOUT", font=("Impact", 18), text_color=self.colors.get('accent')).pack(pady=(20, 5))
         loadouts = ["NONE"] + list_all_loadouts()
         self.loadout_var = ctk.StringVar(value=self.controller.current_loadout)
         self.loadout_opt = ctk.CTkOptionMenu(self.sidebar, values=loadouts, variable=self.loadout_var, command=self.on_loadout_change, width=200)
         self.loadout_opt.pack(pady=(0, 10), padx=10)
+
+        # VRAM Monitor
         self.vram_container = ctk.CTkFrame(self.sidebar, fg_color="transparent")
         self.vram_container.pack(pady=(5, 0))
+        
         self.v_lbl_1 = ctk.CTkLabel(self.vram_container, text="Vram: ", font=("Consolas", 11), text_color="#D0D0D0")
         self.v_lbl_1.pack(side="left")
         self.v_lbl_used = ctk.CTkLabel(self.vram_container, text="0.0", font=("Consolas", 11, "bold"), text_color="#FFFFFF")
@@ -376,41 +482,66 @@ class JarvisApp(ctk.CTk):
         self.v_lbl_ext.pack(side="left")
         self.v_lbl_total = ctk.CTkLabel(self.vram_container, text=" / 0.0 GB (0%)", font=("Consolas", 11), text_color="#D0D0D0")
         self.v_lbl_total.pack(side="left")
+
+        # Layered VRAM Bar
         self.vram_bar_bg = ctk.CTkFrame(self.sidebar, width=200, height=8, fg_color="#10141B", corner_radius=4)
         self.vram_bar_bg.pack(pady=(2, 20))
         self.vram_bar_ext = ctk.CTkFrame(self.vram_bar_bg, width=0, height=8, fg_color=self.colors.get('warning'), corner_radius=4)
         self.vram_bar_ext.place(x=0, y=0)
         self.vram_bar_model = ctk.CTkFrame(self.vram_bar_bg, width=0, height=8, fg_color=self.colors.get('accent'), corner_radius=4)
         self.vram_bar_model.place(x=0, y=0)
+
         ctk.CTkLabel(self.sidebar, text="ACTIVE MODELS", font=("Impact", 16), text_color="#E0E0E0").pack(pady=(10, 5))
         self.health_frame = ctk.CTkFrame(self.sidebar, fg_color="transparent")
         self.health_frame.pack(fill="both", expand=True, padx=10)
         self.service_widgets = {}
+
+        # --- HEADER ---
         self.header = ctk.CTkFrame(self, height=80, corner_radius=0, fg_color="#0D1117")
         self.header.grid(row=0, column=1, sticky="ew")
+        
+        # Pipeline
         ctk.CTkLabel(self.header, text="Pipeline:").pack(side="left", padx=(20, 5))
         pipes = [f.replace(".yaml", "") for f in os.listdir(os.path.join(script_dir, "system_config", "pipelines")) if f.endswith(".yaml")]
         self.pipe_var = ctk.StringVar(value=self.controller.current_pipeline)
         self.pipe_opt = ctk.CTkOptionMenu(self.header, values=pipes, variable=self.pipe_var, command=self.on_config_change)
         self.pipe_opt.pack(side="left", padx=10)
+
+        # Strategy
         ctk.CTkLabel(self.header, text="Strategy:").pack(side="left", padx=(20, 5))
         strategies = [f.replace(".yaml", "") for f in os.listdir(os.path.join(script_dir, "system_config", "strategies")) if f.endswith(".yaml")]
         self.strategy_var = ctk.StringVar(value=self.controller.current_strategy)
         self.strategy_opt = ctk.CTkOptionMenu(self.header, values=strategies, variable=self.strategy_var, command=self.on_config_change)
         self.strategy_opt.pack(side="left", padx=10)
+
+        # Mode Indicator
         self.mode_label = ctk.CTkLabel(self.header, text="MODE: TERMINAL", font=("Consolas", 12, "bold"), text_color=self.colors.get('accent'))
         self.mode_label.pack(side="right", padx=20)
+
+        # --- MAIN DISPLAY AREA ---
         self.main_area = ctk.CTkFrame(self, fg_color="transparent")
         self.main_area.grid(row=1, column=1, sticky="nsew", padx=15, pady=15)
-        self.main_area.grid_columnconfigure(0, weight=1); self.main_area.grid_columnconfigure(1, weight=1); self.main_area.grid_rowconfigure(0, weight=1)
+        self.main_area.grid_columnconfigure(0, weight=1) # Graph
+        self.main_area.grid_columnconfigure(1, weight=1) # Console
+        self.main_area.grid_rowconfigure(0, weight=1)
+
+        # 1. Pipeline Graph
         self.graph_widget = PipelineGraphWidget(self.main_area, self.ui_cfg)
         self.graph_widget.grid(row=0, column=0, sticky="nsew", padx=(0, 10))
+        self.graph_widget.on_positions_changed_callback = lambda p: self.controller.update_node_positions(self.controller.current_pipeline, p)
+
+        # 2. Console Container (Terminal or Log Viewer)
         self.console_container = ctk.CTkFrame(self.main_area, fg_color="transparent")
         self.console_container.grid(row=0, column=1, sticky="nsew")
-        self.console_container.grid_columnconfigure(0, weight=1); self.console_container.grid_rowconfigure(0, weight=1)
+        self.console_container.grid_columnconfigure(0, weight=1)
+        self.console_container.grid_rowconfigure(0, weight=1)
+
         self.terminal = ctk.CTkTextbox(self.console_container, font=("Consolas", 13), fg_color=self.colors.get('bg'), text_color=self.colors.get('text'))
         self.terminal.grid(row=0, column=0, sticky="nsew")
+        
         self.log_viewer = ctk.CTkTextbox(self.console_container, font=("Consolas", 11), fg_color="#05080F", text_color="#A0A0A0")
+        
+        # --- FOOTER ---
         self.footer = ctk.CTkFrame(self, height=120, fg_color="#0D1117")
         self.footer.grid(row=2, column=1, sticky="ew")
         self.record_btn = ctk.CTkButton(self.footer, text="HOLD TO TALK", font=("Impact", 24), height=60, fg_color=self.colors.get('accent'), text_color="black")
@@ -462,12 +593,14 @@ class JarvisApp(ctk.CTk):
     def update_graph_view(self):
         try:
             bound_graph = self.controller.resolver.resolve(self.controller.current_pipeline, self.controller.current_strategy)
-            self.graph_widget.set_graph_data(bound_graph)
+            manual_pos = self.controller.node_positions.get(self.controller.current_pipeline)
+            self.graph_widget.set_graph_data(bound_graph, manual_positions=manual_pos)
         except:
             try:
                 raw_pipeline = self.controller.resolver.load_yaml(self.controller.current_pipeline)
                 unbound_graph = {n['id']: n.copy() for n in raw_pipeline.get('nodes', [])}
-                self.graph_widget.set_graph_data(unbound_graph)
+                manual_pos = self.controller.node_positions.get(self.controller.current_pipeline)
+                self.graph_widget.set_graph_data(unbound_graph, manual_positions=manual_pos)
             except: self.graph_widget.set_graph_data(None)
 
     def switch_to_terminal(self):
