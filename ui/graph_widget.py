@@ -277,7 +277,3 @@ class PipelineGraphWidget(ctk.CTkFrame):
                 self.canvas.create_text(cx, cy + 10, text=subtext[:22], fill=self.ui_cfg['colors']['success'], font=f_sec)
             elif ntype == 'processing' and role != 'utility':
                 self.canvas.create_text(cx, cy + 10, text="[UNBOUND]", fill=self.ui_cfg['colors']['error'], font=f_pri)
-            else:
-                # Only show role if it's not redundant
-                role_text = f"[{role.upper()}]" if role != ntype else ""
-                self.canvas.create_text(cx, cy + 10, text=role_text, fill=self.ui_cfg['colors']['gray'], font=f_sec)
