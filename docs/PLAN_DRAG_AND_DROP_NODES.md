@@ -30,6 +30,13 @@ Update `draw_graph()` to follow this precedence:
 2.  **Manual Override**: If a node exists in `self.manual_positions`, use those coordinates instead of the defaults.
 3.  **Clamping**: Ensure manually moved nodes stay within the visible canvas boundaries, even during window resizing.
 
+### Phase 4: Auto Layout Algorithm
+Introduce an "AUTO" button that resets manual positions to an optimized configuration:
+1.  **Alignment**: Nodes follow their primary input's Y-coordinate where possible to create linear paths.
+2.  **Layering**: Use the established tier-based columns for X-coordinates.
+3.  **Conflict Resolution**: If multiple nodes in a tier target the same Y-coordinate, apply a vertical offset to prevent overlapping and minimize line crossings.
+4.  **Persistence**: The auto-generated layout is saved to `.cache/checkpoint-client.json` as if it were a manual move.
+
 ## 3. Verification
 *   Drag a source node to the bottom of the screen; verify all connected edges (arrows) update their paths in real-time.
 *   Verify that clicking a node still selects it (for log viewing) without interfering with the drag start.

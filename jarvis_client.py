@@ -17,7 +17,7 @@ if script_dir not in sys.path:
 
 import utils
 from utils import load_config, list_all_loadouts, get_system_health, kill_all_jarvis_services, kill_process_on_port, log_msg
-from utils.engine import PipelineResolver, PipelineExecutor
+from utils.engine import PipelineResolver, PipelineExecutor, GraphLayoutEngine
 from utils.edge import AudioSensor
 
 from manage_loadout import apply_loadout, kill_loadout, restart_service, kill_service
@@ -247,6 +247,23 @@ class PipelineGraphWidget(ctk.CTkFrame):
         self.manual_positions = manual_positions or {}
         self.draw_graph()
 
+    def apply_auto_layout(self):
+        """Calculates an optimized layout using the delegated GraphLayoutEngine."""
+        if not hasattr(self, 'bound_graph') or not self.bound_graph: return
+        
+        w, h = self.winfo_width(), self.winfo_height()
+        if w <= 1 or h <= 1: return
+        
+        from utils.engine import GraphLayoutEngine
+        node_cfg = self.ui_cfg['graph']['node']
+        engine = GraphLayoutEngine(node_w=node_cfg['width'], node_h=node_cfg['height'])
+        
+        new_positions = engine.calculate_layout(self.bound_graph, w, h)
+        self.manual_positions = new_positions
+        self.draw_graph()
+        if self.on_positions_changed_callback:
+            self.on_positions_changed_callback(new_positions)
+
     def on_press(self, event):
         x, y = event.x, event.y
         self.dragging_node_id = None
@@ -330,41 +347,22 @@ class PipelineGraphWidget(ctk.CTkFrame):
         w, h = self.winfo_width(), self.winfo_height()
         if w <= 1 or h <= 1: return
 
-        # 1. Layout Engine (Simple Tiered Grid based on implicit roles)
-        tiers = {0: [], 1: [], 2: [], 3: []}
-        
-        # Categorize nodes by role/type to assign tiers
-        for nid, node in self.bound_graph.items():
-            ntype = node.get('type')
-            role = node.get('role', '')
-            if ntype in ['source', 'input']: tiers[0].append(nid)
-            elif role == 'utility': tiers[1].append(nid)
-            elif ntype == 'processing' and role != 'utility': tiers[2].append(nid)
-            elif ntype == 'sink': tiers[3].append(nid)
-            else: tiers[1].append(nid) # Fallback
-
-        # Calculate coordinates
+        # 1. Use Layout Engine for "Defaults" if no manual positions exist
         node_cfg = self.ui_cfg['graph']['node']
         node_w, node_h, r = node_cfg['width'], node_cfg['height'], node_cfg['radius']
-        margin_x = w / 5
+        
+        engine = GraphLayoutEngine(node_w=node_w, node_h=node_h)
+        default_positions = engine.calculate_layout(self.bound_graph, w, h)
+        
         self.nodes = {}
-
-        for tier_idx, nodes_in_tier in tiers.items():
-            if not nodes_in_tier: continue
-            cx_default = margin_x * (tier_idx + 1)
-            spacing_y = h / (len(nodes_in_tier) + 1)
+        for nid, node in self.bound_graph.items():
+            cx, cy = self.manual_positions.get(nid, default_positions.get(nid, (w/2, h/2)))
             
-            for i, nid in enumerate(nodes_in_tier):
-                cy_default = spacing_y * (i + 1)
-                
-                # Use manual position if exists, otherwise tiered default
-                cx, cy = self.manual_positions.get(nid, (cx_default, cy_default))
-                
-                self.nodes[nid] = {
-                    'x': cx, 'y': cy,
-                    'bbox': (cx - node_w/2, cy - node_h/2, cx + node_w/2, cy + node_h/2),
-                    'data': self.bound_graph[nid]
-                }
+            self.nodes[nid] = {
+                'x': cx, 'y': cy,
+                'bbox': (cx - node_w/2, cy - node_h/2, cx + node_w/2, cy + node_h/2),
+                'data': node
+            }
 
         # 2. Draw Edges
         for nid, ndata in self.nodes.items():
@@ -514,6 +512,10 @@ class JarvisApp(ctk.CTk):
         self.strategy_opt = ctk.CTkOptionMenu(self.header, values=strategies, variable=self.strategy_var, command=self.on_config_change)
         self.strategy_opt.pack(side="left", padx=10)
 
+        # Auto Layout
+        self.auto_btn = ctk.CTkButton(self.header, text="AUTO LAYOUT", width=100, height=24, fg_color=self.colors.get('gray'), text_color="white", command=self.on_auto_layout)
+        self.auto_btn.pack(side="left", padx=20)
+
         # Mode Indicator
         self.mode_label = ctk.CTkLabel(self.header, text="MODE: TERMINAL", font=("Consolas", 12, "bold"), text_color=self.colors.get('accent'))
         self.mode_label.pack(side="right", padx=20)
@@ -554,6 +556,9 @@ class JarvisApp(ctk.CTk):
         self.controller.current_strategy = self.strategy_var.get()
         self.controller.save_checkpoint()
         self.update_graph_view()
+
+    def on_auto_layout(self):
+        self.graph_widget.apply_auto_layout()
 
     def on_loadout_change(self, val):
         if val != "NONE" and val == self.controller.current_loadout: return
