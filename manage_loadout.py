@@ -49,20 +49,24 @@ def print_status():
     
     print("="*LINE_LEN + "\n")
 
-def save_runtime_registry(services, project_root=None, external_vram=None):
+def save_runtime_registry(services, project_root=None, external_vram=None, loadout_id=None):
     root = project_root if project_root else get_project_root()
     registry_path = os.path.join(root, "system_config", "model_calibrations", "runtime_registry.json")
     
-    # Preserve existing external if not provided
+    # Preserve existing external and loadout_id if not provided
     current_external = 0.0
-    if external_vram is None and os.path.exists(registry_path):
+    current_loadout_id = "NONE"
+    if os.path.exists(registry_path):
         try:
             with open(registry_path, "r") as f:
-                current_external = json.load(f).get("system_external_vram", 0.0)
+                reg_data = json.load(f)
+                current_external = reg_data.get("system_external_vram", 0.0)
+                current_loadout_id = reg_data.get("loadout_id", "NONE")
         except: pass
 
     data = {
         "active_loadout": services,
+        "loadout_id": loadout_id if loadout_id is not None else current_loadout_id,
         "system_external_vram": external_vram if external_vram is not None else current_external,
         "last_updated": time.strftime("%Y-%m-%d %H:%M:%S")
     }
@@ -180,7 +184,7 @@ def apply_loadout(name, loud=False, soft=False):
         kill_jarvis_ports(stt_ports + tts_ports + ([vllm_port] if vllm_port else []))
 
     # Save registry IMMEDIATELY so UI shows "STARTUP" for all models
-    save_runtime_registry(active_services, project_root, external_vram=external_vram)
+    save_runtime_registry(active_services, project_root, external_vram=external_vram, loadout_id=name)
     print() # SEPARATION
 
     # 4. Service Startup with Lifecycle Headers

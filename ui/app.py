@@ -76,16 +76,14 @@ class JarvisApp(ctk.CTk):
         self.pipe_opt = ctk.CTkOptionMenu(self.header, values=pipes, variable=self.pipe_var, command=self.on_config_change)
         self.pipe_opt.pack(side="left", padx=10)
 
-        # Strategy
-        ctk.CTkLabel(self.header, text="Strategy:").pack(side="left", padx=(20, 5))
-        strategies = [f.replace(".yaml", "") for f in os.listdir(os.path.join(script_dir, "system_config", "strategies")) if f.endswith(".yaml")]
-        self.strategy_var = ctk.StringVar(value=self.controller.current_strategy)
-        self.strategy_opt = ctk.CTkOptionMenu(self.header, values=strategies, variable=self.strategy_var, command=self.on_config_change)
-        self.strategy_opt.pack(side="left", padx=10)
-
         # Auto Layout
         self.auto_btn = ctk.CTkButton(self.header, text="AUTO LAYOUT", width=100, height=24, fg_color=self.colors.get('gray'), text_color="white", command=self.on_auto_layout)
         self.auto_btn.pack(side="left", padx=20)
+
+        # View Mode Selector
+        self.view_mode_var = ctk.StringVar(value="MAPPING")
+        self.view_mode_btn = ctk.CTkSegmentedButton(self.header, values=["MAPPING", "STATUS"], variable=self.view_mode_var, command=self.on_view_mode_change)
+        self.view_mode_btn.pack(side="left", padx=10)
 
         # Mode Indicator
         self.mode_label = ctk.CTkLabel(self.header, text="MODE: TERMINAL", font=("Consolas", 12, "bold"), text_color=self.colors.get('accent'))
@@ -124,12 +122,14 @@ class JarvisApp(ctk.CTk):
 
     def on_config_change(self, _=None):
         self.controller.current_pipeline = self.pipe_var.get()
-        self.controller.current_strategy = self.strategy_var.get()
         self.controller.save_checkpoint()
         self.update_graph_view()
 
     def on_auto_layout(self):
         self.graph_widget.apply_auto_layout()
+
+    def on_view_mode_change(self, val):
+        self.update_graph_view()
 
     def on_loadout_change(self, val):
         if val != "NONE" and val == self.controller.current_loadout: return
@@ -167,16 +167,18 @@ class JarvisApp(ctk.CTk):
         self.after(100, execute_backend_changes)
 
     def update_graph_view(self):
+        mode = self.view_mode_var.get()
+        health = self.controller.health_state
         try:
             bound_graph = self.controller.resolver.resolve(self.controller.current_pipeline, self.controller.current_strategy)
             manual_pos = self.controller.node_positions.get(self.controller.current_pipeline)
-            self.graph_widget.set_graph_data(bound_graph, manual_positions=manual_pos)
+            self.graph_widget.set_graph_data(bound_graph, manual_positions=manual_pos, view_mode=mode, health_data=health)
         except:
             try:
                 raw_pipeline = self.controller.resolver.load_yaml(self.controller.current_pipeline)
                 unbound_graph = {n['id']: n.copy() for n in raw_pipeline.get('nodes', [])}
                 manual_pos = self.controller.node_positions.get(self.controller.current_pipeline)
-                self.graph_widget.set_graph_data(unbound_graph, manual_positions=manual_pos)
+                self.graph_widget.set_graph_data(unbound_graph, manual_positions=manual_pos, view_mode=mode, health_data=health)
             except: self.graph_widget.set_graph_data(None)
 
     def switch_to_terminal(self):
@@ -239,6 +241,16 @@ class JarvisApp(ctk.CTk):
                 self.service_widgets[mid].destroy()
                 del self.service_widgets[mid]
 
+        # 1. Determine which models are bound to the current pipeline
+        bound_mids = set()
+        try:
+            # We use the current view_mode's bound graph
+            bound_graph = self.controller.resolver.resolve(self.controller.current_pipeline)
+            for node in bound_graph.values():
+                binding = node.get('binding')
+                if binding: bound_mids.add(binding['id'])
+        except: pass
+
         # Update or Create widgets
         for m in models_to_render:
             mid = m['id']
@@ -250,9 +262,14 @@ class JarvisApp(ctk.CTk):
                 self.service_widgets[mid] = card
             
             self.service_widgets[mid].set_status(info['status'])
+            self.service_widgets[mid].set_orphan(mid not in bound_mids)
             
         self._update_selection_ui()
         
+        # Refresh Graph if in Status Mode
+        if self.view_mode_var.get() == "STATUS":
+            self.update_graph_view()
+
         # Loadout Opt color coding
         if self.controller.current_loadout == "NONE": self.loadout_opt.configure(fg_color=self.colors.get('gray'))
         elif all(s['status'] == "ON" or s['status'] == "BUSY" for s in health.values()): self.loadout_opt.configure(fg_color=self.colors.get('success'), text_color="black")

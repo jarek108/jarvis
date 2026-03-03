@@ -12,11 +12,13 @@ class PipelineGraphWidget(ctk.CTkFrame):
         self.nodes = {}
         self.edges = []
         
-        # Interaction State
+        # Interaction & View State
         self.manual_positions = initial_positions or {} # nid -> (x, y)
         self.dragging_node_id = None
         self.drag_offset = (0, 0)
         self.has_dragged = False
+        self.view_mode = "MAPPING"
+        self.health_data = {} # port -> {status, info}
         
         self.canvas.bind("<Configure>", self.on_resize)
         self.canvas.bind("<ButtonPress-1>", self.on_press)
@@ -30,9 +32,11 @@ class PipelineGraphWidget(ctk.CTkFrame):
     def on_resize(self, event):
         self.draw_graph()
 
-    def set_graph_data(self, bound_graph, manual_positions=None):
+    def set_graph_data(self, bound_graph, manual_positions=None, view_mode=None, health_data=None):
         self.bound_graph = bound_graph
-        self.manual_positions = manual_positions or {}
+        if manual_positions is not None: self.manual_positions = manual_positions
+        if view_mode: self.view_mode = view_mode
+        if health_data is not None: self.health_data = health_data
         self.draw_graph()
 
     def apply_auto_layout(self):
@@ -272,8 +276,33 @@ class PipelineGraphWidget(ctk.CTkFrame):
             f_pri, f_sec = tuple(self.ui_cfg['graph']['font']['primary']), tuple(self.ui_cfg['graph']['font']['secondary'])
             self.canvas.create_text(cx, cy - 10, text=display_name, fill="#FFFFFF", font=f_pri)
             
-            if binding:
-                subtext = binding.get('id', 'Unknown')
-                self.canvas.create_text(cx, cy + 10, text=subtext[:22], fill=self.ui_cfg['colors']['success'], font=f_sec)
-            elif ntype == 'processing' and role != 'utility':
-                self.canvas.create_text(cx, cy + 10, text="[UNBOUND]", fill=self.ui_cfg['colors']['error'], font=f_pri)
+            if self.view_mode == "STATUS":
+                # STATUS MODE: Show functional state
+                status_text = ""
+                status_color = self.ui_cfg['colors']['gray']
+                
+                if binding:
+                    port = binding.get('port')
+                    health = self.health_data.get(port, {"status": "OFF"})
+                    s = health['status']
+                    if s == "ON": status_text = "READY"; status_color = self.ui_cfg['colors']['success']
+                    elif s == "BUSY": status_text = "PROCESSING"; status_color = self.ui_cfg['colors']['accent']
+                    elif s == "STARTUP": status_text = "STARTUP"; status_color = self.ui_cfg['colors']['warning']
+                    else: status_text = "ERROR"; status_color = self.ui_cfg['colors']['error']
+                elif ntype == 'processing' and role != 'utility':
+                    status_text = "UNBOUND"; status_color = self.ui_cfg['colors']['error']
+                elif ntype in ['source', 'sink']:
+                    status_text = "READY"; status_color = self.ui_cfg['colors']['success']
+                
+                if status_text:
+                    self.canvas.create_text(cx, cy + 10, text=status_text, fill=status_color, font=f_sec if status_text != "UNBOUND" else f_pri)
+            else:
+                # MAPPING MODE: Show model IDs (Original behavior)
+                if binding:
+                    subtext = binding.get('id', 'Unknown')
+                    # Check if it was an auto-binding
+                    is_auto = binding.get('is_auto', True) # For now we assume most are auto
+                    display_sub = f"{subtext[:22]} [AUTO]" if is_auto else subtext[:22]
+                    self.canvas.create_text(cx, cy + 10, text=display_sub, fill=self.ui_cfg['colors']['success'], font=f_sec)
+                elif ntype == 'processing' and role != 'utility':
+                    self.canvas.create_text(cx, cy + 10, text="[UNBOUND]", fill=self.ui_cfg['colors']['error'], font=f_pri)

@@ -126,7 +126,24 @@ class ModelHealthCard(ctk.CTkFrame):
         elif status == "OFF": color = self.colors.get('error')
         elif status == "STARTUP": color = self.colors.get('warning')
         elif status == "BUSY": color = self.colors.get('accent')
+        elif status == "ORPHAN": color = "#505050"
         self.lamp.configure(text_color=color)
+
+    def set_orphan(self, is_orphan):
+        if is_orphan:
+            self.lamp.configure(text_color="#505050")
+            self.subtext.configure(text_color="#606060")
+            self.name_box.configure(text_color="#808080")
+            # Add small indicator
+            try: self.orphan_lbl.destroy()
+            except: pass
+            self.orphan_lbl = ctk.CTkLabel(self.header, text="[NOT IN USE]", font=("Consolas", 9), text_color="#606060")
+            self.orphan_lbl.pack(side="right", padx=5)
+        else:
+            self.subtext.configure(text_color="#D0D0D0")
+            self.name_box.configure(text_color="#FFFFFF")
+            try: self.orphan_lbl.destroy()
+            except: pass
 
     def set_selected(self, selected):
         if selected:

@@ -4,6 +4,9 @@ device: cuda
 paths:
   venv_python: "jarvis-venv/Scripts/python.exe"
 
+# --- Autonomous Binding ---
+mapping_preference: "prefer_big" # [prefer_big, prefer_small]
+
 # --- Fixed Infrastructure Ports ---
 stt_loadout:
   faster-whisper-tiny: 8100
