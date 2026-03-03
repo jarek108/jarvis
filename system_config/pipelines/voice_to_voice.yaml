@@ -2,17 +2,20 @@ id: voice_to_voice
 description: "Reactive Speech-to-Speech interaction loop."
 nodes:
   - id: sys_prompt
+    display_name: "📄 SYS PROMPT"
     type: source
     role: file_reader
     capabilities: [text_out]
     path: "pipelines/prompts/sts_persona.txt"
 
   - id: input_mic
+    display_name: "🎙 MIC"
     type: source
     role: microphone
     capabilities: [audio_out]
 
   - id: proc_stt
+    display_name: "STT"
     type: processing
     role: stt
     capabilities: [audio_in, text_out]
@@ -20,6 +23,7 @@ nodes:
       - input_mic
 
   - id: conversation_memory
+    display_name: "🧠 CONV MEM"
     type: utility
     role: memory
     path: "voice_session.txt"
@@ -27,6 +31,7 @@ nodes:
       - proc_stt
 
   - id: proc_llm
+    display_name: "LLM"
     type: processing
     role: llm
     capabilities: [text_in, text_out]
@@ -43,6 +48,7 @@ nodes:
       {{ proc_stt }}
 
   - id: logic_chunker
+    display_name: "CHUNKER"
     type: processing
     role: utility
     operation: chunk_by_delimiter
@@ -51,6 +57,7 @@ nodes:
       - proc_llm
 
   - id: proc_tts
+    display_name: "TTS"
     type: processing
     role: tts
     capabilities: [text_in, audio_out]
@@ -58,6 +65,7 @@ nodes:
       - logic_chunker
 
   - id: output_speaker
+    display_name: "🔊 SPEAKER"
     type: sink
     role: audio_playback
     capabilities: [audio_in]

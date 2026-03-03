@@ -334,9 +334,28 @@ class PipelineGraphWidget(ctk.CTkFrame):
         width = self.ui_cfg['graph']['edge']['width']
         ashape = tuple(self.ui_cfg['graph']['edge']['arrow_shape'])
         
-        # Draw an angled or curved line with an arrowhead
+        # Draw an angled line with an arrowhead
         ctrl_x = (x1 + x2) / 2
         return self.canvas.create_line(x1, y1, ctrl_x, y1, ctrl_x, y2, x2, y2, fill=color, width=width, arrow=ctk.LAST, arrowshape=ashape, smooth=True, dash=style)
+
+    def draw_label(self, x1, y1, x2, y2, label, color=None):
+        if not label: return
+        if color is None: color = self.ui_cfg['graph']['edge']['color']
+        
+        ctrl_x = (x1 + x2) / 2
+        mid_y = (y1 + y2) / 2
+        f_sec = tuple(self.ui_cfg['graph']['font']['secondary'])
+        
+        # Create text first to measure it
+        text_id = self.canvas.create_text(ctrl_x, mid_y, text=label.upper(), fill="#B0B0B0", font=f_sec)
+        bbox = self.canvas.bbox(text_id)
+        
+        # Draw a background "pill" with generous padding
+        px, py = 6, 3
+        rect_id = self.canvas.create_rectangle(bbox[0]-px, bbox[1]-py, bbox[2]+px, bbox[3]+py, fill=self.ui_cfg['colors']['bg'], outline=color, width=1)
+        
+        # Ensure text is on top of its own rectangle
+        self.canvas.tag_raise(text_id, rect_id)
 
     def draw_graph(self):
         self.canvas.delete("all")
@@ -364,26 +383,44 @@ class PipelineGraphWidget(ctk.CTkFrame):
                 'data': node
             }
 
-        # 2. Draw Edges
+        # 2. PASS 1: Draw Edge Lines
+        label_queue = [] # (x1, y1, x2, y2, label, color)
+        
         for nid, ndata in self.nodes.items():
             node = ndata['data']
+            dest_caps = node.get('capabilities', [])
             
             # Standard Inputs
             inputs = node.get('inputs', [])
             for src_id in inputs:
                 if src_id in self.nodes:
                     src = self.nodes[src_id]
+                    src_node = src['data']
+                    src_caps = src_node.get('capabilities', [])
+                    
+                    # Infer Data Type
+                    src_outs = {c.replace("_out", "") for c in src_caps if c.endswith("_out")}
+                    dest_ins = {c.replace("_in", "") for c in dest_caps if c.endswith("_in")}
+                    common = src_outs.intersection(dest_ins)
+                    dtype = list(common)[0] if common else None
+                    if not dtype and (src_node.get('role') == 'memory' or node.get('role') == 'memory'): dtype = "text"
+
                     dash = (4, 4) if node.get('role') == 'memory' else None
                     self.draw_edge(src['bbox'][2], src['y'], ndata['bbox'][0], ndata['y'], style=dash)
+                    if dtype: label_queue.append((src['bbox'][2], src['y'], ndata['bbox'][0], ndata['y'], dtype, None))
             
-            # System Prompt Connection (Specialized)
+            # System Prompt Connection
             sys_prompt_id = node.get('system_prompt')
             if sys_prompt_id and sys_prompt_id in self.nodes:
                 src = self.nodes[sys_prompt_id]
-                # Draw purple dotted line for system prompt
                 self.draw_edge(src['bbox'][2], src['y'], ndata['bbox'][0], ndata['y'], color=self.ui_cfg['colors']['purple'], style=(2, 2))
+                label_queue.append((src['bbox'][2], src['y'], ndata['bbox'][0], ndata['y'], "text", self.ui_cfg['colors']['purple']))
 
-        # 3. Draw Nodes
+        # 3. PASS 2: Draw Labels (On top of all lines)
+        for args in label_queue:
+            self.draw_label(*args)
+
+        # 4. Draw Nodes (On top of everything)
         for nid, ndata in self.nodes.items():
             node = ndata['data']
             cx, cy = ndata['x'], ndata['y']
@@ -418,24 +455,22 @@ class PipelineGraphWidget(ctk.CTkFrame):
 
             self.draw_rounded_rect(bx1, by1, node_w, node_h, r, bg_color, outline_color, outline_w)
             
-            # Label Cleaning & Abbreviation
-            display_name = nid
-            if display_name.startswith("input_"): display_name = display_name[6:]
-            if display_name.startswith("output_"): display_name = display_name[7:]
-            if display_name.startswith("proc_"): display_name = display_name[5:]
-            
-            abbrevs = {
-                "conversation_memory": "conv mem",
-                "logic_chunker": "chunker",
-                "system_prompt": "sys prompt",
-                "speaker": "speaker",
-                "mic": "mic"
-            }
-            display_name = abbrevs.get(display_name, display_name).replace("_", " ")
+            # Label Selection (favor YAML display_name, fallback to cleaned ID)
+            if 'display_name' in node:
+                display_name = node['display_name'].upper()
+            else:
+                display_name = nid
+                if display_name.startswith("input_"): display_name = display_name[6:]
+                if display_name.startswith("output_"): display_name = display_name[7:]
+                if display_name.startswith("proc_"): display_name = display_name[5:]
+                
+                # Internal common abbreviations
+                abbrevs = {"conversation_memory": "conv mem", "system_prompt": "sys prompt"}
+                display_name = abbrevs.get(display_name, display_name).replace("_", " ").upper()
             
             # Text Content
             f_pri, f_sec = tuple(self.ui_cfg['graph']['font']['primary']), tuple(self.ui_cfg['graph']['font']['secondary'])
-            self.canvas.create_text(cx, cy - 10, text=display_name.upper(), fill="#FFFFFF", font=f_pri)
+            self.canvas.create_text(cx, cy - 10, text=display_name, fill="#FFFFFF", font=f_pri)
             
             if binding:
                 subtext = binding.get('id', 'Unknown')

@@ -2,17 +2,20 @@ id: multimodal_sentry
 description: "Visual analysis with declarative sensors and actuators."
 nodes:
   - id: sys_prompt
+    display_name: "📄 SYS PROMPT"
     type: source
     role: file_reader
     capabilities: [text_out]
     path: "pipelines/prompts/sentry_persona.txt"
 
   - id: input_mic
+    display_name: "🎙 MIC"
     type: source
     role: microphone
     capabilities: [audio_out]
 
   - id: input_desktop
+    display_name: "🖥 SCREEN"
     type: source
     role: screen_capture
     capabilities: [image_out]

@@ -2,16 +2,19 @@ id: hybrid_chat
 description: "Voice and Text merged context."
 nodes:
   - id: input_mic
+    display_name: "🎙 MIC"
     type: source
     role: microphone
     capabilities: [audio_out]
 
   - id: input_text
+    display_name: "📄 SCREEN TEXT"
     type: source
     role: selection_buffer
     capabilities: [text_out]
 
   - id: input_instruction
+    display_name: "💬 CHAT BOX"
     type: source
     role: chat_box
     capabilities: [text_out]
