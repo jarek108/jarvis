@@ -392,35 +392,60 @@ class PipelineGraphWidget(ctk.CTkFrame):
             # Styling based on state and selection
             is_selected = (nid == self.selected_node_id)
             bg_color = node_cfg['bg_color']
-            outline_color = self.ui_cfg['colors']['success'] if is_selected else self.ui_cfg['colors']['gray']
-            outline_w = 2 if is_selected else 1
             
             ntype = node.get('type')
             role = node.get('role', ntype)
             binding = node.get('binding')
             
-            if ntype == 'source': 
-                # Check if this node is used as a system_prompt anywhere
+            # Color Coding Strategy
+            if ntype == 'source':
                 is_sys_prompt = any(n.get('system_prompt') == nid for n in self.bound_graph.values())
                 outline_color = self.ui_cfg['colors']['purple'] if is_sys_prompt else self.ui_cfg['colors']['accent']
-            elif ntype == 'sink': outline_color = self.ui_cfg['colors']['warning']
-            elif ntype == 'processing' and role != 'utility' and not binding:
-                # Flag unbound required models
-                outline_color = self.ui_cfg['colors']['error']
-                outline_w = 2
+            elif ntype == 'sink':
+                outline_color = self.ui_cfg['colors']['warning']
+            elif ntype == 'processing':
+                if role == 'utility':
+                    outline_color = self.ui_cfg['colors']['gray']
+                elif not binding:
+                    outline_color = self.ui_cfg['colors']['error']
+                else:
+                    outline_color = self.ui_cfg['colors']['success']
+            else:
+                outline_color = self.ui_cfg['colors']['gray']
+
+            outline_w = 2.5 if is_selected else 1.5
+            if is_selected: bg_color = node_cfg.get('selected_bg_color', "#1A202C")
 
             self.draw_rounded_rect(bx1, by1, node_w, node_h, r, bg_color, outline_color, outline_w)
             
+            # Label Cleaning & Abbreviation
+            display_name = nid
+            if display_name.startswith("input_"): display_name = display_name[6:]
+            if display_name.startswith("output_"): display_name = display_name[7:]
+            if display_name.startswith("proc_"): display_name = display_name[5:]
+            
+            abbrevs = {
+                "conversation_memory": "conv mem",
+                "logic_chunker": "chunker",
+                "system_prompt": "sys prompt",
+                "speaker": "speaker",
+                "mic": "mic"
+            }
+            display_name = abbrevs.get(display_name, display_name).replace("_", " ")
+            
             # Text Content
             f_pri, f_sec = tuple(self.ui_cfg['graph']['font']['primary']), tuple(self.ui_cfg['graph']['font']['secondary'])
-            self.canvas.create_text(cx, cy - 10, text=nid[:20], fill="#FFFFFF", font=f_pri)
+            self.canvas.create_text(cx, cy - 10, text=display_name.upper(), fill="#FFFFFF", font=f_pri)
+            
             if binding:
                 subtext = binding.get('id', 'Unknown')
                 self.canvas.create_text(cx, cy + 10, text=subtext[:22], fill=self.ui_cfg['colors']['success'], font=f_sec)
             elif ntype == 'processing' and role != 'utility':
                 self.canvas.create_text(cx, cy + 10, text="[UNBOUND]", fill=self.ui_cfg['colors']['error'], font=f_pri)
             else:
-                self.canvas.create_text(cx, cy + 10, text=f"[{role.upper()}]", fill=self.ui_cfg['colors']['gray'], font=f_sec)
+                # Only show role if it's not redundant
+                role_text = f"[{role.upper()}]" if role != ntype else ""
+                self.canvas.create_text(cx, cy + 10, text=role_text, fill=self.ui_cfg['colors']['gray'], font=f_sec)
 
 class JarvisApp(ctk.CTk):
     def __init__(self):
