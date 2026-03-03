@@ -122,16 +122,17 @@ class PipelineGraphWidget(ctk.CTkFrame):
         ashape = tuple(self.ui_cfg['graph']['edge']['arrow_shape'])
         
         # Draw a vertical "stepped" line with an arrowhead
-        ctrl_y = (y1 + y2) / 2
+        # Weighted towards source (30%) to move the curve closer to the top
+        ctrl_y = y1 + (y2 - y1) * 0.3
         return self.canvas.create_line(x1, y1, x1, ctrl_y, x2, ctrl_y, x2, y2, fill=color, width=width, arrow=ctk.LAST, arrowshape=ashape, smooth=True, dash=style)
 
     def draw_label(self, x1, y1, x2, y2, label, color=None):
         if not label: return
         if color is None: color = self.ui_cfg['graph']['edge']['color']
         
-        # Midpoint of the vertical flow
+        # Midpoint of the vertical flow, following the 30% elbow weight
         mid_x = (x1 + x2) / 2
-        ctrl_y = (y1 + y2) / 2
+        ctrl_y = y1 + (y2 - y1) * 0.3
         f_sec = tuple(self.ui_cfg['graph']['font']['secondary'])
         
         # Create text first to measure it
