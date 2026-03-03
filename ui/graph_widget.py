@@ -121,20 +121,21 @@ class PipelineGraphWidget(ctk.CTkFrame):
         width = self.ui_cfg['graph']['edge']['width']
         ashape = tuple(self.ui_cfg['graph']['edge']['arrow_shape'])
         
-        # Draw an angled line with an arrowhead
-        ctrl_x = (x1 + x2) / 2
-        return self.canvas.create_line(x1, y1, ctrl_x, y1, ctrl_x, y2, x2, y2, fill=color, width=width, arrow=ctk.LAST, arrowshape=ashape, smooth=True, dash=style)
+        # Draw a vertical "stepped" line with an arrowhead
+        ctrl_y = (y1 + y2) / 2
+        return self.canvas.create_line(x1, y1, x1, ctrl_y, x2, ctrl_y, x2, y2, fill=color, width=width, arrow=ctk.LAST, arrowshape=ashape, smooth=True, dash=style)
 
     def draw_label(self, x1, y1, x2, y2, label, color=None):
         if not label: return
         if color is None: color = self.ui_cfg['graph']['edge']['color']
         
-        ctrl_x = (x1 + x2) / 2
-        mid_y = (y1 + y2) / 2
+        # Midpoint of the vertical flow
+        mid_x = (x1 + x2) / 2
+        ctrl_y = (y1 + y2) / 2
         f_sec = tuple(self.ui_cfg['graph']['font']['secondary'])
         
         # Create text first to measure it
-        text_id = self.canvas.create_text(ctrl_x, mid_y, text=label.upper(), fill="#B0B0B0", font=f_sec)
+        text_id = self.canvas.create_text(mid_x, ctrl_y, text=label.upper(), fill="#B0B0B0", font=f_sec)
         bbox = self.canvas.bbox(text_id)
         
         # Draw a background "pill" with generous padding
@@ -193,15 +194,22 @@ class PipelineGraphWidget(ctk.CTkFrame):
                     if not dtype and (src_node.get('role') == 'memory' or node.get('role') == 'memory'): dtype = "text"
 
                     dash = (4, 4) if node.get('role') == 'memory' else None
-                    self.draw_edge(src['bbox'][2], src['y'], ndata['bbox'][0], ndata['y'], style=dash)
-                    if dtype: label_queue.append((src['bbox'][2], src['y'], ndata['bbox'][0], ndata['y'], dtype, None))
+                    # From BOTTOM of source to TOP of destination
+                    x1, y1 = src['x'], src['bbox'][3]
+                    x2, y2 = ndata['x'], ndata['bbox'][1]
+                    
+                    self.draw_edge(x1, y1, x2, y2, style=dash)
+                    if dtype: label_queue.append((x1, y1, x2, y2, dtype, None))
             
             # System Prompt Connection
             sys_prompt_id = node.get('system_prompt')
             if sys_prompt_id and sys_prompt_id in self.nodes:
                 src = self.nodes[sys_prompt_id]
-                self.draw_edge(src['bbox'][2], src['y'], ndata['bbox'][0], ndata['y'], color=self.ui_cfg['colors']['purple'], style=(2, 2))
-                label_queue.append((src['bbox'][2], src['y'], ndata['bbox'][0], ndata['y'], "text", self.ui_cfg['colors']['purple']))
+                x1, y1 = src['x'], src['bbox'][3]
+                x2, y2 = ndata['x'], ndata['bbox'][1]
+                
+                self.draw_edge(x1, y1, x2, y2, color=self.ui_cfg['colors']['purple'], style=(2, 2))
+                label_queue.append((x1, y1, x2, y2, "text", self.ui_cfg['colors']['purple']))
 
         # 3. PASS 2: Draw Labels (On top of all lines)
         for args in label_queue:

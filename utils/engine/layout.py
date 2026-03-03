@@ -2,13 +2,13 @@ import os
 
 class GraphLayoutEngine:
     """
-    Topological DAG layout engine.
+    Topological DAG layout engine (Vertical Flow: Top to Bottom).
     Prioritizes straight-line data flow and crossing minimization.
     """
-    def __init__(self, node_w=160, node_h=60, min_spacing_y=40):
+    def __init__(self, node_w=160, node_h=60, min_spacing_x=40):
         self.node_w = node_w
         self.node_h = node_h
-        self.min_spacing_y = min_spacing_y
+        self.min_spacing_x = min_spacing_x
 
     def calculate_layout(self, bound_graph, canvas_w, canvas_h):
         if not bound_graph: return {}
@@ -19,7 +19,7 @@ class GraphLayoutEngine:
             sys_p = node.get('system_prompt')
             if sys_p: adj[nid].append(sys_p)
         
-        # 2. Assign Topological Ranks (X-Columns)
+        # 2. Assign Topological Ranks (Y-Rows)
         ranks = {} 
         def get_rank(nid):
             if nid in ranks: return ranks[nid]
@@ -41,53 +41,52 @@ class GraphLayoutEngine:
 
         # 3. Position Nodes (Iterative Alignment)
         new_positions = {}
-        margin_x = canvas_w / (max_rank + 2)
-        start_x = margin_x
+        margin_y = canvas_h / (max_rank + 2)
+        start_y = margin_y
 
-        # Rank 0: Even vertical distribution centered in canvas
+        # Rank 0: Even horizontal distribution centered in canvas
         r0 = nodes_by_rank[0]
-        spacing_y0 = canvas_h / (len(r0) + 1)
+        spacing_x0 = canvas_w / (len(r0) + 1)
         for i, nid in enumerate(r0):
-            new_positions[nid] = (start_x, spacing_y0 * (i + 1))
+            new_positions[nid] = (spacing_x0 * (i + 1), start_y)
 
         # Rank 1+: Align with parents and resolve overlaps
-        min_dist_y = self.node_h + self.min_spacing_y
+        min_dist_x = self.node_w + self.min_spacing_x
 
         for r in range(1, max_rank + 1):
             nodes = nodes_by_rank[r]
-            cx = start_x + (margin_x * r)
+            cy = start_y + (margin_y * r)
             
-            # Target Y is the average Y of parents (Barycenter)
+            # Target X is the average X of parents (Barycenter)
             requested = []
             for nid in nodes:
                 parents = [p for p in adj.get(nid, []) if p in new_positions]
                 if parents:
-                    target_y = sum(new_positions[p][1] for p in parents) / len(parents)
+                    target_x = sum(new_positions[p][0] for p in parents) / len(parents)
                 else:
-                    target_y = canvas_h / 2
-                requested.append({'id': nid, 'y': target_y})
+                    target_x = canvas_w / 2
+                requested.append({'id': nid, 'x': target_x})
 
-            # Reorder vertical positions to reduce crossing (Sort by parent Y)
-            requested.sort(key=lambda x: x['y'])
+            # Reorder horizontal positions to reduce crossing (Sort by parent X)
+            requested.sort(key=lambda x: x['x'])
             
             # Initial placement with overlap detection
-            placed_y = []
+            placed_x = []
             for i, req in enumerate(requested):
-                y = req['y']
+                x = req['x']
                 if i > 0:
-                    y = max(y, placed_y[-1] + min_dist_y)
-                placed_y.append(y)
+                    x = max(x, placed_x[-1] + min_dist_x)
+                placed_x.append(x)
             
             # Center the entire rank block around the mean of requested positions
-            # This maintains the "straight line" feel as much as possible
-            avg_req = sum(r['y'] for r in requested) / len(requested)
-            avg_placed = sum(placed_y) / len(placed_y)
+            avg_req = sum(r['x'] for r in requested) / len(requested)
+            avg_placed = sum(placed_x) / len(placed_x)
             shift = avg_req - avg_placed
             
             for i, req in enumerate(requested):
-                final_y = placed_y[i] + shift
+                final_x = placed_x[i] + shift
                 # Final Clamping to avoid nodes leaving canvas
-                final_y = max(self.node_h, min(canvas_h - self.node_h, final_y))
-                new_positions[req['id']] = (cx, final_y)
+                final_x = max(self.node_w, min(canvas_w - self.node_w, final_x))
+                new_positions[req['id']] = (final_x, cy)
 
         return new_positions
