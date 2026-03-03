@@ -79,6 +79,16 @@ To distinguish between engines in reports and configuration, Jarvis uses prefixe
 *   `vl_` or `vllm:`: Explicitly force vLLM (e.g., `vllm:Qwen/Qwen2.5-0.5B-Instruct`).
 *   **Default:** Any model ID containing `:` or `/` without a prefix currently defaults to Ollama.
 
+### Autonomous Capability Binding (ACB)
+Jarvis automatically maps the models running in your active loadout to the logical nodes in your pipeline.
+*   **Preference Tuning:** You can control how the `AutoBinder` resolves ambiguity (when multiple models fit a node's requirements) by editing `system_config/config.yaml`:
+    ```yaml
+    mapping_preference: "prefer_big" # Use the most capable model (highest param count/VRAM)
+    # OR
+    mapping_preference: "prefer_small" # Optimize for speed/latency by using the smallest valid model
+    ```
+*   **Manual Overrides:** The system saves manual model selections (made in the UI) to `.cache/pipeline_bindings.json`. This acts as a sticky override for that specific `(Pipeline, Loadout)` pair.
+
 ### Suffix Convention (Runtime Flags)
 To pass runtime parameters to the test runner (without affecting the engine loader), append flags using the `#` delimiter:
 *   `#stream`: Enables streaming mode (Time-To-First-Token measurement).

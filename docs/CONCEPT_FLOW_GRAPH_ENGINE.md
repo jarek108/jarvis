@@ -39,6 +39,12 @@ context_layout: |
   USER: {{ proc_stt }}
 ```
 
+### 5. Autonomous Capability Binding (ACB)
+The Pipeline Engine does not require manual, hardcoded routing of physical models to logical nodes. Instead, it utilizes the `AutoBinder`:
+1.  **Contract**: Nodes declare required capabilities (e.g., `[text_in, text_out]`).
+2.  **Handshake**: When a Loadout is applied, the `AutoBinder` intersects the node requirements with the active hardware capabilities.
+3.  **Physics-Aware Sorting**: Ambiguities (multiple valid models) are resolved by sorting models based on their param count and VRAM footprint, prioritizing based on the global `mapping_preference`.
+
 ## Trace-Based Evaluation
 Metrics are no longer calculated "in-line" during execution. Instead:
 1.  The **Executor** generates a "Dumb Trace" (raw timestamps and packet types).

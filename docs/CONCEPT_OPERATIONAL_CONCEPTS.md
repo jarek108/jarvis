@@ -8,9 +8,9 @@ This document defines the core concepts that govern the behavior, logic, and res
 *   **States**: `text_chat`, `visual_chat`, `sentry_mode`, `active_copilot`.
 
 ## 2. Loadout (The Physical Implementation)
-*   **Role**: The specific set of AI models loaded into VRAM.
-*   **Relation**: Must satisfy the requirements of the active **Operational Mode**.
-*   **Management**: Handled by the `ResourceManager` using a "Smart Hot-Swap" strategy to fit within the 32GB VRAM budget.
+*   **Role**: The specific set of AI models loaded into VRAM. It acts as the "Capability Provider" for the system.
+*   **Relation**: The Orchestrator's `AutoBinder` automatically matches the capabilities provided by the active Loadout to the logical requirements of the current Pipeline.
+*   **Management**: Handled by the `manage_loadout.py` script using a "Smart Hot-Swap" strategy to fit within the 32GB VRAM budget.
 
 ## 3. Inference Triggering Mode (The Spark)
 Determines the logic that initiates a processing turn.
