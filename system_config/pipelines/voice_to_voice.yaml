@@ -51,6 +51,7 @@ nodes:
     display_name: "CHUNKER"
     type: processing
     role: utility
+    capabilities: [text_in, text_out]
     operation: chunk_by_delimiter
     delimiters: ".?!"
     inputs:

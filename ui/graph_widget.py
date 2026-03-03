@@ -192,7 +192,11 @@ class PipelineGraphWidget(ctk.CTkFrame):
                     dest_ins = {c.replace("_in", "") for c in dest_caps if c.endswith("_in")}
                     common = src_outs.intersection(dest_ins)
                     dtype = list(common)[0] if common else None
-                    if not dtype and (src_node.get('role') == 'memory' or node.get('role') == 'memory'): dtype = "text"
+                    
+                    # Manual fallback for generic utility/memory nodes
+                    if not dtype:
+                        if any(r in [src_node.get('role'), node.get('role')] for r in ['memory', 'utility']):
+                            dtype = "text"
 
                     dash = (4, 4) if node.get('role') == 'memory' else None
                     # From BOTTOM of source to TOP of destination
