@@ -282,8 +282,7 @@ class PipelineTestRunner:
                         self.run_scenario(
                             sid=s_id, pid=pipeline, mid=mapping, domain=domain, l_id=l_id, 
                             v_ext=v_ext, v_static=v_static, 
-                            overrides=overrides, 
-                            virtualization=True
+                            overrides=overrides
                         )
 
                 # Capture pre-load external VRAM
