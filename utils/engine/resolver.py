@@ -4,7 +4,7 @@ import json
 from loguru import logger
 from utils.config import get_project_root, load_config
 from .binder import AutoBinder
-from .contract import MappingPreference
+from .contract import MappingPreference, NodeImplementation
 
 class PipelineResolver:
     def __init__(self, project_root=None, base_dir=None):
@@ -79,10 +79,10 @@ class PipelineResolver:
         
         return caps
 
-    def resolve(self, pipeline_name, strategy_name=None):
+    def resolve(self, pipeline_name, strategy_name=None, overrides=None):
         """
         Binds a pipeline to live models using the AutoBinder.
-        Hierarchy: YAML Override > Persistent Cache > Physics Heuristic.
+        Hierarchy: Manual Overrides > YAML Override > Persistent Cache > Physics Heuristic.
         """
         pipeline = self.load_yaml(pipeline_name)
         live_data = self.get_live_models()
@@ -99,28 +99,24 @@ class PipelineResolver:
             nodes=pipeline['nodes'],
             active_models=live_models,
             preference=preference,
-            loadout_id=loadout_id
+            loadout_id=loadout_id,
+            overrides=overrides
         )
         
         bound_nodes = {}
-        # 1. Populate Entry/Utility Nodes (No model binding needed)
         for node in pipeline['nodes']:
             nid = node['id']
-            if node.get('type') in ['input', 'source', 'sink'] or node.get('role') in ['utility', 'memory']:
-                bound_nodes[nid] = node.copy()
-            else:
-                # Processing Node - Apply Binding
-                bound_model = manifest.get(nid)
-                if not bound_model:
-                    # Critical Error: No model could satisfy requirements
+            # EVERY node now looks into the manifest for its implementation
+            bound_impl = manifest.get(nid)
+            
+            bn = node.copy()
+            bn['binding'] = bound_impl
+            bound_nodes[nid] = bn
+
+            if not bound_impl:
+                # Only log error for processing nodes that REQUIRE a model/logic
+                if node.get('type') == 'processing' and node.get('role') not in ['utility', 'memory']:
                     logger.error(f"❌ ARCH_MISMATCH: No model found for {nid}")
-                    bn = node.copy()
-                    bn['binding'] = None
-                    bound_nodes[nid] = bn
-                else:
-                    bn = node.copy()
-                    bn['binding'] = bound_model
-                    bound_nodes[nid] = bn
 
         logger.info(f"✅ Resolved '{pipeline_name}' via AutoBinder [Pref: {pref_str}]")
         return bound_nodes
@@ -132,7 +128,6 @@ class PipelineResolver:
         """
         report = {"runnable": True, "errors": [], "map": {}}
         
-        # 1. Load the raw pipeline first to populate the map even if resolution fails
         try:
             raw_pipeline = self.load_yaml(pipeline_name)
             for node in raw_pipeline['nodes']:
@@ -140,7 +135,6 @@ class PipelineResolver:
         except Exception as e:
             return {"runnable": False, "errors": [f"Pipeline Load Error: {e}"], "map": {}}
 
-        # 2. Try to Resolve the graph (Detects ARCH_MISMATCH or strategy errors)
         try:
             bound_graph = self.resolve(pipeline_name, strategy_name)
         except Exception as e:
@@ -148,7 +142,6 @@ class PipelineResolver:
             report["errors"].append(f"Resolution Error: {e}")
             return report
 
-        # 3. Check Live Health for all bound ports
         if external_health:
             health = external_health
         else:
@@ -156,29 +149,30 @@ class PipelineResolver:
             health = get_system_health()
         
         for nid, node in bound_graph.items():
-            role = node.get('role', '').lower()
-            if node['type'] == 'processing' and role not in ['utility', 'memory']:
-                binding = node.get('binding')
-                if not binding:
+            binding = node.get('binding')
+            if not binding:
+                if node['type'] == 'processing':
                     report["runnable"] = False
                     report["errors"].append(f"Node '{nid}' is unbound.")
-                    continue
-                
-                port = binding.get('port')
+                report["map"][nid] = {"status": "UNBOUND", "model": "None"}
+                continue
+            
+            # If implementation has a port (Model), check health
+            # implementation.config['binding'] stores the model data
+            m_data = binding.config.get('binding', {})
+            port = m_data.get('port')
+            
+            if port:
                 svc_info = health.get(port, {"status": "OFF", "info": None})
-                
                 report["map"][nid] = {
                     "status": svc_info['status'],
-                    "model": binding['id'],
+                    "model": binding.id,
                     "port": port
                 }
-                
                 if svc_info['status'] != "ON":
                     report["runnable"] = False
-                    report["errors"].append(f"Service for '{nid}' ({binding['id']} on port {port}) is {svc_info['status']}.")
-            
+                    report["errors"].append(f"Service for '{nid}' ({binding.id} on port {port}) is {svc_info['status']}.")
             else:
-                # Utility, Memory, or Sink nodes
-                report["map"][nid] = {"status": "LOCAL", "role": role or node['type']}
+                report["map"][nid] = {"status": "LOCAL", "model": binding.id}
 
         return report

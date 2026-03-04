@@ -20,6 +20,7 @@ from test_utils import (
     init_session, RichDashboard, AccumulatingReporter,
     save_artifact, trigger_report_generation, run_test_lifecycle
 )
+from test_utils.mocks import get_mock_implementation
 from utils import log_msg
 from utils.engine import PipelineResolver, PipelineExecutor
 
@@ -45,7 +46,7 @@ class PipelineTestRunner:
                 return yaml.safe_load(f)
         return {}
 
-    def run_scenario(self, sid, pid, mid, domain, l_id, v_ext=0.0, v_static=0.0):
+    def run_scenario(self, sid, pid, mid, domain, l_id, v_ext=0.0, v_static=0.0, overrides=None):
         # 3. Execution (Multi-Input & Multi-Modal Support)
         inputs = {}
         scen_def = self.integration_scenarios.get(sid)
@@ -76,7 +77,7 @@ class PipelineTestRunner:
         import asyncio
         try:
             # Use the instance resolver (self.resolver) instead of creating a new one
-            bound_graph = self.resolver.resolve(pid, mid)
+            bound_graph = self.resolver.resolve(pid, mid, overrides=overrides)
             success = asyncio.run(self.executor.run(bound_graph, inputs))
         except Exception as e:
             self.log(f"Resolution/Execution Error: {e}", level="error")
@@ -209,8 +210,17 @@ class PipelineTestRunner:
 
                 def execution_wrapper():
                     # At this point v_static has been assigned by run_test_lifecycle
+                    
+                    # Resolve mapping to implementations if provided
+                    overrides = {}
+                    if mapping:
+                        for nid, m_def in mapping.items():
+                            if isinstance(m_def, str) and m_def.startswith("mock:"):
+                                role = "llm" if "llm" in nid else ("stt" if "stt" in nid else "unknown")
+                                overrides[nid] = get_mock_implementation(m_def, role, mock_text=m_def.replace("mock:", ""))
+                    
                     for s_id in scenarios:
-                        self.run_scenario(s_id, pipeline, mapping, domain, l_id, v_ext=v_ext, v_static=v_static)
+                        self.run_scenario(s_id, pipeline, mapping, domain, l_id, v_ext=v_ext, v_static=v_static, overrides=overrides)
 
                 # Capture pre-load external VRAM
                 v_ext = utils.get_gpu_vram_usage()

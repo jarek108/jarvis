@@ -1,0 +1,33 @@
+id: unified_abstraction_check
+description: "Verifies the new Unified Node Abstraction, including fixed bindings and mock injection."
+
+nodes:
+  - id: input_mic
+    display_name: "🎙 MIC"
+    type: source
+    implementation: "PushToTalkMic" # FIXED BINDING (Bypasses AutoBinder discovery)
+    capabilities: [audio_out]
+
+  - id: proc_stt
+    display_name: "STT"
+    type: processing
+    role: stt
+    capabilities: [audio_in, text_out]
+    inputs: 
+      - input_mic
+
+  - id: proc_llm
+    display_name: "LLM"
+    type: processing
+    role: llm
+    capabilities: [text_in, text_out]
+    inputs: 
+      - proc_stt
+
+  - id: output_speaker
+    display_name: "🔊 SPEAKER"
+    type: sink
+    implementation: "SystemSpeaker" # FIXED BINDING
+    capabilities: [audio_in]
+    inputs:
+      - proc_llm

@@ -10,4 +10,9 @@ from ui import JarvisApp
 
 if __name__ == "__main__":
     app = JarvisApp()
-    app.mainloop()
+    try:
+        app.mainloop()
+    except KeyboardInterrupt:
+        print("\n[Client] Exiting gracefully due to KeyboardInterrupt...")
+        app.destroy()
+        sys.exit(0)

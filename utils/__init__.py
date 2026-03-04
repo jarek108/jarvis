@@ -9,8 +9,8 @@ from .infra import (
 from .edge import (
     get_vram_estimation, get_ollama_vram, get_loaded_ollama_models,
     get_gpu_vram_usage, get_gpu_total_vram, check_ollama_offload,
-    AudioSensor, ScreenSensor, ClipboardSensor,
-    AudioActuator, KeyboardActuator, NotificationActuator
+    PushToTalkMic, WavFileReader, ScreenSensor, ClipboardSensor,
+    SystemSpeaker, KeyboardActuator, NotificationActuator
 )
 from .engine import PipelineResolver, PipelineExecutor, chunk_by_delimiter
 from .llm import check_and_pull_model, warmup_llm, is_model_local

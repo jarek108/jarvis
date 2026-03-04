@@ -2,18 +2,21 @@ import os
 import yaml
 import json
 from loguru import logger
-from .contract import Capability, MappingPreference
+from .contract import Capability, MappingPreference, NodeImplementation, IOType
+from .registry import ImplementationRegistry
+from .implementations import execute_openai_chat, execute_whisper_stt, execute_chatterbox_tts
 from utils.config import get_project_root, safe_filename
 
 class AutoBinder:
     """
-    Intelligent Model Binder for Jarvis Pipelines.
-    Matches logical nodes to physical models based on capabilities and physics.
+    Intelligent Model and Edge Binder for Jarvis Pipelines.
+    Matches logical nodes to physical implementations (local functions or remote models).
     """
     def __init__(self, project_root=None):
         self.project_root = project_root if project_root else get_project_root()
         self.cal_dir = os.path.join(self.project_root, "system_config", "model_calibrations")
         self.cache_path = os.path.join(self.project_root, ".cache", "pipeline_bindings.json")
+        self.registry = ImplementationRegistry()
 
     def _get_model_physics(self, model_id, engine):
         """Loads calibration data for a model to get its 'weight' (VRAM/Params)."""
@@ -24,29 +27,36 @@ class AutoBinder:
                 return yaml.safe_load(f)
         return {}
 
-    def find_candidates(self, required_caps, active_models):
-        """Returns models that satisfy all required capabilities."""
-        candidates = []
-        for model in active_models:
-            model_caps = model.get('capabilities', [])
-            # Convert strings to set for intersection
-            if all(cap in model_caps for cap in required_caps):
-                candidates.append(model)
-        return candidates
+    def _model_to_implementation(self, m: dict) -> NodeImplementation:
+        """Wraps a loadout model into a standard NodeImplementation object."""
+        engine = m.get('engine', 'unknown')
+        caps = [Capability(c) if isinstance(c, str) else c for c in m.get('capabilities', [])]
+        
+        # Determine protocol-specific execute_fn
+        if engine in ['ollama', 'vllm']:
+            fn = execute_openai_chat
+            it, ot = [IOType.TEXT_STREAM], [IOType.TEXT_STREAM, IOType.TEXT_FINAL]
+        elif engine == 'native':
+            if any(c in [Capability.STT, "stt"] for c in caps):
+                fn = execute_whisper_stt
+                it, ot = [IOType.AUDIO_FILE], [IOType.TEXT_FINAL]
+            elif any(c in [Capability.TTS, "tts"] for c in caps):
+                fn = execute_chatterbox_tts
+                it, ot = [IOType.TEXT_FINAL], [IOType.AUDIO_FILE]
+            else:
+                fn = None; it = ot = []
+        else:
+            fn = None; it = ot = []
 
-    def sort_by_physics(self, candidates, preference=MappingPreference.PREFER_BIG):
-        """Sorts candidates based on their VRAM footprint or param count."""
-        def get_weight(m):
-            physics = self._get_model_physics(m['id'], m['engine'])
-            # Priority 1: base_vram_gb
-            # Priority 2: source_tokens (proxy for model size)
-            weight = physics.get('constants', {}).get('base_vram_gb', 0.0)
-            if weight == 0:
-                weight = physics.get('metadata', {}).get('source_tokens', 0) / 1e9 # B params proxy
-            return weight
-
-        reverse = (preference == MappingPreference.PREFER_BIG)
-        return sorted(candidates, key=get_weight, reverse=reverse)
+        return NodeImplementation(
+            id=m['id'],
+            input_types=it,
+            output_types=ot,
+            execute_fn=fn,
+            config={"binding": m},
+            capabilities=caps,
+            physics_weight=self._get_model_physics(m['id'], engine).get('constants', {}).get('base_vram_gb', 0.0)
+        )
 
     def get_persisted_binding(self, pipeline_id, loadout_id, node_id):
         """Checks the local cache for a manual override."""
@@ -58,67 +68,64 @@ class AutoBinder:
                 return data.get(key, {}).get(node_id)
         except: return None
 
-    def persist_binding(self, pipeline_id, loadout_id, node_id, model_uri):
-        """Saves a manual override to the local cache."""
-        os.makedirs(os.path.dirname(self.cache_path), exist_ok=True)
-        data = {}
-        if os.path.exists(self.cache_path):
-            try:
-                with open(self.cache_path, "r") as f: data = json.load(f)
-            except: pass
-        
-        key = f"{pipeline_id}::{loadout_id}"
-        if key not in data: data[key] = {}
-        data[key][node_id] = model_uri
-        
-        with open(self.cache_path, "w") as f:
-            json.dump(data, f, indent=2)
-
-    def generate_manifest(self, pipeline_id, nodes, active_models, preference=MappingPreference.PREFER_BIG, loadout_id="unknown"):
+    def generate_manifest(self, pipeline_id, nodes, active_models, preference=MappingPreference.PREFER_BIG, loadout_id="unknown", overrides=None):
         """
         Creates a binding manifest for a list of nodes.
-        Hierarchy: YAML Override > Cache Override > Physics Heuristic.
+        Hierarchy: Manual Overrides > Fixed YAML Binding > Cache Override > Heuristic Discovery.
         """
         manifest = {}
         
+        # 1. Prepare candidate implementations (Static + Dynamic Models)
+        all_candidates = self.registry.get_all().copy()
+        for m in active_models:
+            all_candidates.append(self._model_to_implementation(m))
+
         for node in nodes:
             nid = node['id']
-            if node.get('type') in ['input', 'source', 'sink'] or node.get('role') in ['utility', 'memory']:
+            
+            # 0. Strategy 0: Manual Overrides (Injection for testing)
+            if overrides and nid in overrides:
+                manifest[nid] = overrides[nid]
                 continue
 
-            required_caps = node.get('capabilities', [])
-            if not required_caps: continue
-
-            # 1. Check YAML Override (if we decide to put it there)
-            yaml_override = node.get('model_hint') # Placeholder name
+            fixed_impl_id = node.get('implementation')
+            required_caps = [Capability(c) if isinstance(c, str) else c for c in node.get('capabilities', [])]
             
-            # 2. Check Persisted Cache
+            # A. Strategy 1: Fixed Binding (Direct implementation ID in YAML)
+            if fixed_impl_id:
+                bound = next((c for c in all_candidates if c.id == fixed_impl_id), None)
+                if bound:
+                    manifest[nid] = bound
+                    continue
+                else:
+                    logger.warning(f"Fixed implementation '{fixed_impl_id}' not found for node {nid}")
+
+            # B. Strategy 2: Persistent Cache Override
             cache_override = self.get_persisted_binding(pipeline_id, loadout_id, nid)
-            
-            # 3. Find candidates
-            candidates = self.find_candidates(required_caps, active_models)
-            
-            if not candidates:
-                logger.warning(f"No candidates found for node {nid} with caps {required_caps}")
-                manifest[nid] = None
-                continue
-
-            # Resolution logic
-            bound_model = None
-            
-            # Try cache match
             if cache_override:
-                bound_model = next((m for m in candidates if m['id'] == cache_override), None)
-            
-            # Try YAML hint match
-            if not bound_model and yaml_override:
-                bound_model = next((m for m in candidates if m['id'] == yaml_override), None)
+                bound = next((c for c in all_candidates if c.id == cache_override), None)
+                if bound:
+                    manifest[nid] = bound
+                    continue
 
-            # Fallback to Physics
-            if not bound_model:
-                sorted_candidates = self.sort_by_physics(candidates, preference)
-                bound_model = sorted_candidates[0]
+            # C. Strategy 3: Discovery based on Capabilities
+            if required_caps:
+                candidates = [
+                    c for c in all_candidates 
+                    if all(rc in c.capabilities for rc in required_caps)
+                ]
+                
+                if not candidates:
+                    logger.warning(f"No implementations satisfy capabilities {required_caps} for node {nid}")
+                    manifest[nid] = None
+                    continue
 
-            manifest[nid] = bound_model
+                # Sort by physics if multiple candidates exist
+                reverse = (preference == MappingPreference.PREFER_BIG)
+                candidates.sort(key=lambda x: x.physics_weight, reverse=reverse)
+                manifest[nid] = candidates[0]
+            else:
+                # No capabilities and no fixed binding? Node is likely a passthrough or utility
+                manifest[nid] = None
 
         return manifest

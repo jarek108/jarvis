@@ -6,7 +6,6 @@ import aiohttp
 from loguru import logger
 
 import utils
-from ..pipeline_adapters import get_adapter
 
 class PipelineExecutor:
     def __init__(self, project_root, dashboard=None, session_dir=None):
@@ -31,13 +30,15 @@ class PipelineExecutor:
         if self.dashboard: self.dashboard.log(msg)
 
     def record_packet(self, node_id, packet, direction="OUT"):
-        """Records packet envelope to the trace without parsing content."""
+        """Records packet envelope to the trace, including content for text modalities."""
+        if not packet: return
         self.trace.append({
             "t": time.perf_counter(),
             "node": node_id,
             "dir": direction,
             "type": packet.get("type"),
             "seq": packet.get("seq", 0),
+            "content": packet.get("content") if packet.get("type", "").startswith("text") else None,
             "data_len": len(str(packet.get("content", ""))) if packet.get("content") else 0
         })
 
@@ -66,23 +67,26 @@ class PipelineExecutor:
         return LoggingQueue(output_queue, self.record_packet, node_id, self.results)
 
     async def execute_node(self, node_id, node, input_queues, output_queues, session):
-        """Agnostic node runner using the Adapter Registry."""
+        """Agnostic node runner using the NodeImplementation system."""
         start_t = time.perf_counter()
         self.trace.append({"t": start_t, "node": node_id, "type": "START"})
         
         try:
-            # 1. Setup Data Flow (Multi-Input Support)
+            # 1. Setup Data Flow
             in_streams = {
                 nid: self._proxy_stream(node_id, q) 
                 for nid, q in input_queues.items()
             }
             out_q_wrapped = await self._capture_stream(node_id, output_queues[node_id])
 
-            # 2. Get Specialized Adapter
-            role = node.get('role', 'llm')
-            adapter = get_adapter(role, self.project_root, session_dir=self.session_dir)
-            
-            self.log(f"  -> {node_id} (Running {role} adapter)")
+            # 2. Extract Implementation (Binding)
+            implementation = node.get('binding')
+            if not implementation:
+                # If node has no binding, it might be an input provider or a passthrough
+                self.log(f"  -> {node_id} (Skipping: No binding)")
+                return
+
+            self.log(f"  -> {node_id} (Running {implementation.id})")
 
             # 3. Track VRAM Peak
             try:
@@ -90,8 +94,16 @@ class PipelineExecutor:
                 if v > self.vram_peak: self.vram_peak = v
             except: pass
 
-            # 4. Execute
-            await adapter.run(node_id, node, in_streams, out_q_wrapped, session)
+            # 4. Merge Config & Execute
+            exec_config = node.copy()
+            exec_config.update(implementation.config)
+            exec_config['scenario_inputs'] = node.get('scenario_inputs', {})
+            exec_config['session_dir'] = self.session_dir
+
+            if implementation.execute_fn:
+                await implementation.execute_fn(node_id, in_streams, exec_config, out_q_wrapped, session)
+            else:
+                self.log(f"⚠️ No execute_fn for {node_id}")
 
             self.timings[node_id] = {
                 "start": start_t, 
@@ -102,54 +114,32 @@ class PipelineExecutor:
             
         except Exception as e:
             self.log(f"💥 {node_id} failed: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
             self.trace.append({"t": time.perf_counter(), "node": node_id, "type": "ERROR", "msg": str(e)})
         finally:
             await output_queues[node_id].put(None)
 
     async def run(self, bound_graph, scenario_inputs):
-        """Topological async execution loop."""
+        """Topological async execution loop. Symmetrical for all node types."""
         self.results, self.timings, self.trace, self.vram_peak = {}, {}, [], 0.0
         queues = {nid: asyncio.Queue() for nid in bound_graph}
         
-        async with aiohttp.ClientSession() as session:
-            # 1. Initialize Source/Input Nodes
-            for nid, node in bound_graph.items():
-                if node['type'] in ['input', 'source']:
-                    val = scenario_inputs.get(nid) or node.get('path')
-                    
-                    # Resolve input path (e.g. pipelines/prompts/sts_persona.txt)
-                    if val and isinstance(val, str):
-                        # Try relative to project root first (standard for prompts/tests data)
-                        p_abs = os.path.join(self.project_root, val)
-                        if not os.path.exists(p_abs):
-                            # Maybe it was moved to system_config/pipelines/prompts?
-                            if val.startswith("pipelines/prompts/"):
-                                p_abs = os.path.join(self.project_root, "system_config", val)
-                        
-                        if os.path.exists(p_abs):
-                            # Provision buffer in session_dir
-                            bp = self.resolve_path(node.get('buffer'), f"{nid}.tmp")
-                            os.makedirs(os.path.dirname(bp), exist_ok=True)
-                            shutil.copy(p_abs, bp)
-                            val = bp
-                    
-                    self.results[nid] = val
-                    p = {"type": "input_source", "content": val, "ts": time.perf_counter()}
-                    self.record_packet(nid, p, "OUT")
-                    await queues[nid].put(p); await queues[nid].put(None)
+        # Inject scenario inputs into node configs
+        for nid, node in bound_graph.items():
+            node['scenario_inputs'] = scenario_inputs
 
-            # 2. Run Processing and Sink Nodes Concurrently
+        async with aiohttp.ClientSession() as session:
             tasks = []
             for nid, node in bound_graph.items():
-                if node['type'] in ['processing', 'sink']:
-                    # Build input queue list, explicitly including system_prompt if defined
-                    input_ids = node.get('inputs', []).copy()
-                    sys_prompt_id = node.get('system_prompt')
-                    if sys_prompt_id and sys_prompt_id not in input_ids:
-                        input_ids.append(sys_prompt_id)
-                        
-                    in_qs = {d: queues[d] for d in input_ids if d in queues}
-                    tasks.append(self.execute_node(nid, node, in_qs, queues, session))
+                # Build input queue list
+                input_ids = node.get('inputs', []).copy()
+                sys_prompt_id = node.get('system_prompt')
+                if sys_prompt_id and sys_prompt_id not in input_ids:
+                    input_ids.append(sys_prompt_id)
+                    
+                in_qs = {d: queues[d] for d in input_ids if d in queues}
+                tasks.append(self.execute_node(nid, node, in_qs, queues, session))
 
             await asyncio.gather(*tasks)
             

@@ -15,7 +15,7 @@ if script_dir not in sys.path:
 import utils
 from utils import load_config, get_system_health
 from utils.engine import PipelineResolver, PipelineExecutor
-from utils.edge import AudioSensor
+# from utils.edge import AudioSensor # Removed as Edge Registry handles sensors
 from manage_loadout import apply_loadout, kill_loadout, restart_service, kill_service
 
 CHECKPOINT_PATH = os.path.join(script_dir, ".cache", "checkpoint-client.json")
@@ -57,8 +57,8 @@ class JarvisController:
         self.resolver = PipelineResolver(self.project_root)
         self.executor = PipelineExecutor(self.project_root, session_dir=self.session_dir)
         
-        # Edge Hardware
-        self.audio_sensor = AudioSensor()
+        # Edge Hardware (bound via registry, so no need to instantiate physical sensor here)
+        self.ptt_signal = threading.Event()
         
         threading.Thread(target=self._status_polling_loop, daemon=True).start()
 
@@ -172,27 +172,31 @@ class JarvisController:
             self.ui_queue.put({"type": "log", "msg": f"❌ CANNOT RUN: {', '.join(self.runnability['errors'])}", "tag": "system"})
             return
         self.is_recording = True
+        self.ptt_signal.set()
         self.ui_queue.put({"type": "state", "recording": True})
+        
+        # Trigger pipeline run immediately on press
+        # The Source node will wait for the ptt_signal logic
+        threading.Thread(target=self._run_pipeline_local, daemon=True).start()
 
     def stop_recording(self):
         if not self.is_recording: return
         self.is_recording = False
+        self.ptt_signal.clear()
         self.ui_queue.put({"type": "state", "recording": False})
-        audio_data = self.audio_sensor.capture_snapshot(duration=3.0)
-        threading.Thread(target=self._run_pipeline_local, args=(audio_data,), daemon=True).start()
 
-    def _run_pipeline_local(self, audio_data):
-        temp_audio = os.path.join(self.session_dir, "user_voice.wav")
-        os.makedirs(os.path.dirname(temp_audio), exist_ok=True)
-        with open(temp_audio, "wb") as f: f.write(audio_data)
-
+    def _run_pipeline_local(self):
         try:
-            bound_graph = self.resolver.resolve(self.current_pipeline, self.current_strategy)
+            # ACB: No strategy name needed anymore
+            bound_graph = self.resolver.resolve(self.current_pipeline)
         except Exception as e:
             self.ui_queue.put({"type": "log", "msg": f"Resolution Error: {e}", "tag": "system"})
             return
 
-        inputs = {"input_mic": temp_audio}
+        # Inject UI Signals into scenario inputs
+        inputs = {
+            "ptt_active": self.ptt_signal
+        }
 
         async def run_and_monitor():
             exec_task = asyncio.create_task(self.executor.run(bound_graph, inputs))
