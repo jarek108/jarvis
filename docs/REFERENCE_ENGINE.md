@@ -44,6 +44,10 @@ The unified test runner uses orthogonal flags to control component realism.
 ### Default Behavior (No Flags)
 By default, the runner uses **Real Models** + **Production Hardware Drivers**, but drives them using a **Virtualized Environment** (simulators and synchronized signals).
 
+### Safety Guardrails
+- **Global Scenario Timeout**: Scenarios are capped at **120 seconds**. If a pipeline hangs (e.g., waiting for data that never arrives), the runner will force-close it to continue the suite.
+- **Node-level PTT Timeout**: In test mode, hardware input nodes (like Microphone) will only wait **15 seconds** for a trigger signal before giving up.
+
 ---
 
 ## 3. Pipeline YAML Schema
