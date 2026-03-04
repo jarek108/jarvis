@@ -5,6 +5,7 @@ import time
 import argparse
 import threading
 import json
+import asyncio
 from loguru import logger
 from contextlib import redirect_stdout
 
@@ -21,8 +22,34 @@ from test_utils import (
     save_artifact, trigger_report_generation, run_test_lifecycle
 )
 from test_utils.mocks import get_mock_implementation
+from test_utils.env_simulators import AudioFeeder, ScreenFeeder, KeyboardSandbox
 from utils import log_msg
 from utils.engine import PipelineResolver, PipelineExecutor
+
+class E2EOrchestrator:
+    """Manages virtual environment synchronization for hardware E2E tests."""
+    def __init__(self, project_root):
+        self.project_root = project_root
+        self.audio_feeder = AudioFeeder()
+        self.screen_feeder = ScreenFeeder()
+        self.kb_sandbox = KeyboardSandbox()
+
+    async def execute_sequence(self, sequence, inputs):
+        """Executes a list of virtual environment actions."""
+        for step in sequence:
+            action = step.get('action')
+            if action == 'play_audio':
+                path = os.path.join(self.project_root, step['file'])
+                self.audio_feeder.play(path)
+            elif action == 'set_signal':
+                name, val = step['name'], step['value']
+                if name == 'ptt_active':
+                    sig = inputs.get('ptt_active')
+                    if sig:
+                        if val: sig.set()
+                        else: sig.clear()
+            elif action == 'wait':
+                await asyncio.sleep(step['ms'] / 1000.0)
 
 class PipelineTestRunner:
     def __init__(self, plan_path, dashboard=None, session_dir=None, reporter=None):
@@ -38,15 +65,21 @@ class PipelineTestRunner:
         self.dashboard = dashboard
         self.session_dir = session_dir
         self.reporter = reporter
+        self.e2e_orchestrator = E2EOrchestrator(self.project_root)
 
     def load_scenarios(self):
-        path = os.path.join(self.project_root, "tests", "scenarios", "core.yaml")
-        if os.path.exists(path):
-            with open(path, "r", encoding="utf-8") as f:
-                return yaml.safe_load(f)
-        return {}
+        scenarios = {}
+        paths = [
+            os.path.join(self.project_root, "tests", "scenarios", "core.yaml"),
+            os.path.join(self.project_root, "tests", "scenarios", "e2e_hardware.yaml")
+        ]
+        for path in paths:
+            if os.path.exists(path):
+                with open(path, "r", encoding="utf-8") as f:
+                    scenarios.update(yaml.safe_load(f) or {})
+        return scenarios
 
-    def run_scenario(self, sid, pid, mid, domain, l_id, v_ext=0.0, v_static=0.0, overrides=None):
+    def run_scenario(self, sid, pid, mid, domain, l_id, v_ext=0.0, v_static=0.0, overrides=None, e2e_mode=False):
         # 3. Execution (Multi-Input & Multi-Modal Support)
         inputs = {}
         scen_def = self.integration_scenarios.get(sid)
@@ -68,19 +101,32 @@ class PipelineTestRunner:
                     if pid == 'atomic_tts': inputs['input_text'] = content
                     elif pid == 'atomic_llm' or pid == 'atomic_vlm': inputs['input_instruction'] = content
                     else: inputs['input_instruction'] = content
-                    if media: inputs['input_media'] = media # ROUTING FIX: Ensure media reaches VLM
+                    if media: inputs['input_media'] = media
                 elif content: 
                     inputs['input_instruction'] = content
                     if media: inputs['input_media'] = media
 
+        # Special Handling for E2E Signal Injection
+        if e2e_mode:
+            inputs['ptt_active'] = threading.Event()
+
         start_time = time.perf_counter()
-        import asyncio
         try:
             # Use the instance resolver (self.resolver) instead of creating a new one
             bound_graph = self.resolver.resolve(pid, mid, overrides=overrides)
-            success = asyncio.run(self.executor.run(bound_graph, inputs))
+            
+            async def e2e_wrapper():
+                # Launch sequence in background if present
+                seq = scen_def.get('sequence')
+                if e2e_mode and seq:
+                    asyncio.create_task(self.e2e_orchestrator.execute_sequence(seq, inputs))
+                return await self.executor.run(bound_graph, inputs)
+
+            success = asyncio.run(e2e_wrapper())
         except Exception as e:
             self.log(f"Resolution/Execution Error: {e}", level="error")
+            import traceback
+            logger.error(traceback.format_exc())
             success = False
             # Create dummy metrics for failed resolution
             node_metrics = {"SYSTEM": {"error": str(e)}}
@@ -220,7 +266,7 @@ class PipelineTestRunner:
                                 overrides[nid] = get_mock_implementation(m_def, role, mock_text=m_def.replace("mock:", ""))
                     
                     for s_id in scenarios:
-                        self.run_scenario(s_id, pipeline, mapping, domain, l_id, v_ext=v_ext, v_static=v_static, overrides=overrides)
+                        self.run_scenario(s_id, pipeline, mapping, domain, l_id, v_ext=v_ext, v_static=v_static, overrides=overrides, e2e_mode=args.e2e)
 
                 # Capture pre-load external VRAM
                 v_ext = utils.get_gpu_vram_usage()
@@ -258,6 +304,7 @@ def main():
     parser = argparse.ArgumentParser(description="Jarvis Unified Flow Runner")
     parser.add_argument("plan", type=str)
     parser.add_argument("--plumbing", action="store_true")
+    parser.add_argument("--e2e", action="store_true")
     args = parser.parse_args()
 
     plan_path = utils.resolve_path(args.plan)

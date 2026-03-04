@@ -7,32 +7,23 @@ Jarvis has transitioned from a hardcoded, sequential orchestration model to a **
 
 ### 1. The Modality-Blind Executor
 The `PipelineExecutor` acts as a pure "Traffic Cop" (Dispatcher). It is completely unaware of the data types (audio, tokens, video) passing through it.
+*   **Agnostic Execution**: It does not use specialized classes. It simply retrieves a `NodeImplementation` from the registry and calls its `execute_fn`.
 *   **Transport**: Uses `asyncio.Queue` for non-blocking handoffs between nodes.
-*   **Standard Packet Protocol**: All data is wrapped in a `PipelinePacket`:
-    ```json
-    {
-      "type": "text_token",
-      "content": "Hello",
-      "seq": 0,
-      "ts": 12345.678,
-      "metadata": {}
-    }
-    ```
-*   **Flight Recorder (Trace)**: Records every packet's metadata (envelope) into a `trace.json` artifact, enabling post-hoc performance analysis.
+*   **Flight Recorder (Trace)**: Records every packet's metadata (envelope) and content (for text) into a `trace.json` artifact.
 
-### 2. Node Adapter Registry
-Specialized logic is isolated in **Adapters**. The Executor retrieves the appropriate adapter via the `get_adapter(role)` factory.
-*   **LLM Adapter**: Manages streaming from Ollama/vLLM and performs context templating.
-*   **STT/TTS Adapters**: Manage binary/text conversion and reactive speech synthesis.
-*   **Utility Adapters**: Handle logical transformations (e.g., text chunking) within the graph.
+### 2. Unified Implementation Registry
+All logic is centralized in the `ImplementationRegistry`. Instead of deep OOP hierarchies, the system uses **Functional Composition**:
+*   **Static Implementations**: Hardcoded logic for local drivers (Mic, Speaker, Keyboard) and utility ops (Chunkers, Memory).
+*   **Dynamic Implementations**: Generated at runtime when a Loadout is applied, wrapping remote models (Ollama, vLLM) in a standard `execute_fn`.
+*   **Data Contracts**: Every implementation declares `input_types` and `output_types` (using the `IOType` enum) for strict validation.
 
 ### 3. Reactive Data Flow
-Nodes can begin processing data as soon as their upstream dependency yields its first packet.
+Nodes begin processing as soon as their upstream dependency yields its first packet.
 *   **Streaming Handoff**: `LLM (Token Stream) -> Logic Chunker (Sentence Stream) -> TTS (Audio Stream)`.
-*   **Concurrent Execution**: All nodes in a graph run as parallel async tasks, waiting only for data to appear in their respective input queues.
+*   **Concurrent Execution**: All nodes run as parallel async tasks, waiting for data in their input queues.
 
 ### 4. Robust Context Templating
-Adapters receive a dictionary of all upstream input streams. The `LLMAdapter` uses a `context_layout` to merge these streams into a final prompt:
+Processing nodes receive a dictionary of all upstream input streams. The `LLM` implementation uses a `context_layout` to merge these streams into a final prompt:
 ```yaml
 context_layout: |
   SYSTEM: {{ sys_prompt }}
@@ -40,21 +31,14 @@ context_layout: |
 ```
 
 ### 5. Autonomous Capability Binding (ACB)
-The Pipeline Engine does not require manual, hardcoded routing of physical models to logical nodes. Instead, it utilizes the `AutoBinder`:
-1.  **Contract**: Nodes declare required capabilities (e.g., `[text_in, text_out]`).
-2.  **Handshake**: When a Loadout is applied, the `AutoBinder` intersects the node requirements with the active hardware capabilities.
-3.  **Physics-Aware Sorting**: Ambiguities (multiple valid models) are resolved by sorting models based on their param count and VRAM footprint, prioritizing based on the global `mapping_preference`.
-
-## Trace-Based Evaluation
-Metrics are no longer calculated "in-line" during execution. Instead:
-1.  The **Executor** generates a "Dumb Trace" (raw timestamps and packet types).
-2.  **Domain Evaluators** analyze the trace to calculate high-level metrics:
-    *   **STT**: Real-Time Factor (RTF).
-    *   **LLM**: Time to First Token (TTFT), Tokens Per Second (TPS).
-    *   **TTS**: Characters Per Second (CPS).
+The Pipeline Engine utilizes the `AutoBinder` to map logical nodes to physical implementations:
+1.  **Fixed Binding**: YAML can specify an exact `implementation` ID (e.g., `PushToTalkMic`), bypassing discovery.
+2.  **Capability Contract**: Nodes declare required capabilities (e.g., `[text_in, text_out]`).
+3.  **Physics-Aware Sorting**: Ambiguities are resolved by prioritizing models based on VRAM footprint and the global `mapping_preference`.
 
 ## Future Extensibility
 To add a new modality (e.g., **Vision**):
 1.  Define a new node in a YAML pipeline.
-2.  Add a `VisionAdapter` to `utils/pipeline_adapters/`.
-3.  The `PipelineExecutor` will automatically handle its transport and tracing without modification.
+2.  Add an `execute_vision_op` function to `utils/engine/implementations.py`.
+3.  Register it in `utils/engine/registry.py`.
+4.  The `PipelineExecutor` handles transport without modification.

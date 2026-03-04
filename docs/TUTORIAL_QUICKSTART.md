@@ -58,7 +58,23 @@ Jarvis enforces strict hygiene. You **must** set these to avoid polluting C: dri
     *   Release to send.
 
 ## 4. Verification
-Run the fast health check to ensure all subsystems (Docker, Ollama, Audio) are linked.
+
+### Physical Hardware Check
+Ensure your workstation hardware (RTX 5090, Microphone, Screen Capture) is correctly detected.
 ```powershell
-python tests/runner.py tests/plans/ALL_fast.yaml
+python tools/smoke_hardware.py
 ```
+
+### Full Pipeline Check (Plumbing)
+Verify the STT -> LLM -> TTS flow using the fast-check suite (uses mock models to save time).
+```powershell
+python tests/runner.py tests/plans/ALL_fast.yaml --plumbing
+```
+
+---
+
+## What's Next?
+- **[Hardware Testing Guide](HOWTO_HARDWARE_TESTING.md)**: Learn how to run realistic E2E hardware tests using virtual drivers.
+- **[Benchmark Guide](HOWTO_BENCHMARK.md)**: Learn how to generate VRAM and latency reports.
+- **[Model Onboarding](TUTORIAL_MODEL_ONBOARDING.md)**: Learn how to add new models to your loadouts.
+- **[Architecture Deep-Dive](CONCEPT_ARCHITECTURE.md)**: Understand the Unified Node Abstraction.

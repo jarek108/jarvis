@@ -1,0 +1,20 @@
+# Synchronized E2E Hardware Scenarios
+
+e2e_mic_virtual:
+  sequence:
+    - action: wait
+      ms: 500
+    - action: play_audio
+      file: "tests/data/polish.wav"
+    - action: set_signal
+      name: "ptt_active"
+      value: true
+    - action: wait
+      ms: 3000
+    - action: set_signal
+      name: "ptt_active"
+      value: false
+  turns:
+    - expect:
+        - type: "log"
+          content: "Jarvis"

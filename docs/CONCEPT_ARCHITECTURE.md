@@ -9,11 +9,14 @@ Jarvis is a high-performance Speech-to-Speech (STS) and Vision-Language (VLM) as
 - **LLM/VLM Engines**:
     - **Ollama**: Native low-latency inference.
     - **vLLM**: High-throughput Dockerized serving on port `8300`.
-- **STS Pipeline**: The central orchestrator (`PipelineExecutor`) that dynamically manages the STT -> LLM -> TTS flow based on YAML configurations.
+- **STS Pipeline**: The central orchestrator (`PipelineExecutor`) that dynamically manages the STT -> LLM -> TTS flow using the **Unified Node Abstraction** to execute both remote models and local hardware drivers.
 
 ## The Processing Graph
 
-The system architecture treats "Pipelines" (like STS or Visual Sentry) as directed acyclic graphs (DAGs) composed of atomic **Processing Nodes**. Each node performs a specific transformation on data.
+The system architecture treats "Pipelines" as directed acyclic graphs (DAGs) composed of atomic **Node Implementations**. 
+- **Dynamic Nodes**: Automatically bound to models in a Loadout (e.g., STT, LLM).
+- **Fixed Nodes**: Explicitly bound to local hardware or logical scripts (e.g., Microphone, Speaker, Chunkers).
+- **Symmetrical Execution**: Every node, whether a 70B model or a local keyboard script, is executed via the same functional signature.
 
 | Processing Node | Definition | Example Models (Supported/Planned) |
 | :--- | :--- | :--- |

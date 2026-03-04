@@ -28,6 +28,17 @@ except ImportError:
     pyautogui = None
 
 try:
+    import pyperclip
+except ImportError:
+    pyperclip = None
+
+try:
+    import mss
+    import PIL.Image
+except ImportError:
+    mss = PIL = None
+
+try:
     from win10toast import ToastNotifier
 except ImportError:
     ToastNotifier = None
@@ -225,6 +236,37 @@ async def execute_notification(node_id: str, input_streams: dict[str, AsyncGener
             else:
                 logger.info(f"🔔 NOTIFICATION: {content}")
             await output_queue.put(packet)
+
+async def execute_screen_capture(node_id: str, input_streams: dict[str, AsyncGenerator], config: dict[str, Any], output_queue: asyncio.Queue, session: aiohttp.ClientSession):
+    """Captures desktop screenshots."""
+    if not mss or not PIL: return
+    session_dir = config.get('session_dir', '.')
+    out_path = os.path.join(session_dir, f"{node_id}_capture.jpg")
+    os.makedirs(os.path.dirname(out_path), exist_ok=True)
+
+    with mss.mss() as sct:
+        monitor = sct.monitors[1]
+        sct_img = sct.grab(monitor)
+        img = PIL.Image.frombytes("RGB", sct_img.size, sct_img.bgra, "raw", "BGRX")
+        img.save(out_path, format="JPEG", quality=85)
+        
+    await output_queue.put({"type": "image_path", "content": out_path, "ts": time.perf_counter()})
+
+async def execute_keyboard_typer(node_id: str, input_streams: dict[str, AsyncGenerator], config: dict[str, Any], output_queue: asyncio.Queue, session: aiohttp.ClientSession):
+    """Emulates keyboard typing."""
+    if not pyautogui: return
+    for stream in input_streams.values():
+        async for packet in stream:
+            if packet is None: break
+            content = str(packet.get('content', ''))
+            pyautogui.write(content, interval=0.01)
+            await output_queue.put(packet)
+
+async def execute_clipboard_sensor(node_id: str, input_streams: dict[str, AsyncGenerator], config: dict[str, Any], output_queue: asyncio.Queue, session: aiohttp.ClientSession):
+    """Reads local clipboard content."""
+    if not pyperclip: return
+    text = pyperclip.paste()
+    await output_queue.put({"type": "text_final", "content": text, "ts": time.perf_counter()})
 
 # --- UTILITY IMPLEMENTATIONS ---
 

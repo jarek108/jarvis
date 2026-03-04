@@ -42,6 +42,13 @@ class JarvisController:
         self.node_positions = {} # Scoped per pipeline: { pid: { nid: [x,y] } }
         self.load_checkpoint()
         
+        # 3.1 IMMEDIATE SYNC: Clear runtime registry to prevent stale UI
+        # We do this synchronously before polling starts to ensure initial UI is clean
+        try:
+            from manage_loadout import save_runtime_registry
+            save_runtime_registry([], project_root=self.project_root, loadout_id="NONE")
+        except: pass
+
         # Force system state to match UI "NONE" state
         def init_cleanup():
             self.ui_queue.put({"type": "log", "msg": "🧹 Cleaning up previous session state...", "tag": "system"})

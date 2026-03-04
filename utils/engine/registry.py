@@ -3,7 +3,8 @@ from .contract import NodeImplementation, IOType, Capability
 from .implementations import (
     execute_openai_chat, execute_whisper_stt, execute_chatterbox_tts,
     execute_speaker, execute_ptt_mic, execute_notification, execute_chunker,
-    execute_memory_node
+    execute_memory_node, execute_screen_capture, execute_keyboard_typer,
+    execute_clipboard_sensor
 )
 
 class ImplementationRegistry:
@@ -39,6 +40,30 @@ class ImplementationRegistry:
             output_types=[],
             execute_fn=execute_notification,
             capabilities=[Capability.TEXT_IN]
+        ))
+
+        self.register(NodeImplementation(
+            id="ScreenCapture",
+            input_types=[],
+            output_types=[IOType.IMAGE_FILE],
+            execute_fn=execute_screen_capture,
+            capabilities=[Capability.IMAGE_OUT]
+        ))
+
+        self.register(NodeImplementation(
+            id="KeyboardTyper",
+            input_types=[IOType.TEXT_FINAL],
+            output_types=[],
+            execute_fn=execute_keyboard_typer,
+            capabilities=[Capability.TEXT_IN]
+        ))
+
+        self.register(NodeImplementation(
+            id="ClipboardSensor",
+            input_types=[],
+            output_types=[IOType.TEXT_FINAL],
+            execute_fn=execute_clipboard_sensor,
+            capabilities=[Capability.TEXT_OUT]
         ))
 
         # 2. Logical / Utility Implementations
