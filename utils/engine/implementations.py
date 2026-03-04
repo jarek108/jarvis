@@ -193,19 +193,31 @@ async def execute_ptt_mic(node_id: str, input_streams: dict[str, AsyncGenerator]
     """Push-to-Talk microphone implementation."""
     if not pyaudio: return
     scenario_inputs = config.get('scenario_inputs', {})
+    
+    # 0. Check for direct file override FIRST
+    # This allows scenarios with 'send_binary' to bypass the PTT wait
+    path = scenario_inputs.get(node_id) or scenario_inputs.get('input_mic')
+    if path and os.path.exists(path):
+        await output_queue.put({"type": "audio_path", "content": path, "ts": time.perf_counter()})
+        return
+
     ptt_signal = scenario_inputs.get('ptt_active')
     session_dir = config.get('session_dir', '.')
     
     if not ptt_signal:
-        # If no signal, attempt fallback to direct file if provided in scenario_inputs
-        path = scenario_inputs.get(node_id)
-        if path:
-            await output_queue.put({"type": "audio_path", "content": path, "ts": time.perf_counter()})
-            return
         raise ValueError(f"{node_id} requires a 'ptt_active' signal or direct file override.")
 
     # 1. Wait for PTT
-    while not ptt_signal.is_set(): await asyncio.sleep(0.05)
+    wait_start = time.perf_counter()
+    # If in a test (detected via scenario_inputs), use a shorter timeout
+    is_test = 'input_mic' in scenario_inputs or 'input_text' in scenario_inputs
+    timeout = config.get('wait_timeout', 15.0 if is_test else 300.0) 
+    
+    while not ptt_signal.is_set():
+        if time.perf_counter() - wait_start > timeout:
+            logger.warning(f"[{node_id}] PTT wait timed out after {timeout}s")
+            return # Exit cleanly, allowing downstream nodes to close
+        await asyncio.sleep(0.05)
     
     # 2. Record
     pa = pyaudio.PyAudio()

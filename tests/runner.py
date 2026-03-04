@@ -119,7 +119,8 @@ class PipelineTestRunner:
                 seq = scen_def.get('sequence')
                 if seq:
                     asyncio.create_task(self.e2e_orchestrator.execute_sequence(seq, inputs))
-                return await self.executor.run(bound_graph, inputs)
+                # Global Scenario Timeout (120s) to prevent hangs
+                return await asyncio.wait_for(self.executor.run(bound_graph, inputs), timeout=120.0)
 
             success = asyncio.run(e2e_wrapper())
         except Exception as e:
