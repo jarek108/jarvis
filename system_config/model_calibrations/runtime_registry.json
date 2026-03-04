@@ -11,9 +11,15 @@
       "engine": "native",
       "port": 8100,
       "params": {}
+    },
+    {
+      "id": "chatterbox-turbo",
+      "engine": "native",
+      "port": 8202,
+      "params": {}
     }
   ],
   "loadout_id": "NONE",
-  "system_external_vram": 5.2978515625,
-  "last_updated": "2026-03-04 12:52:14"
+  "system_external_vram": 5.015625,
+  "last_updated": "2026-03-04 14:06:49"
 }

@@ -6,36 +6,36 @@ settings:
   force_download: true
 
 execution:
-  # STT: Across all models and languages
-  - domain: "stt"
-    pipeline: "atomic_stt"
-    loadouts:
-      - ["native://faster-whisper-tiny"]
-      - ["native://faster-whisper-base"]
-    scenarios: [stt_polish_std, stt_french_std, stt_chinese_std, stt_english_std]
+  # # STT: Across all models and languages
+  # - domain: "stt"
+  #   pipeline: "atomic_stt"
+  #   loadouts:
+  #     - ["native://faster-whisper-tiny"]
+  #     - ["native://faster-whisper-base"]
+  #   scenarios: [stt_polish_std, stt_french_std, stt_chinese_std, stt_english_std]
 
-  # LLM: Quality & Speed variations
-  - domain: "llm"
-    pipeline: "atomic_llm"
-    loadouts:
-      - ["ollama://qwen2.5:0.5b"]
-      - ["ollama://gpt-oss-20b"]
-    scenarios: [llm_basic_chat, llm_polish_explicit, llm_short2long, llm_long_story]
+  # # LLM: Quality & Speed variations
+  # - domain: "llm"
+  #   pipeline: "atomic_llm"
+  #   loadouts:
+  #     - ["ollama://qwen2.5:0.5b"]
+  #     - ["ollama://gpt-oss-20b"]
+  #   scenarios: [llm_basic_chat, llm_polish_explicit, llm_short2long, llm_long_story]
 
-  # TTS: Audio fidelity variations
-  - domain: "tts"
-    pipeline: "atomic_tts"
-    loadouts:
-      - ["native://chatterbox-turbo"]
-      - ["native://chatterbox-multilingual"]
-    scenarios: [tts_standard, tts_polish, tts_implicit_excited]
+  # # TTS: Audio fidelity variations
+  # - domain: "tts"
+  #   pipeline: "atomic_tts"
+  #   loadouts:
+  #     - ["native://chatterbox-turbo"]
+  #     - ["native://chatterbox-multilingual"]
+  #   scenarios: [tts_standard, tts_polish, tts_implicit_excited]
 
-  # VLM: Vision support
-  - domain: "vlm"
-    pipeline: "atomic_vlm"
-    loadouts:
-      - ["vllm://Qwen/Qwen2-VL-2B-Instruct#stream"]
-    scenarios: [vlm_jarvis_logo, vlm_bunny]
+  # # VLM: Vision support
+  # - domain: "vlm"
+  #   pipeline: "atomic_vlm"
+  #   loadouts:
+  #     - ["vllm://Qwen/Qwen2-VL-2B-Instruct#stream"]
+  #   scenarios: [vlm_jarvis_logo, vlm_bunny]
 
   - domain: "hybrid_chat"
     pipeline: "hybrid_chat"

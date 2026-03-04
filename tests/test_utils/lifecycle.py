@@ -261,7 +261,7 @@ class LifecycleManager:
         parts = [s.get('res_id', s['id'].upper()) for s in required if s['type'] != 'sts']
         return " + ".join(parts) or self.setup_name.upper()
 
-    def reconcile(self, domain):
+    def reconcile(self, domain, timeout=None):
         ensure_utf8_output()
         vram_external = utils.get_gpu_vram_usage()
         prior_vram = 0.0
@@ -341,9 +341,14 @@ class LifecycleManager:
         # 4. Parallel Wait
         if services_to_start:
             ports_to_wait = [s['port'] for s in services_to_start]
-            timeout = self.cfg.get('vllm', {}).get('model_startup_timeout', 120)
-            if not asyncio.run(utils.wait_for_ports_parallel(ports_to_wait, timeout=timeout, require_stub=self.stub_mode)):
-                raise RuntimeError(f"Parallel startup timeout after {timeout}s")
+            
+            # USE CONFIG TIMEOUT BUT CAP AT GLOBAL TIMEOUT
+            startup_timeout = self.cfg.get('vllm', {}).get('model_startup_timeout', 120)
+            if timeout and timeout < startup_timeout:
+                startup_timeout = timeout
+
+            if not asyncio.run(utils.wait_for_ports_parallel(ports_to_wait, timeout=startup_timeout, require_stub=self.stub_mode)):
+                raise RuntimeError(f"Parallel startup timeout after {startup_timeout}s")
         
         # 5. Warmup
         if not self.stub_mode and (domain in ["llm", "vlm", "sts"] or self.full):
@@ -395,7 +400,7 @@ class LifecycleManager:
             })
         return entries
 
-def run_test_lifecycle(domain, setup_name, models, purge_on_entry, purge_on_exit, full, test_func, benchmark_mode=False, force_download=False, track_prior_vram=True, session_dir=None, on_phase=None, stub_mode=False, reporter=None, on_ready=None, **kwargs):
+def run_test_lifecycle(domain, setup_name, models, purge_on_entry, purge_on_exit, full, test_func, benchmark_mode=False, force_download=False, track_prior_vram=True, session_dir=None, on_phase=None, stub_mode=False, reporter=None, on_ready=None, global_timeout=None, **kwargs):
     ensure_utf8_output()
     manager = LifecycleManager(setup_name, models=models, purge_on_entry=purge_on_entry, purge_on_exit=purge_on_exit, full=full, benchmark_mode=benchmark_mode, force_download=force_download, track_prior_vram=track_prior_vram, session_dir=session_dir, on_phase=on_phase, stub_mode=stub_mode, **kwargs)
     model_display = manager.format_models_for_display(domain=domain)
@@ -405,16 +410,20 @@ def run_test_lifecycle(domain, setup_name, models, purge_on_entry, purge_on_exit
     os.makedirs(log_dir, exist_ok=True)
     debug_log_path = os.path.join(log_dir, f"lifecycle_{domain}_{setup_name}.log")
 
+    start_time = time.perf_counter()
+
     with redirect_stdout(f):
         try:
             if on_phase: on_phase("setup")
-            setup_time, prior_vram, vram_external, vram_static = manager.reconcile(domain)
+            # Enforce timeout on setup phase
+            setup_time, prior_vram, vram_external, vram_static = manager.reconcile(domain, timeout=global_timeout)
             
             if on_ready: 
                 try: on_ready(manager)
                 except: pass
 
             if setup_time == -1:
+                # ... skipping SETUP error handling logic (unchanged) ...
                 if manager.uncalibrated_models:
                     err_msg = f"Skipped: Missing calibration for vLLM models: {', '.join(manager.uncalibrated_models)}. Run 'python tools/calibrate_models.py' first."
                     status = "UNCALIBRATED"
@@ -429,6 +438,12 @@ def run_test_lifecycle(domain, setup_name, models, purge_on_entry, purge_on_exit
                     report_scenario_result(res_obj)
                 return 0, 0, prior_vram, model_display, vram_external, vram_static
             
+            # Check if we have time left for execution
+            if global_timeout:
+                elapsed = time.perf_counter() - start_time
+                if elapsed >= global_timeout:
+                    raise TimeoutError(f"Global scenario timeout ({global_timeout}s) exceeded during setup phase.")
+
             if on_phase: on_phase("execution")
             test_func()
             

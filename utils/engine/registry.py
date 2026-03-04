@@ -4,7 +4,8 @@ from .implementations import (
     execute_openai_chat, execute_whisper_stt, execute_chatterbox_tts,
     execute_speaker, execute_ptt_mic, execute_notification, execute_chunker,
     execute_memory_node, execute_screen_capture, execute_keyboard_typer,
-    execute_clipboard_sensor
+    execute_clipboard_sensor, execute_file_reader, validate_ptt_mic, 
+    validate_screen_capture, validate_keyboard_typer, validate_file_reader
 )
 
 class ImplementationRegistry:
@@ -23,7 +24,8 @@ class ImplementationRegistry:
             input_types=[],
             output_types=[IOType.AUDIO_FILE],
             execute_fn=execute_ptt_mic,
-            capabilities=[Capability.AUDIO_OUT]
+            capabilities=[Capability.AUDIO_OUT],
+            validate_fn=validate_ptt_mic
         ))
         
         self.register(NodeImplementation(
@@ -47,7 +49,8 @@ class ImplementationRegistry:
             input_types=[],
             output_types=[IOType.IMAGE_FILE],
             execute_fn=execute_screen_capture,
-            capabilities=[Capability.IMAGE_OUT]
+            capabilities=[Capability.IMAGE_OUT],
+            validate_fn=validate_screen_capture
         ))
 
         self.register(NodeImplementation(
@@ -55,7 +58,8 @@ class ImplementationRegistry:
             input_types=[IOType.TEXT_FINAL],
             output_types=[],
             execute_fn=execute_keyboard_typer,
-            capabilities=[Capability.TEXT_IN]
+            capabilities=[Capability.TEXT_IN],
+            validate_fn=validate_keyboard_typer
         ))
 
         self.register(NodeImplementation(
@@ -64,6 +68,15 @@ class ImplementationRegistry:
             output_types=[IOType.TEXT_FINAL],
             execute_fn=execute_clipboard_sensor,
             capabilities=[Capability.TEXT_OUT]
+        ))
+
+        self.register(NodeImplementation(
+            id="FileReader",
+            input_types=[],
+            output_types=[IOType.TEXT_FINAL],
+            execute_fn=execute_file_reader,
+            capabilities=[Capability.TEXT_OUT],
+            validate_fn=validate_file_reader
         ))
 
         # 2. Logical / Utility Implementations

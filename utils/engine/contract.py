@@ -56,3 +56,6 @@ class NodeImplementation:
     # Metadata for the AutoBinder
     capabilities: list[Capability] = field(default_factory=list)
     physics_weight: float = 0.0 # VRAM or Param count proxy
+
+    # Validation logic to ensure scenario_inputs fit this node (node_id, config, scenario_inputs)
+    validate_fn: Optional[Callable[[str, dict, dict], tuple[bool, str]]] = None

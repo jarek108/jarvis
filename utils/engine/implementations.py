@@ -43,7 +43,41 @@ try:
 except ImportError:
     ToastNotifier = None
 
-# --- Core Utilities ---
+# --- VALIDATION HELPERS ---
+
+def validate_ptt_mic(node_id: str, config: dict, scenario_inputs: dict) -> tuple[bool, str]:
+    """Ensures PTT Mic has a way to get data."""
+    # Check for direct file override
+    if scenario_inputs.get(node_id) or scenario_inputs.get('input_mic'):
+        return True, ""
+    
+    # Check for PTT signal (usually provided by Test Runner in E2E mode)
+    if scenario_inputs.get('ptt_active'):
+        return True, ""
+        
+    return False, f"Node '{node_id}' requires a 'ptt_active' signal or file input (input_mic), but neither was found."
+
+def validate_file_reader(node_id: str, config: dict, scenario_inputs: dict) -> tuple[bool, str]:
+    """Ensures file_reader has a valid path."""
+    path = config.get('path') or scenario_inputs.get(node_id) or scenario_inputs.get('input_text')
+    if not path:
+        return False, f"Node '{node_id}' (file_reader) requires a 'path' in config or scenario inputs."
+    return True, ""
+
+def validate_screen_capture(node_id: str, config: dict, scenario_inputs: dict) -> tuple[bool, str]:
+    """Screen capture usually runs on the live desktop, so it always has data."""
+    return True, ""
+
+def validate_keyboard_typer(node_id: str, config: dict, scenario_inputs: dict) -> tuple[bool, str]:
+    """Keyboard typer always has an OS focus to type into."""
+    return True, ""
+
+def validate_stt(node_id: str, config: dict, scenario_inputs: dict) -> tuple[bool, str]:
+    """STT usually depends on upstream audio, so we don't strictly validate scenario_inputs here
+    unless it's a root node (which is rare)."""
+    return True, ""
+
+# --- CORE UTILITIES ---
 
 async def resolve_inputs(input_streams: dict[str, AsyncGenerator]) -> dict[str, str]:
     """Standard utility to accumulate data from input streams."""
@@ -279,6 +313,33 @@ async def execute_clipboard_sensor(node_id: str, input_streams: dict[str, AsyncG
     if not pyperclip: return
     text = pyperclip.paste()
     await output_queue.put({"type": "text_final", "content": text, "ts": time.perf_counter()})
+
+async def execute_file_reader(node_id: str, input_streams: dict[str, AsyncGenerator], config: dict[str, Any], output_queue: asyncio.Queue, session: aiohttp.ClientSession):
+    """Reads a text file from disk."""
+    # 1. Resolve path (YAML config > Scenario inputs)
+    path = config.get('path')
+    scenario_inputs = config.get('scenario_inputs', {})
+    if not path:
+        path = scenario_inputs.get(node_id) or scenario_inputs.get('input_text')
+    
+    if not path:
+        logger.warning(f"[{node_id}] No file path provided.")
+        return
+
+    # Handle relative paths from project root
+    project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    if not os.path.isabs(path):
+        # Try relative to system_config/pipelines if not found elsewhere
+        alt_path = os.path.join(project_root, "system_config", path)
+        if os.path.exists(alt_path): path = alt_path
+        else: path = os.path.join(project_root, path)
+
+    if os.path.exists(path):
+        with open(path, 'r', encoding='utf-8', errors='ignore') as f:
+            content = f.read()
+            await output_queue.put({"type": "text_final", "content": content, "ts": time.perf_counter()})
+    else:
+        logger.error(f"[{node_id}] File not found: {path}")
 
 # --- UTILITY IMPLEMENTATIONS ---
 

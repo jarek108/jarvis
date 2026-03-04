@@ -66,6 +66,10 @@ class PipelineTestRunner:
         self.session_dir = session_dir
         self.reporter = reporter
         self.e2e_orchestrator = E2EOrchestrator(self.project_root)
+        
+        # Load safety settings from central config
+        self.cfg = utils.load_config()
+        self.max_scenario_time = self.cfg.get('system', {}).get('maximum_scenario_length', 500.0)
 
     def load_scenarios(self):
         scenarios = {}
@@ -79,7 +83,7 @@ class PipelineTestRunner:
                     scenarios.update(yaml.safe_load(f) or {})
         return scenarios
 
-    def run_scenario(self, sid, pid, mid, domain, l_id, v_ext=0.0, v_static=0.0, overrides=None):
+    def run_scenario(self, sid, pid, mid, domain, l_id, v_ext=0.0, v_static=0.0, overrides=None, remaining_timeout=None):
         # 3. Execution (Multi-Input & Multi-Modal Support)
         inputs = {}
         scen_def = self.integration_scenarios.get(sid)
@@ -109,32 +113,60 @@ class PipelineTestRunner:
         # Synchronized Signal Injection (Always enabled for hardware testing)
         inputs['ptt_active'] = threading.Event()
 
-        start_time = time.perf_counter()
+        # --- PRE-FLIGHT VALIDATION ---
+        # Ensure all nodes in the pipeline have the inputs they need from this scenario
         try:
             # Use the instance resolver (self.resolver) instead of creating a new one
             bound_graph = self.resolver.resolve(pid, mid, overrides=overrides)
             
+            validation_errors = []
+            for nid, node in bound_graph.items():
+                impl = node.get('binding')
+                if impl and impl.validate_fn:
+                    is_valid, err = impl.validate_fn(nid, node, inputs)
+                    if not is_valid:
+                        validation_errors.append(err)
+            
+            if validation_errors:
+                err_msg = " | ".join(validation_errors)
+                self.log(f"Scenario Validation Failed: {err_msg}", level="error")
+                res_obj = {
+                    "name": sid, "status": "FAILED", "duration": 0,
+                    "pipeline": pid, "domain": domain, "loadout_id": l_id,
+                    "node_metrics": {}, "vram_peak": 0,
+                    "result": f"SCENARIO_MISMATCH: {err_msg}"
+                }
+                if self.reporter: self.reporter.report(res_obj)
+                return False
+
+        except Exception as e:
+            self.log(f"Resolution Error: {e}", level="error")
+            return False
+
+        start_time = time.perf_counter()
+        try:
             async def e2e_wrapper():
                 # Launch sequence in background if present
                 seq = scen_def.get('sequence')
                 if seq:
                     asyncio.create_task(self.e2e_orchestrator.execute_sequence(seq, inputs))
-                # Global Scenario Timeout (120s) to prevent hangs
-                return await asyncio.wait_for(self.executor.run(bound_graph, inputs), timeout=120.0)
+                # Global Scenario Timeout (Remaining time from global limit)
+                timeout = remaining_timeout if remaining_timeout else self.max_scenario_time
+                return await asyncio.wait_for(self.executor.run(bound_graph, inputs), timeout=timeout)
 
             success = asyncio.run(e2e_wrapper())
         except Exception as e:
-            self.log(f"Resolution/Execution Error: {e}", level="error")
+            self.log(f"Execution Error: {e}", level="error")
             import traceback
             logger.error(traceback.format_exc())
             success = False
-            # Create dummy metrics for failed resolution
+            # Create dummy metrics for failed execution
             node_metrics = {"SYSTEM": {"error": str(e)}}
             res_obj = {
                 "name": sid, "status": "FAILED", "duration": 0,
                 "pipeline": pid, "domain": domain, "loadout_id": l_id,
                 "node_metrics": node_metrics, "vram_peak": 0,
-                "result": f"ARCH_MISMATCH: {e}"
+                "result": f"ERROR: {e}"
             }
             if self.reporter: self.reporter.report(res_obj)
             return False
@@ -255,7 +287,9 @@ class PipelineTestRunner:
                     except Exception as e: self.log(f"Failed to update registry: {e}", level="error")
 
                 def execution_wrapper():
-                    # At this point v_static has been assigned by run_test_lifecycle
+                    # Timer for the entire execution block (Setup + Scenarios)
+                    # Note: setup is already done when this is called by run_test_lifecycle
+                    block_start = time.perf_counter()
                     
                     # Resolve mapping to implementations if provided
                     overrides = {}
@@ -280,10 +314,15 @@ class PipelineTestRunner:
                                 overrides[nid] = get_mock_implementation(m_def, role, mock_text=m_def.replace("mock:", ""))
                     
                     for s_id in scenarios:
+                        # Calculate remaining global time
+                        elapsed = time.perf_counter() - block_start
+                        rem = max(1.0, self.max_scenario_time - elapsed)
+                        
                         self.run_scenario(
                             sid=s_id, pid=pipeline, mid=mapping, domain=domain, l_id=l_id, 
                             v_ext=v_ext, v_static=v_static, 
-                            overrides=overrides
+                            overrides=overrides,
+                            remaining_timeout=rem
                         )
 
                 # Capture pre-load external VRAM
@@ -294,7 +333,8 @@ class PipelineTestRunner:
                     purge_on_entry=True if l else False, purge_on_exit=True if l else False,
                     full=True, test_func=execution_wrapper, benchmark_mode=True, session_dir=self.session_dir,
                     on_phase=lambda p: self.dashboard.update_phase(domain, l_id, p) if self.dashboard else None,
-                    stub_mode=args.mock_models, reporter=proxy_reporter, on_ready=on_ready_callback
+                    stub_mode=args.mock_models, reporter=proxy_reporter, on_ready=on_ready_callback,
+                    global_timeout=self.max_scenario_time
                 )
                 v_static = v_static_actual
                 v_ext = v_ext_actual # Use the internal more accurate external measure
