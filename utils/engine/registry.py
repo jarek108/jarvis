@@ -3,9 +3,11 @@ from .contract import NodeImplementation, IOType, Capability
 from .implementations import (
     execute_openai_chat, execute_whisper_stt, execute_chatterbox_tts,
     execute_speaker, execute_ptt_mic, execute_notification, execute_chunker,
-    execute_memory_node, execute_screen_capture, execute_keyboard_typer,
-    execute_clipboard_sensor, execute_file_reader, validate_ptt_mic, 
-    validate_screen_capture, validate_keyboard_typer, validate_file_reader
+    execute_memory_node, execute_screen_capture, execute_camera_capture,
+    execute_keyboard_typer, execute_clipboard_sensor, execute_clipboard_writer,
+    execute_file_reader, validate_ptt_mic, validate_screen_capture,
+    validate_camera_capture, validate_keyboard_typer, validate_file_reader,
+    validate_stt
 )
 
 class ImplementationRegistry:
@@ -19,8 +21,10 @@ class ImplementationRegistry:
 
     def _load_static_implementations(self):
         # 1. Hardware / Edge Implementations
+        
+        # --- AUDIO ---
         self.register(NodeImplementation(
-            id="PushToTalkMic",
+            id="InputMic",
             input_types=[],
             output_types=[IOType.AUDIO_FILE],
             execute_fn=execute_ptt_mic,
@@ -29,23 +33,16 @@ class ImplementationRegistry:
         ))
         
         self.register(NodeImplementation(
-            id="SystemSpeaker",
+            id="OutputSpeaker",
             input_types=[IOType.AUDIO_FILE, IOType.AUDIO_STREAM],
             output_types=[],
             execute_fn=execute_speaker,
             capabilities=[Capability.AUDIO_IN]
         ))
 
+        # --- VISION ---
         self.register(NodeImplementation(
-            id="NotificationActuator",
-            input_types=[IOType.TEXT_FINAL],
-            output_types=[],
-            execute_fn=execute_notification,
-            capabilities=[Capability.TEXT_IN]
-        ))
-
-        self.register(NodeImplementation(
-            id="ScreenCapture",
+            id="InputScreen",
             input_types=[],
             output_types=[IOType.IMAGE_FILE],
             execute_fn=execute_screen_capture,
@@ -54,7 +51,25 @@ class ImplementationRegistry:
         ))
 
         self.register(NodeImplementation(
-            id="KeyboardTyper",
+            id="InputCamera",
+            input_types=[],
+            output_types=[IOType.IMAGE_FILE],
+            execute_fn=execute_camera_capture,
+            capabilities=[Capability.IMAGE_OUT],
+            validate_fn=validate_camera_capture
+        ))
+
+        # --- OS TOOLS ---
+        self.register(NodeImplementation(
+            id="OutputNotification",
+            input_types=[IOType.TEXT_FINAL],
+            output_types=[],
+            execute_fn=execute_notification,
+            capabilities=[Capability.TEXT_IN]
+        ))
+
+        self.register(NodeImplementation(
+            id="OutputKeyboard",
             input_types=[IOType.TEXT_FINAL],
             output_types=[],
             execute_fn=execute_keyboard_typer,
@@ -63,7 +78,7 @@ class ImplementationRegistry:
         ))
 
         self.register(NodeImplementation(
-            id="ClipboardSensor",
+            id="InputClipboard",
             input_types=[],
             output_types=[IOType.TEXT_FINAL],
             execute_fn=execute_clipboard_sensor,
@@ -71,7 +86,15 @@ class ImplementationRegistry:
         ))
 
         self.register(NodeImplementation(
-            id="FileReader",
+            id="OutputClipboard",
+            input_types=[IOType.TEXT_FINAL],
+            output_types=[],
+            execute_fn=execute_clipboard_writer,
+            capabilities=[Capability.TEXT_IN]
+        ))
+
+        self.register(NodeImplementation(
+            id="InputFile",
             input_types=[],
             output_types=[IOType.TEXT_FINAL],
             execute_fn=execute_file_reader,
@@ -93,6 +116,16 @@ class ImplementationRegistry:
             output_types=[IOType.TEXT_FINAL],
             execute_fn=execute_memory_node
         ))
+
+        # 3. BACKWARD COMPATIBILITY (Legacy IDs)
+        # We register these pointing to the same implementations to avoid breaking existing pipelines
+        self.register(NodeImplementation(id="PushToTalkMic", input_types=[], output_types=[IOType.AUDIO_FILE], execute_fn=execute_ptt_mic, capabilities=[Capability.AUDIO_OUT], validate_fn=validate_ptt_mic))
+        self.register(NodeImplementation(id="SystemSpeaker", input_types=[IOType.AUDIO_FILE], output_types=[], execute_fn=execute_speaker, capabilities=[Capability.AUDIO_IN]))
+        self.register(NodeImplementation(id="ScreenCapture", input_types=[], output_types=[IOType.IMAGE_FILE], execute_fn=execute_screen_capture, capabilities=[Capability.IMAGE_OUT], validate_fn=validate_screen_capture))
+        self.register(NodeImplementation(id="KeyboardTyper", input_types=[IOType.TEXT_FINAL], output_types=[], execute_fn=execute_keyboard_typer, capabilities=[Capability.TEXT_IN], validate_fn=validate_keyboard_typer))
+        self.register(NodeImplementation(id="ClipboardSensor", input_types=[], output_types=[IOType.TEXT_FINAL], execute_fn=execute_clipboard_sensor, capabilities=[Capability.TEXT_OUT]))
+        self.register(NodeImplementation(id="FileReader", input_types=[], output_types=[IOType.TEXT_FINAL], execute_fn=execute_file_reader, capabilities=[Capability.TEXT_OUT], validate_fn=validate_file_reader))
+        self.register(NodeImplementation(id="NotificationActuator", input_types=[IOType.TEXT_FINAL], output_types=[], execute_fn=execute_notification, capabilities=[Capability.TEXT_IN]))
 
     def register(self, impl: NodeImplementation):
         self._implementations[impl.id] = impl
