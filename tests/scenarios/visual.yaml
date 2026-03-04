@@ -1,0 +1,20 @@
+# Visual analysis scenarios using ScreenCapture simulation
+
+desktop_logo_analysis:
+  description: "Test ScreenCapture + VLM analysis of a simulated desktop state."
+  sequence:
+    - action: open_image
+      file: "tests/data/jarvis_logo.png"
+  turns:
+    - send: {node: "input_instruction", content: "What logo do you see on my screen?"}
+      expect: [{"type": "log", "content": "Jarvis"}]
+
+bunny_video_analysis:
+  description: "Test VLM analysis of a provided video file."
+  turns:
+    - send: 
+        node: "input_instruction"
+        content: "What is happening in this video?"
+        media: "tests/data/bunny.mp4"
+        media_node: "input_media"
+      expect: [{"type": "log", "role": "assistant"}]

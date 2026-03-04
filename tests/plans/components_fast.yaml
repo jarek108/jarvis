@@ -1,0 +1,26 @@
+name: "Atomic Component Smoke Test"
+description: "Verify STT, LLM, and TTS components in isolation using zero-VRAM stubs."
+settings:
+  purge_on_entry: true
+  purge_on_exit: true
+
+execution:
+  - domain: "stt"
+    pipeline: "atomic_stt"
+    loadouts: [["native://faster-whisper-tiny"]]
+    scenarios: [stt_polish_std, stt_english_std]
+
+  - domain: "llm"
+    pipeline: "atomic_llm"
+    loadouts: [["ollama://qwen2.5:0.5b"]]
+    scenarios: [llm_basic_chat]
+
+  - domain: "tts"
+    pipeline: "atomic_tts"
+    loadouts: [["native://chatterbox-turbo"]]
+    scenarios: [tts_standard]
+
+  - domain: "memory"
+    pipeline: "memory_verification"
+    loadouts: [["ollama://qwen2.5:0.5b"]]
+    scenarios: [memory_recall]

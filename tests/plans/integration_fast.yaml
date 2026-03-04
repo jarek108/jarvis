@@ -1,0 +1,16 @@
+name: "Production Integration Smoke Test"
+description: "Verify production pipelines (from system_config) using zero-VRAM stubs."
+settings:
+  purge_on_entry: true
+  purge_on_exit: true
+
+execution:
+  - domain: "sts_voice"
+    pipeline: "voice_to_voice"
+    loadouts: [["native://faster-whisper-tiny", "native://chatterbox-turbo", "ollama://qwen2.5:0.5b"]]
+    scenarios: [sts_voice]
+
+  - domain: "hybrid_chat"
+    pipeline: "hybrid_chat"
+    loadouts: [["native://faster-whisper-tiny", "ollama://qwen2.5:0.5b"]]
+    scenarios: [super_whisper_action]

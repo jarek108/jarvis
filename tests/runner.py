@@ -41,6 +41,9 @@ class E2EOrchestrator:
             if action == 'play_audio':
                 path = os.path.join(self.project_root, step['file'])
                 self.audio_feeder.play(path)
+            elif action == 'open_image':
+                path = os.path.join(self.project_root, step['file'])
+                self.screen_feeder.start(path)
             elif action == 'set_signal':
                 name, val = step['name'], step['value']
                 if name == 'ptt_active':
@@ -57,13 +60,15 @@ class PipelineTestRunner:
             self.plan = yaml.safe_load(f)
         self.project_root = project_root
         self.session_dir = session_dir
-        # ISOLATION: Point resolver to absolute tests/pipelines/ directory
-        base_pipelines_dir = os.path.join(self.project_root, "tests", "pipelines")
-        self.resolver = PipelineResolver(self.project_root, base_dir=base_pipelines_dir)
+        # SEARCH PATHS: Check tests first, then production
+        search_paths = [
+            os.path.join(self.project_root, "tests", "pipelines"),
+            os.path.join(self.project_root, "system_config", "pipelines")
+        ]
+        self.resolver = PipelineResolver(self.project_root, search_paths=search_paths)
         self.executor = PipelineExecutor(self.project_root, dashboard=dashboard, session_dir=self.session_dir)
         self.integration_scenarios = self.load_scenarios()
         self.dashboard = dashboard
-        self.session_dir = session_dir
         self.reporter = reporter
         self.e2e_orchestrator = E2EOrchestrator(self.project_root)
         
@@ -84,7 +89,7 @@ class PipelineTestRunner:
         return scenarios
 
     def run_scenario(self, sid, pid, mid, domain, l_id, v_ext=0.0, v_static=0.0, overrides=None, remaining_timeout=None):
-        # 3. Execution (Multi-Input & Multi-Modal Support)
+        # 3. Execution (Data Routing)
         inputs = {}
         scen_def = self.integration_scenarios.get(sid)
         if not scen_def:
@@ -92,31 +97,34 @@ class PipelineTestRunner:
             return False
 
         for turn in scen_def.get('turns', []):
+            # Legacy binary support
             if 'send_binary' in turn:
                 inputs['input_mic'] = turn['send_binary']
             
             send_data = turn.get('send', {})
             if isinstance(send_data, dict):
-                s_type, content, media = send_data.get('type'), send_data.get('content'), send_data.get('media')
-                if s_type == 'context':
-                    inputs['input_text'] = content
-                    if media: inputs['input_media'] = media
-                elif s_type == 'message':
+                # NEW: Explicit Node Mapping
+                target_node = send_data.get('node')
+                content = send_data.get('content')
+                media = send_data.get('media')
+                media_node = send_data.get('media_node')
+
+                if target_node:
+                    inputs[target_node] = content
+                if media and media_node:
+                    inputs[media_node] = media
+
+                # FALLBACK: Maintain legacy compatibility for un-refactored scenarios
+                if not target_node and content:
                     if pid == 'atomic_tts': inputs['input_text'] = content
-                    elif pid == 'atomic_llm' or pid == 'atomic_vlm': inputs['input_instruction'] = content
                     else: inputs['input_instruction'] = content
-                    if media: inputs['input_media'] = media
-                elif content: 
-                    inputs['input_instruction'] = content
                     if media: inputs['input_media'] = media
 
         # Synchronized Signal Injection (Always enabled for hardware testing)
         inputs['ptt_active'] = threading.Event()
 
         # --- PRE-FLIGHT VALIDATION ---
-        # Ensure all nodes in the pipeline have the inputs they need from this scenario
         try:
-            # Use the instance resolver (self.resolver) instead of creating a new one
             bound_graph = self.resolver.resolve(pid, mid, overrides=overrides)
             
             validation_errors = []
@@ -146,26 +154,20 @@ class PipelineTestRunner:
         start_time = time.perf_counter()
         try:
             async def e2e_wrapper():
-                # Launch sequence in background if present
                 seq = scen_def.get('sequence')
                 if seq:
                     asyncio.create_task(self.e2e_orchestrator.execute_sequence(seq, inputs))
-                # Global Scenario Timeout (Remaining time from global limit)
                 timeout = remaining_timeout if remaining_timeout else self.max_scenario_time
                 return await asyncio.wait_for(self.executor.run(bound_graph, inputs), timeout=timeout)
 
             success = asyncio.run(e2e_wrapper())
         except Exception as e:
             self.log(f"Execution Error: {e}", level="error")
-            import traceback
-            logger.error(traceback.format_exc())
             success = False
-            # Create dummy metrics for failed execution
-            node_metrics = {"SYSTEM": {"error": str(e)}}
             res_obj = {
                 "name": sid, "status": "FAILED", "duration": 0,
                 "pipeline": pid, "domain": domain, "loadout_id": l_id,
-                "node_metrics": node_metrics, "vram_peak": 0,
+                "node_metrics": {}, "vram_peak": 0,
                 "result": f"ERROR: {e}"
             }
             if self.reporter: self.reporter.report(res_obj)
@@ -173,12 +175,12 @@ class PipelineTestRunner:
 
         duration = time.perf_counter() - start_time
         
-        # Save trace artifact for post-hoc analysis
+        # Save trace artifact
         trace_path = os.path.join(self.session_dir, f"trace_{sid}.json")
         with open(trace_path, "w") as f:
             json.dump(self.executor.trace, f, indent=2)
 
-        # 4. Post-hoc Metric Evaluation (Node-Driven)
+        # 4. Post-hoc Metric Evaluation
         from test_utils.pipeline_evaluator import TraceEvaluator
         evaluator = TraceEvaluator(self.project_root, self.executor.trace)
         
@@ -196,26 +198,18 @@ class PipelineTestRunner:
             elif role == 'tts': node_metrics[nid] = evaluator.calculate_tts_metrics(nid)
 
         status = "PASSED" if success else "FAILED"
-        
-        # Extraction helpers for reporting
         stt_res = self.executor.results.get("proc_stt", [])
         llm_res = self.executor.results.get("proc_llm", [])
         
         res_obj = {
-            "name": sid,
-            "status": status,
-            "duration": duration,
-            "pipeline": pid,
-            "domain": domain,
-            "loadout_id": l_id,
-            "node_metrics": node_metrics,
-            "vram_external": v_ext,
-            "vram_static": v_static,
-            "vram_peak": self.executor.vram_peak,
+            "name": sid, "status": status, "duration": duration,
+            "pipeline": pid, "domain": domain, "loadout_id": l_id,
+            "node_metrics": node_metrics, "vram_external": v_ext,
+            "vram_static": v_static, "vram_peak": self.executor.vram_peak,
             "stt_text": "".join(stt_res) if isinstance(stt_res, list) else str(stt_res),
             "llm_text": "".join(llm_res) if isinstance(llm_res, list) else str(llm_res),
             "input_file": inputs.get("input_mic") or inputs.get("input_media", ""),
-            "output_file": self.executor.results.get("proc_tts", [""])[0] if isinstance(self.executor.results.get("proc_tts"), list) else self.executor.results.get("proc_tts", "")
+            "output_file": self.executor.results.get("proc_tts", [""])[0]
         }
 
         if self.reporter: self.reporter.report(res_obj)
@@ -231,8 +225,6 @@ class PipelineTestRunner:
         for block in execution_blocks:
             domain = block.get('domain', 'core').lower()
             pipeline = block.get('pipeline')
-            if not pipeline: raise ValueError(f"Block in domain '{domain}' missing explicit 'pipeline' field.")
-            
             loadouts = block.get('loadouts', [None])
             scenarios = block.get('scenarios', [])
             if domain not in structure:
@@ -247,10 +239,6 @@ class PipelineTestRunner:
 
         if self.dashboard:
             self.dashboard.init_plan_structure(structure)
-            total_scenarios = sum(d['total'] for d in structure.values())
-            total_models = sum(len(d['loadouts']) for d in structure.values())
-            self.dashboard.overall_progress.update(self.dashboard.overall_task, total=total_scenarios)
-            self.dashboard.overall_progress.update(self.dashboard.models_task, total=total_models)
 
         for block in execution_blocks:
             domain = block.get('domain', 'core').lower()
@@ -287,45 +275,28 @@ class PipelineTestRunner:
                     except Exception as e: self.log(f"Failed to update registry: {e}", level="error")
 
                 def execution_wrapper():
-                    # Timer for the entire execution block (Setup + Scenarios)
-                    # Note: setup is already done when this is called by run_test_lifecycle
                     block_start = time.perf_counter()
-                    
-                    # Resolve mapping to implementations if provided
                     overrides = {}
                     
-                    # AUTO-MOCK EDGE nodes if requested
                     if args.mock_edge:
-                        # Find all source/sink nodes in the current pipeline and mock them
                         try:
                             raw_p = self.resolver.load_yaml(pipeline)
                             for node in raw_p['nodes']:
                                 if node['type'] in ['source', 'sink', 'input']:
-                                    role = node.get('role', 'unknown')
-                                    overrides[node['id']] = get_mock_implementation(f"mock_{node['id']}", role)
+                                    overrides[node['id']] = get_mock_implementation(f"mock_{node['id']}", node.get('role', 'unknown'))
                         except: pass
 
-                    # Apply specific mapping from test plan (overwrites auto-mocks)
                     if mapping:
                         for nid, m_def in mapping.items():
                             if isinstance(m_def, str) and m_def.startswith("mock:"):
-                                # If it's a specific mock string, extract role from node ID
                                 role = "llm" if "llm" in nid else ("stt" if "stt" in nid else "unknown")
                                 overrides[nid] = get_mock_implementation(m_def, role, mock_text=m_def.replace("mock:", ""))
                     
                     for s_id in scenarios:
-                        # Calculate remaining global time
                         elapsed = time.perf_counter() - block_start
                         rem = max(1.0, self.max_scenario_time - elapsed)
-                        
-                        self.run_scenario(
-                            sid=s_id, pid=pipeline, mid=mapping, domain=domain, l_id=l_id, 
-                            v_ext=v_ext, v_static=v_static, 
-                            overrides=overrides,
-                            remaining_timeout=rem
-                        )
+                        self.run_scenario(sid=s_id, pid=pipeline, mid=mapping, domain=domain, l_id=l_id, v_ext=v_ext, v_static=v_static, overrides=overrides, remaining_timeout=rem)
 
-                # Capture pre-load external VRAM
                 v_ext = utils.get_gpu_vram_usage()
 
                 setup_time, cleanup_time, prior_vram, model_display, v_ext_actual, v_static_actual = run_test_lifecycle(
@@ -337,41 +308,28 @@ class PipelineTestRunner:
                     global_timeout=self.max_scenario_time
                 )
                 v_static = v_static_actual
-                v_ext = v_ext_actual # Use the internal more accurate external measure
+                v_ext = v_ext_actual
 
                 for r in self.reporter.results:
                     if r.get('loadout_id') == l_id:
                         r['detailed_model'], r['setup_time'], r['cleanup_time'] = model_display, setup_time, cleanup_time
-                        if self.dashboard:
-                            l_data = self.dashboard.test_data.get(domain, {}).get('loadouts', {}).get(l_id, {})
-                            r['log_path'] = l_data.get('log_paths', {}).get('llm') or l_data.get('log_paths', {}).get('sts')
 
                 status = "passed" if structure[domain]['loadouts'][l_id]['errors'] == 0 else "failed"
-                if self.dashboard:
-                    self.dashboard.finalize_loadout(domain, l_id, setup_time + cleanup_time, status=status)
-                    if not args.mock_models: self.dashboard.vram_usage = utils.get_gpu_vram_usage()
+                if self.dashboard: self.dashboard.finalize_loadout(domain, l_id, setup_time + cleanup_time, status=status)
                 
                 loadout_results = [r for r in self.reporter.results if r.get('loadout_id') == l_id]
                 save_artifact(domain, [{"loadout": l_id, "scenarios": loadout_results, "status": status.upper()}], session_dir=self.session_dir)
-                self.log(f"Finalized loadout: {l_id}")
-                print() # SEPARATION
 
             if self.dashboard: self.dashboard.finalize_domain(domain)
 
 def main():
     parser = argparse.ArgumentParser(description="Jarvis Unified Flow Runner")
     parser.add_argument("plan", type=str)
-    
-    # New Orthogonal Flags
-    parser.add_argument("--mock-models", action="store_true", help="Use zero-VRAM stubs for LLM/STT/TTS.")
-    parser.add_argument("--mock-edge", action="store_true", help="Replace hardware drivers (Mic/Speaker) with file-based mocks.")
-    
-    # Legacy Alias
-    parser.add_argument("--mock-all", action="store_true", help="Alias for --mock-models --mock-edge")
-    
+    parser.add_argument("--mock-models", action="store_true")
+    parser.add_argument("--mock-edge", action="store_true")
+    parser.add_argument("--mock-all", action="store_true")
     args = parser.parse_args()
     
-    # Handle Alias
     if args.mock_all:
         args.mock_models = True
         args.mock_edge = True
@@ -383,49 +341,33 @@ def main():
     dashboard.start()
 
     session_dir = "ERROR"
-    session_id = "ERROR"
     report_path = None
 
     try:
-        utils.get_hf_home(silent=True)
-        utils.get_ollama_models(silent=True)
         session_dir, session_id = init_session(plan_path)
-        dashboard.snapshot_path = os.path.join(session_dir, "progression.log")
-        
         with open(os.path.join(session_dir, "system_info.yaml"), "r") as f: system_info = yaml.safe_load(f)
         dashboard.finalize_boot(session_id, system_info)
         dashboard.vram_total = utils.get_gpu_total_vram()
         
-        log_msg(f"Started session: {session_id}", tag="runner")
-
-        def dashboard_capture(res):
-            if not isinstance(res, dict): return
-            domain, l_id = res.get('domain'), res.get('loadout_id')
-            if domain and l_id: dashboard.update_scenario(domain, l_id, res['name'], res['status'], result=res.get('result', ''))
-
-        reporter = AccumulatingReporter(callback=dashboard_capture)
+        reporter = AccumulatingReporter(callback=lambda res: dashboard.update_scenario(res['domain'], res['loadout_id'], res['name'], res['status'], result=res.get('result', '')) if isinstance(res, dict) and res.get('domain') else None)
         runner = PipelineTestRunner(plan_path, dashboard=dashboard, session_dir=session_dir, reporter=reporter)
 
         def execution_worker():
             nonlocal report_path
             try:
                 runner.run_all(args)
-                dashboard.current_status = "Generating Report..."
                 report_path = trigger_report_generation(upload=True, session_dir=session_dir)
                 dashboard.report_url, dashboard.current_status = report_path, "Finished"
-                log_msg(f"Report generated: {report_path}", tag="runner")
-                time.sleep(1)
             except Exception as e:
                 import traceback
                 log_msg(f"CRITICAL ERROR: {e}", tag="runner", level="error")
-                with open(os.path.join(session_dir, "crash.log"), "w") as f: traceback.print_exc(file=f)
 
         worker = threading.Thread(target=execution_worker, daemon=True)
         worker.start()
         while worker.is_alive(): time.sleep(0.1)
     finally:
         dashboard.stop()
-        print(f"\n✅ Session Complete: {session_id}\n📊 Report: {report_path}")
+        print(f"\n✅ Session Complete\n📊 Report: {report_path}")
 
 if __name__ == "__main__":
     main()

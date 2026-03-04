@@ -7,15 +7,15 @@ from .binder import AutoBinder
 from .contract import MappingPreference, NodeImplementation
 
 class PipelineResolver:
-    def __init__(self, project_root=None, base_dir=None):
+    def __init__(self, project_root=None, search_paths=None):
         self.project_root = project_root if project_root else get_project_root()
         self.cfg = load_config()
         
         # ISOLATION: Define explicit directories for different graph artifacts
-        if base_dir:
-            self.pipelines_dir = base_dir if os.path.isabs(base_dir) else os.path.join(self.project_root, base_dir)
+        if search_paths:
+            self.search_paths = [os.path.join(self.project_root, p) if not os.path.isabs(p) else p for p in search_paths]
         else:
-            self.pipelines_dir = os.path.join(self.project_root, "system_config", "pipelines")
+            self.search_paths = [os.path.join(self.project_root, "system_config", "pipelines")]
 
         self.strategies_dir = os.path.join(self.project_root, "system_config", "strategies")
         self.cal_dir = os.path.join(self.project_root, "system_config", "model_calibrations")
@@ -23,17 +23,17 @@ class PipelineResolver:
         
         self.binder = AutoBinder(self.project_root)
 
-    def load_yaml(self, name, folder=None):
-        """Loads a YAML from the configured absolute base_dir or a specified folder."""
+    def load_yaml(self, name):
+        """Searches for a YAML across the configured search paths."""
         clean_name = name.replace(".yaml", "")
-        base = folder if folder else self.pipelines_dir
-        path = os.path.join(base, f"{clean_name}.yaml")
         
-        if not os.path.exists(path):
-            raise FileNotFoundError(f"YAML not found at: {path}")
+        for base in self.search_paths:
+            path = os.path.join(base, f"{clean_name}.yaml")
+            if os.path.exists(path):
+                with open(path, "r", encoding="utf-8") as f:
+                    return yaml.safe_load(f)
         
-        with open(path, "r", encoding="utf-8") as f:
-            return yaml.safe_load(f)
+        raise FileNotFoundError(f"YAML '{clean_name}.yaml' not found in search paths: {self.search_paths}")
 
     def get_live_models(self):
         if not os.path.exists(self.registry_path):

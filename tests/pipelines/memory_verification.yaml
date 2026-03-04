@@ -1,28 +1,43 @@
 id: memory_verification
-description: "Verify State-as-I/O memory persistence."
+description: "Pipeline for verifying ConversationMemory node and FileReader functionality."
+
 nodes:
-  - id: history_file
+  - id: input_history
     type: source
-    role: memory
-    path: "tests/data/test_history.txt"
+    role: file_reader
+    capabilities: [text_out]
+    path: "tests/data/sample_history.txt"
 
   - id: input_instruction
     type: source
-    role: chat_box
+    role: file_reader
     capabilities: [text_out]
+
+  - id: proc_memory
+    type: processing
+    role: memory
+    capabilities: [text_in, text_out]
+    path: "memory_check.txt" # Relative to session_dir
+    inputs:
+      - input_history
+      - input_instruction
 
   - id: proc_llm
     type: processing
     role: llm
     capabilities: [text_in, text_out]
-    inputs:
-      - history_file
-      - input_instruction
+    inputs: 
+      - proc_memory
     context_layout: |
-      OLD_HISTORY:
-      {{ history_file }}
-
-      NEW_QUERY:
+      [CONVERSATION_HISTORY]
+      {{ proc_memory }}
+      
+      [CURRENT_INSTRUCTION]
       {{ input_instruction }}
 
-
+  - id: output_ui
+    type: sink
+    role: chat_box
+    capabilities: [text_in]
+    inputs:
+      - proc_llm
