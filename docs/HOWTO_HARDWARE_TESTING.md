@@ -2,8 +2,8 @@
 
 This guide explains how to verify Jarvis hardware interaction logic using either virtualized environments or physical verification.
 
-## 1. Running Virtualized E2E Tests
-Virtualized E2E tests run the **actual production code** for hardware interaction but drive it using deterministic virtual devices.
+## 1. Running Virtualized Tests (The Default)
+By default, the test runner drives your **actual production code** using deterministic virtual devices. No flags are required to enable this.
 
 ### Prerequisites (Windows)
 1. Install **[VB-Audio Virtual Cable](https://vb-audio.com/Cable/)**.
@@ -11,16 +11,14 @@ Virtualized E2E tests run the **actual production code** for hardware interactio
 3. Set your system "Default Playback Device" to **CABLE Input**.
 
 ### Execution
-Run the test runner with the `--e2e` flag:
 ```bash
-python tests/runner.py tests/plans/abstraction_verification.yaml --e2e
+python tests/runner.py tests/plans/abstraction_verification.yaml
 ```
 
 ### What happens?
-- The runner spawns an **Audio Feeder** task.
-- It programmatically plays `tests/data/polish.wav` into the Virtual Cable.
+- The runner automatically spawns **Audio Feeders** to simulate a user speaking.
 - It programmatically toggles the `ptt_active` signal.
-- The production `execute_ptt_mic` script "hears" the file and captures it exactly as if you spoke.
+- The production `execute_ptt_mic` script "hears" the virtual file and captures it.
 
 ---
 
@@ -43,21 +41,12 @@ python tools/smoke_hardware.py
 
 ---
 
-## 3. Injecting Mocks for Logic Verification
-If you only want to test the logical flow (plumbing) without any hardware or real models, use mock injection in your test plan.
+## 3. Mocking Components for Speed
+If you only want to test logic without hardware or real models, use the orthogonal mock flags.
 
-### YAML Schema
-In your test plan, add a `mapping` block:
-```yaml
-execution:
-  - domain: "core"
-    pipeline: "my_pipeline"
-    mapping:
-      proc_stt: "mock:This is a mock transcription."
-      proc_llm: "mock:This is a mock AI response."
-```
+| Goal | Command |
+| :--- | :--- |
+| Test without 5090 (Mock Models) | `python tests/runner.py [plan] --mock-models` |
+| Test without Drivers (Mock Edge) | `python tests/runner.py [plan] --mock-edge` |
+| Fast Plumbing (Both) | `python tests/runner.py [plan] --mock-all` |
 
-### Execution
-```bash
-python tests/runner.py tests/plans/my_plan.yaml --plumbing
-```

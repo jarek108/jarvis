@@ -79,7 +79,7 @@ class PipelineTestRunner:
                     scenarios.update(yaml.safe_load(f) or {})
         return scenarios
 
-    def run_scenario(self, sid, pid, mid, domain, l_id, v_ext=0.0, v_static=0.0, overrides=None, e2e_mode=False):
+    def run_scenario(self, sid, pid, mid, domain, l_id, v_ext=0.0, v_static=0.0, overrides=None):
         # 3. Execution (Multi-Input & Multi-Modal Support)
         inputs = {}
         scen_def = self.integration_scenarios.get(sid)
@@ -106,9 +106,8 @@ class PipelineTestRunner:
                     inputs['input_instruction'] = content
                     if media: inputs['input_media'] = media
 
-        # Special Handling for E2E Signal Injection
-        if e2e_mode:
-            inputs['ptt_active'] = threading.Event()
+        # Synchronized Signal Injection (Always enabled for hardware testing)
+        inputs['ptt_active'] = threading.Event()
 
         start_time = time.perf_counter()
         try:
@@ -118,7 +117,7 @@ class PipelineTestRunner:
             async def e2e_wrapper():
                 # Launch sequence in background if present
                 seq = scen_def.get('sequence')
-                if e2e_mode and seq:
+                if seq:
                     asyncio.create_task(self.e2e_orchestrator.execute_sequence(seq, inputs))
                 return await self.executor.run(bound_graph, inputs)
 
@@ -259,14 +258,33 @@ class PipelineTestRunner:
                     
                     # Resolve mapping to implementations if provided
                     overrides = {}
+                    
+                    # AUTO-MOCK EDGE nodes if requested
+                    if args.mock_edge:
+                        # Find all source/sink nodes in the current pipeline and mock them
+                        try:
+                            raw_p = self.resolver.load_yaml(pipeline)
+                            for node in raw_p['nodes']:
+                                if node['type'] in ['source', 'sink', 'input']:
+                                    role = node.get('role', 'unknown')
+                                    overrides[node['id']] = get_mock_implementation(f"mock_{node['id']}", role)
+                        except: pass
+
+                    # Apply specific mapping from test plan (overwrites auto-mocks)
                     if mapping:
                         for nid, m_def in mapping.items():
                             if isinstance(m_def, str) and m_def.startswith("mock:"):
+                                # If it's a specific mock string, extract role from node ID
                                 role = "llm" if "llm" in nid else ("stt" if "stt" in nid else "unknown")
                                 overrides[nid] = get_mock_implementation(m_def, role, mock_text=m_def.replace("mock:", ""))
                     
                     for s_id in scenarios:
-                        self.run_scenario(s_id, pipeline, mapping, domain, l_id, v_ext=v_ext, v_static=v_static, overrides=overrides, e2e_mode=args.e2e)
+                        self.run_scenario(
+                            sid=s_id, pid=pipeline, mid=mapping, domain=domain, l_id=l_id, 
+                            v_ext=v_ext, v_static=v_static, 
+                            overrides=overrides, 
+                            virtualization=True
+                        )
 
                 # Capture pre-load external VRAM
                 v_ext = utils.get_gpu_vram_usage()
@@ -276,7 +294,7 @@ class PipelineTestRunner:
                     purge_on_entry=True if l else False, purge_on_exit=True if l else False,
                     full=True, test_func=execution_wrapper, benchmark_mode=True, session_dir=self.session_dir,
                     on_phase=lambda p: self.dashboard.update_phase(domain, l_id, p) if self.dashboard else None,
-                    stub_mode=args.plumbing, reporter=proxy_reporter, on_ready=on_ready_callback
+                    stub_mode=args.mock_models, reporter=proxy_reporter, on_ready=on_ready_callback
                 )
                 v_static = v_static_actual
                 v_ext = v_ext_actual # Use the internal more accurate external measure
@@ -291,7 +309,7 @@ class PipelineTestRunner:
                 status = "passed" if structure[domain]['loadouts'][l_id]['errors'] == 0 else "failed"
                 if self.dashboard:
                     self.dashboard.finalize_loadout(domain, l_id, setup_time + cleanup_time, status=status)
-                    if not args.plumbing: self.dashboard.vram_usage = utils.get_gpu_vram_usage()
+                    if not args.mock_models: self.dashboard.vram_usage = utils.get_gpu_vram_usage()
                 
                 loadout_results = [r for r in self.reporter.results if r.get('loadout_id') == l_id]
                 save_artifact(domain, [{"loadout": l_id, "scenarios": loadout_results, "status": status.upper()}], session_dir=self.session_dir)
@@ -303,9 +321,20 @@ class PipelineTestRunner:
 def main():
     parser = argparse.ArgumentParser(description="Jarvis Unified Flow Runner")
     parser.add_argument("plan", type=str)
-    parser.add_argument("--plumbing", action="store_true")
-    parser.add_argument("--e2e", action="store_true")
+    
+    # New Orthogonal Flags
+    parser.add_argument("--mock-models", action="store_true", help="Use zero-VRAM stubs for LLM/STT/TTS.")
+    parser.add_argument("--mock-edge", action="store_true", help="Replace hardware drivers (Mic/Speaker) with file-based mocks.")
+    
+    # Legacy Alias
+    parser.add_argument("--mock-all", action="store_true", help="Alias for --mock-models --mock-edge")
+    
     args = parser.parse_args()
+    
+    # Handle Alias
+    if args.mock_all:
+        args.mock_models = True
+        args.mock_edge = True
 
     plan_path = utils.resolve_path(args.plan)
     with open(plan_path, "r") as f: plan_data = yaml.safe_load(f)

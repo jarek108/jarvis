@@ -29,17 +29,20 @@ Used for strict signature validation and simulator matching.
 ---
 
 ## 2. Test Runner CLI (`tests/runner.py`)
-The unified test runner supports multiple levels of realism via flags.
+The unified test runner uses orthogonal flags to control component realism.
 
 ### Usage
 `python tests/runner.py [plan_path] [flags]`
 
 ### Flags
-| Flag | Mode | Logic | Servers | Hardware |
-| :--- | :--- | :--- | :--- | :--- |
-| **`--plumbing`** | Logic-Only | Mocks/Lambda | Stub (0 VRAM) | Disconnected |
-| **`--e2e`** | Virtualized | Production | Real | Virtual Feeders |
-| *(None)* | Manual | Production | Real | Physical |
+| Flag | Component | Behavior |
+| :--- | :--- | :--- |
+| **`--mock-models`** | Models (LLM/STT/TTS) | Replaces servers with zero-VRAM stubs. |
+| **`--mock-edge`** | Hardware (Mic/Speaker) | Replaces drivers with file-readers or no-ops. |
+| **`--mock-all`** | *(Alias)* | Equivalent to `--mock-models --mock-edge`. |
+
+### Default Behavior (No Flags)
+By default, the runner uses **Real Models** + **Production Hardware Drivers**, but drives them using a **Virtualized Environment** (simulators and synchronized signals).
 
 ---
 

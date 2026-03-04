@@ -68,7 +68,7 @@ python tools/smoke_hardware.py
 ### Full Pipeline Check (Plumbing)
 Verify the STT -> LLM -> TTS flow using the fast-check suite (uses mock models to save time).
 ```powershell
-python tests/runner.py tests/plans/ALL_fast.yaml --plumbing
+python tests/runner.py tests/plans/ALL_fast.yaml --mock-all
 ```
 
 ---

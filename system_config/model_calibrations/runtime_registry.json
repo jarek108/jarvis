@@ -1,6 +1,19 @@
 {
-  "active_loadout": [],
+  "active_loadout": [
+    {
+      "id": "qwen2.5:0.5b",
+      "engine": "ollama",
+      "port": 11434,
+      "params": {}
+    },
+    {
+      "id": "faster-whisper-tiny",
+      "engine": "native",
+      "port": 8100,
+      "params": {}
+    }
+  ],
   "loadout_id": "NONE",
-  "system_external_vram": 1.5908203125,
-  "last_updated": "2026-03-04 07:34:03"
+  "system_external_vram": 2.3271484375,
+  "last_updated": "2026-03-04 10:13:19"
 }
