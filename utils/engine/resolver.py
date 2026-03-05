@@ -84,6 +84,15 @@ class PipelineResolver:
         Binds a pipeline to live models using the AutoBinder.
         Hierarchy: Manual Overrides > YAML Override > Persistent Cache > Physics Heuristic.
         """
+        if os.environ.get('JARVIS_MOCK_ALL') == "1":
+            if overrides is None: overrides = {}
+            raw_p = self.load_yaml(pipeline_name)
+            from .implementations.mocks import get_mock_implementation
+            for node in raw_p['nodes']:
+                nid = node['id']
+                if nid not in overrides:
+                    overrides[nid] = get_mock_implementation(f"mock_{nid}", node.get('role', 'unknown'))
+
         pipeline = self.load_yaml(pipeline_name)
         live_data = self.get_live_models()
         live_models = live_data.get("models", [])
