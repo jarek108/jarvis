@@ -213,10 +213,10 @@ def gather_system_info(plan_path):
     }
     return info
 
-def init_session(plan_path):
+def init_session(plan_path, prefix="RUN_"):
     """Initializes a new test session directory and system info file."""
     timestamp = time.strftime("%Y%m%d_%H%M%S")
-    session_id = f"RUN_{timestamp}"
+    session_id = f"{prefix}{timestamp}"
     
     project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     session_dir = os.path.join(project_root, "tests", "logs", session_id)
