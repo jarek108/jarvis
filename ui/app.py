@@ -191,6 +191,7 @@ class JarvisApp(ctk.CTk):
         self.log_viewer.delete("1.0", "end"); self.last_log_content = ""
 
     def _update_log_viewer_loop(self):
+        if not self.winfo_exists(): return
         if self.selected_mid:
             registry_data = self.controller.resolver.get_live_models()
             active_models = registry_data.get("models", [])
@@ -282,6 +283,7 @@ class JarvisApp(ctk.CTk):
             self.record_btn.configure(state="disabled", fg_color=self.colors.get('gray'), text=f"OFFLINE: {err_msg}")
 
     def poll_queue(self):
+        if not self.winfo_exists(): return
         while not self.queue.empty():
             msg = self.queue.get()
             if msg['type'] == "log": self.terminal.insert("end", f"{msg['msg']}\n"); self.terminal.see("end")

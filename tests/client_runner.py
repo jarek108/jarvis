@@ -199,10 +199,20 @@ class ClientTestRunner:
         elif action == "assert_system_state":
             snap = self.dumper.get_system_snapshot()
             cond = step.get('condition')
+            h = snap['health_summary']
+            
+            success = False
             if cond == "all_models_active":
-                all_on = all(s == "ON" or s == "BUSY" for s in snap['health_summary'].values())
-                if all_on and snap['health_summary']: logger.info("✅ System State: All models active.")
-                else: logger.error(f"❌ System State: Models not active yet. {snap['health_summary']}")
+                success = all(s == "ON" or s == "BUSY" for s in h.values()) and len(h) > 0
+            elif cond == "no_models_active":
+                success = len(h) == 0
+            elif cond == "models_loading":
+                success = any(s == "STARTUP" for s in h.values())
+            elif cond == "any_models_active":
+                success = len(h) > 0
+
+            if success: logger.info(f"✅ System State: {cond}")
+            else: logger.error(f"❌ System State: Condition '{cond}' failed. Health: {h}")
 
     def cleanup(self):
         logger.info("🧹 Cleaning up client test session...")
@@ -229,6 +239,18 @@ async def main():
     
     if "timeline" in data:
         await runner.run_scenario(data)
+    elif "scenarios" in data:
+        # Load from plan
+        scenario_file = os.path.join(project_root, "tests", "scenarios", "client_ui.yaml")
+        with open(scenario_file, 'r') as sf:
+            all_scenarios = yaml.safe_load(sf)
+        
+        for item in data['scenarios']:
+            sid = item['id']
+            if sid in all_scenarios:
+                sdata = all_scenarios[sid]
+                sdata['name'] = sdata.get('name', sid)
+                await runner.run_scenario(sdata)
     else:
         for sid, sdata in data.items():
             if isinstance(sdata, dict) and "timeline" in sdata:

@@ -299,9 +299,9 @@ class PipelineGraphWidget(ctk.CTkFrame):
             else:
                 # MAPPING MODE: Show model IDs (Original behavior)
                 if binding:
-                    subtext = binding.get('id', 'Unknown')
+                    subtext = getattr(binding, 'id', 'Unknown') if not isinstance(binding, dict) else binding.get('id', 'Unknown')
                     # Check if it was an auto-binding
-                    is_auto = binding.get('is_auto', True) # For now we assume most are auto
+                    is_auto = getattr(binding, 'is_auto', True) if not isinstance(binding, dict) else binding.get('is_auto', True)
                     display_sub = f"{subtext[:22]} [AUTO]" if is_auto else subtext[:22]
                     self.canvas.create_text(cx, cy + 10, text=display_sub, fill=self.ui_cfg['colors']['success'], font=f_sec)
                 elif ntype == 'processing' and role != 'utility':

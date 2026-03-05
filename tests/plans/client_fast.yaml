@@ -1,0 +1,10 @@
+name: "Client UI Automation Fast Check"
+description: "Comprehensive verification of UI responsiveness, state synchronization, and visual consistency."
+
+scenarios:
+  - id: ui_startup_state
+  - id: ui_loadout_activation_latency
+  - id: ui_loadout_deactivation
+  - id: ui_loadout_idempotency
+  - id: ui_view_mode_toggle
+  - id: ui_graph_mapping_status
