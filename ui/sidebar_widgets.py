@@ -16,12 +16,14 @@ class VramMonitor(ctk.CTkFrame):
         ctk.CTkLabel(self.lbl_container, text="Vram: ", font=("Consolas", 11), text_color="#D0D0D0").pack(side="left")
         self.v_lbl_used = ctk.CTkLabel(self.lbl_container, text="0.0", font=("Consolas", 11, "bold"), text_color="#FFFFFF")
         self.v_lbl_used.pack(side="left")
-        ctk.CTkLabel(self.lbl_container, text="(", font=("Consolas", 11), text_color="#D0D0D0").pack(side="left")
+        
+        # Breakdown components (can be hidden)
+        self.v_lbl_open_bracket = ctk.CTkLabel(self.lbl_container, text=" (", font=("Consolas", 11), text_color="#D0D0D0")
         self.v_lbl_model = ctk.CTkLabel(self.lbl_container, text="0.0", font=("Consolas", 11), text_color="#FFFFFF")
-        self.v_lbl_model.pack(side="left")
-        ctk.CTkLabel(self.lbl_container, text=" + ", font=("Consolas", 11), text_color="#D0D0D0").pack(side="left")
+        self.v_lbl_plus = ctk.CTkLabel(self.lbl_container, text=" + ", font=("Consolas", 11), text_color="#D0D0D0")
         self.v_lbl_ext = ctk.CTkLabel(self.lbl_container, text="0.0 ext", font=("Consolas", 11, "bold"), text_color=self.colors.get('warning'))
-        self.v_lbl_ext.pack(side="left")
+        self.v_lbl_close_bracket = ctk.CTkLabel(self.lbl_container, text=")", font=("Consolas", 11), text_color="#D0D0D0")
+
         self.v_lbl_total = ctk.CTkLabel(self.lbl_container, text=" / 0.0 GB (0%)", font=("Consolas", 11), text_color="#D0D0D0")
         self.v_lbl_total.pack(side="left")
 
@@ -33,25 +35,54 @@ class VramMonitor(ctk.CTkFrame):
         self.bar_model = ctk.CTkFrame(self.bar_bg, width=0, height=8, fg_color=self.colors.get('accent'), corner_radius=4)
         self.bar_model.place(x=0, y=0)
 
-    def update(self, used, total, external):
-        if used < external: external = used
-        model_vram = max(0, used - external)
+    def update(self, used, total, external=None):
         pct = used / total if total > 0 else 0
-        
         self.v_lbl_used.configure(text=f"{used:.1f}")
-        self.v_lbl_model.configure(text=f"{model_vram:.1f}")
-        self.v_lbl_ext.configure(text=f"{external:.1f} ext")
         self.v_lbl_total.configure(text=f" / {total:.1f} GB ({int(pct*100)}%)")
-        
+
         bar_max_w = 200
-        ext_w = (external / total) * bar_max_w if total > 0 else 0
-        model_w = (model_vram / total) * bar_max_w if total > 0 else 0
-        ext_w = min(bar_max_w, ext_w)
-        model_w = min(bar_max_w - ext_w, model_w)
-        
-        self.bar_ext.configure(width=ext_w)
-        self.bar_model.place(x=ext_w, y=0)
-        self.bar_model.configure(width=model_w)
+
+        if external is None:
+            # SIMPLE MODE: Hide breakdown
+            self.v_lbl_open_bracket.pack_forget()
+            self.v_lbl_model.pack_forget()
+            self.v_lbl_plus.pack_forget()
+            self.v_lbl_ext.pack_forget()
+            self.v_lbl_close_bracket.pack_forget()
+            
+            # Repack total to ensure it's after used
+            self.v_lbl_total.pack_forget()
+            self.v_lbl_total.pack(side="left")
+
+            # Simple bar
+            self.bar_ext.configure(width=0)
+            self.bar_model.place(x=0, y=0)
+            self.bar_model.configure(width=pct * bar_max_w)
+        else:
+            # DETAILED MODE: Show breakdown
+            if used < external: external = used
+            model_vram = max(0, used - external)
+            
+            self.v_lbl_model.configure(text=f"{model_vram:.1f}")
+            self.v_lbl_ext.configure(text=f"{external:.1f} ext")
+
+            # Packing order: used -> ( -> model -> + -> ext -> ) -> total
+            self.v_lbl_total.pack_forget()
+            self.v_lbl_open_bracket.pack(side="left")
+            self.v_lbl_model.pack(side="left")
+            self.v_lbl_plus.pack(side="left")
+            self.v_lbl_ext.pack(side="left")
+            self.v_lbl_close_bracket.pack(side="left")
+            self.v_lbl_total.pack(side="left")
+
+            ext_w = (external / total) * bar_max_w if total > 0 else 0
+            model_w = (model_vram / total) * bar_max_w if total > 0 else 0
+            ext_w = min(bar_max_w, ext_w)
+            model_w = min(bar_max_w - ext_w, model_w)
+            
+            self.bar_ext.configure(width=ext_w)
+            self.bar_model.place(x=ext_w, y=0)
+            self.bar_model.configure(width=model_w)
         
         if pct > 0.95: self.bar_model.configure(fg_color=self.colors.get('error'))
         elif pct > 0.85: self.bar_model.configure(fg_color=self.colors.get('warning'))

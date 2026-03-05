@@ -59,6 +59,10 @@ class JarvisApp(ctk.CTk):
 
         # VRAM Monitor
         self.vram_monitor = VramMonitor(self.sidebar, self.colors)
+        try:
+            # Fast initial update (no breakdown)
+            self.vram_monitor.update(utils.get_gpu_vram_usage(), utils.get_gpu_total_vram(), None)
+        except: pass
 
         ctk.CTkLabel(self.sidebar, text="ACTIVE MODELS", font=("Impact", 16), text_color="#E0E0E0").pack(pady=(10, 5))
         self.health_frame = ctk.CTkFrame(self.sidebar, fg_color="transparent")
