@@ -12,12 +12,13 @@ from dataclasses import dataclass, asdict
 
 # Add project root to sys.path
 script_dir = os.path.dirname(os.path.abspath(__file__))
-project_root = os.path.dirname(script_dir)
+project_root = os.path.dirname(os.path.dirname(script_dir))
 sys.path.insert(0, project_root)
 
 from ui import JarvisApp
 import utils
 from test_utils import init_session, BOLD, GREEN, RED, YELLOW, RESET, LINE_LEN
+from test_utils.scenarios import load_scenarios_from_sources
 
 # --- Optional Dependencies ---
 try:
@@ -297,11 +298,10 @@ class ClientTestRunner:
 
 async def main():
     parser = argparse.ArgumentParser(description="Jarvis Client UI Test Runner")
-    parser.add_argument("file", type=str, help="Path to scenario YAML or Plan YAML.")
+    parser.add_argument("plan", type=str, help="Path to a Plan YAML.")
     parser.add_argument("--mock-all", action="store_true", help="Alias for --mock-models and --mock-edge")
     parser.add_argument("--mock-models", action="store_true", help="Use fast stub models")
     parser.add_argument("--mock-edge", action="store_true", help="Bypass physical hardware")
-    parser.add_argument("--scenario", "-s", type=str, help="Filter scenarios by ID (substring match).")
     parser.add_argument("--fail-fast", action="store_true", help="Stop execution on first failure.")
     parser.add_argument("--keep-alive", action="store_true", help="Skip initial backend cleanup.")
     args = parser.parse_args()
@@ -310,8 +310,15 @@ async def main():
         args.mock_models = True
         args.mock_edge = True
 
+    plan_path = utils.resolve_path(args.plan)
+    with open(plan_path, 'r') as f:
+        plan_data = yaml.safe_load(f)
+
+    if 'scenarios' not in plan_data:
+        raise ValueError(f"Invalid Client Plan: '{plan_path}' missing 'scenarios' block.")
+
     # Initialize Session
-    session_dir, session_id = init_session(args.file, prefix="CLIENT_RUN_")
+    session_dir, session_id = init_session(plan_path, prefix="CLIENT_RUN_")
     
     # Pre-test backend cleanup
     if not args.keep_alive:
@@ -322,40 +329,22 @@ async def main():
     if args.mock_models: os.environ['JARVIS_MOCK_MODELS'] = "1"
     if args.mock_edge: os.environ['JARVIS_MOCK_EDGE'] = "1"
 
-    with open(args.file, 'r') as f:
-        data = yaml.safe_load(f)
-
     runner = ClientTestRunner(args, session_dir)
     
-    # Resolve Scenarios to run
-    to_run = [] # List of (id, data)
-    if "timeline" in data:
-        to_run.append(("single_scenario", data))
-    elif "scenarios" in data:
-        scenario_file = os.path.join(project_root, "tests", "scenarios", "client_ui.yaml")
-        with open(scenario_file, 'r') as sf:
-            all_scenarios = yaml.safe_load(sf)
-        for item in data['scenarios']:
-            sid = item['id']
-            if sid in all_scenarios:
-                to_run.append((sid, all_scenarios[sid]))
-    else:
-        for sid, sdata in data.items():
-            if isinstance(sdata, dict) and "timeline" in sdata:
-                to_run.append((sid, sdata))
-
-    # Apply Filter
-    if args.scenario:
-        to_run = [(sid, sdata) for sid, sdata in to_run if args.scenario.lower() in sid.lower()]
-        if not to_run:
-            logger.warning(f"No scenarios matched filter: {args.scenario}")
-            return
+    # Resolve Scenarios from sources
+    sources = plan_data.get('scenario_sources', ["client_ui.yaml"])
+    all_scenarios = load_scenarios_from_sources(project_root, "client", sources)
 
     # Execute
-    for sid, sdata in to_run:
-        success = await runner.run_scenario(sid, sdata)
-        if not success and args.fail_fast:
-            break
+    for item in plan_data['scenarios']:
+        sid = item['id']
+        if sid in all_scenarios:
+            sdata = all_scenarios[sid]
+            success = await runner.run_scenario(sid, sdata)
+            if not success and args.fail_fast:
+                break
+        else:
+            logger.error(f"Scenario '{sid}' not found in sources {sources}")
 
     runner.print_summary()
 

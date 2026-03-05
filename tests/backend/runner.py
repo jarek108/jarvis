@@ -23,6 +23,7 @@ from test_utils import (
 )
 from test_utils.mocks import get_mock_implementation
 from test_utils.env_simulators import AudioFeeder, ScreenFeeder, KeyboardSandbox
+from test_utils.scenarios import load_scenarios_from_sources
 from utils import log_msg
 from utils.engine import PipelineResolver, PipelineExecutor
 
@@ -58,6 +59,10 @@ class PipelineTestRunner:
     def __init__(self, plan_path, dashboard=None, session_dir=None, reporter=None):
         with open(plan_path, "r") as f:
             self.plan = yaml.safe_load(f)
+        
+        if 'execution' not in self.plan:
+            raise ValueError(f"Invalid Backend Plan: '{plan_path}' missing 'execution' block.")
+
         self.project_root = project_root
         self.session_dir = session_dir
         # SEARCH PATHS: Check tests first, then production
@@ -77,24 +82,15 @@ class PipelineTestRunner:
         self.max_scenario_time = self.cfg.get('system', {}).get('maximum_scenario_length', 500.0)
 
     def load_scenarios(self):
-        scenarios = {}
         sources = self.plan.get('scenario_sources', ["core.yaml"])
-        
-        for source_file in sources:
-            path = os.path.join(self.project_root, "tests", "backend", "scenarios", source_file)
-            if os.path.exists(path):
-                with open(path, "r", encoding="utf-8") as f:
-                    scenarios.update(yaml.safe_load(f) or {})
-            else:
-                logger.warning(f"Scenario source '{source_file}' not found at {path}")
-        return scenarios
+        return load_scenarios_from_sources(self.project_root, "backend", sources)
 
     def run_scenario(self, sid, pid, mid, domain, l_id, v_ext=0.0, v_static=0.0, overrides=None, remaining_timeout=None):
         # 3. Execution (Data Routing)
         inputs = {}
         scen_def = self.integration_scenarios.get(sid)
         if not scen_def:
-            self.log(f"Scenario '{sid}' not found in core.yaml", level="error")
+            self.log(f"Scenario '{sid}' not found in sources {self.plan.get('scenario_sources')}", level="error")
             return False
 
         for turn in scen_def.get('turns', []):
@@ -296,7 +292,10 @@ class PipelineTestRunner:
                     for s_id in scenarios:
                         elapsed = time.perf_counter() - block_start
                         rem = max(1.0, self.max_scenario_time - elapsed)
-                        self.run_scenario(sid=s_id, pid=pipeline, mid=mapping, domain=domain, l_id=l_id, v_ext=v_ext, v_static=v_static, overrides=overrides, remaining_timeout=rem)
+                        success = self.run_scenario(sid=s_id, pid=pipeline, mid=mapping, domain=domain, l_id=l_id, v_ext=v_ext, v_static=v_static, overrides=overrides, remaining_timeout=rem)
+                        if not success and args.fail_fast:
+                            logger.warning(f"Fail-fast triggered by scenario '{s_id}'")
+                            return
 
                 v_ext = utils.get_gpu_vram_usage()
 
@@ -320,6 +319,10 @@ class PipelineTestRunner:
                 
                 loadout_results = [r for r in self.reporter.results if r.get('loadout_id') == l_id]
                 save_artifact(domain, [{"loadout": l_id, "scenarios": loadout_results, "status": status.upper()}], session_dir=self.session_dir)
+                
+                if status == "failed" and args.fail_fast:
+                    logger.warning("Fail-fast triggered by loadout failure.")
+                    break
 
             if self.dashboard: self.dashboard.finalize_domain(domain)
 
@@ -329,7 +332,6 @@ def main():
     parser.add_argument("--mock-models", action="store_true")
     parser.add_argument("--mock-edge", action="store_true")
     parser.add_argument("--mock-all", action="store_true")
-    parser.add_argument("--scenario", "-s", type=str, help="Filter scenarios by ID (substring match).")
     parser.add_argument("--fail-fast", action="store_true", help="Stop execution on first failure.")
     args = parser.parse_args()
     
@@ -338,25 +340,8 @@ def main():
         args.mock_edge = True
 
     plan_path = utils.resolve_path(args.plan)
-    with open(plan_path, "r") as f: plan_data = yaml.safe_load(f)
     
-    # Pre-filter execution blocks based on scenario
-    if args.scenario:
-        filtered_blocks = []
-        for block in plan_data.get('execution', []):
-            scenarios = block.get('scenarios', [])
-            matched = [s for s in scenarios if args.scenario.lower() in s.lower()]
-            if matched:
-                new_block = block.copy()
-                new_block['scenarios'] = matched
-                filtered_blocks.append(new_block)
-        plan_data['execution'] = filtered_blocks
-        
-        if not filtered_blocks:
-            print(f"No scenarios matched filter: {args.scenario}")
-            return
-
-    dashboard = RichDashboard(plan_data.get('name', 'Flow Test'))
+    dashboard = RichDashboard("Jarvis Backend Test")
     dashboard.start()
 
     session_dir = "ERROR"
@@ -380,6 +365,7 @@ def main():
             except Exception as e:
                 import traceback
                 log_msg(f"CRITICAL ERROR: {e}", tag="runner", level="error")
+                logger.error(traceback.format_exc())
 
         worker = threading.Thread(target=execution_worker, daemon=True)
         worker.start()

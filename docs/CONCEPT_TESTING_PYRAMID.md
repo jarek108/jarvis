@@ -7,28 +7,28 @@ To ensure both rapid development and rock-solid production reliability, Jarvis e
 ## 1. The Pyramid Tiers
 
 ### Tier 0: Fast Infra Check (Unit/Logic)
-**Command:** `python tests/runner.py tests/plans/integration_fast.yaml --mock-all`
+**Command:** `python tests/backend/runner.py tests/backend/plans/integration_fast.yaml --mock-all`
 *   **Goal**: Verify the "Plumbing."
 *   **Realism**: Low. Replaces heavy models with stubs and hardware drivers with file-readers.
 *   **Cost**: Near zero. No VRAM required.
 *   **When**: Every code change.
 
 ### Tier 1: Component Audit (Integration/Isolation)
-**Command:** `python tests/runner.py tests/plans/components_exhaustive.yaml --mock-edge`
+**Command:** `python tests/backend/runner.py tests/backend/plans/components_exhaustive.yaml --mock-edge`
 *   **Goal**: Verify individual AI kernels (STT, LLM, TTS) in isolation.
 *   **Realism**: Medium. Uses real models but bypasses hardware timing/IO.
 *   **Cost**: Moderate VRAM.
 *   **When**: When changing model versions or calibration data.
 
 ### Tier 2: Fast Deployment Check (Virtualized E2E)
-**Command:** `python tests/runner.py tests/plans/integration_fast.yaml`
+**Command:** `python tests/backend/runner.py tests/backend/plans/integration_fast.yaml`
 *   **Goal**: Smoke test the full production stack.
 *   **Realism**: High. Uses real models and real hardware drivers (e.g., `pyaudio`). The environment is virtualized (e.g., Virtual Audio Cables).
 *   **Cost**: Full VRAM for a single loadout.
 *   **When**: Before a commit or pull request.
 
 ### Tier 3: Comprehensive Load Audit (Full E2E)
-**Command:** `python tests/runner.py tests/plans/integration_exhaustive.yaml`
+**Command:** `python tests/backend/runner.py tests/backend/plans/integration_exhaustive.yaml`
 *   **Goal**: Stress test all model combinations and edge cases.
 *   **Realism**: Maximum.
 *   **Cost**: High. Loads multiple 30B+ models sequentially.

@@ -4,6 +4,10 @@ settings:
   purge_on_entry: true
   purge_on_exit: true
 
+scenario_sources:
+  - "core.yaml"
+  - "visual.yaml"
+
 execution:
   - domain: "sts_voice"
     pipeline: "speech_to_speech"

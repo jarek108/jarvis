@@ -4,6 +4,9 @@ settings:
   purge_on_entry: true
   purge_on_exit: true
 
+scenario_sources:
+  - "core.yaml"
+
 execution:
   - domain: "stt"
     pipeline: "atomic_stt"

@@ -1,6 +1,9 @@
 name: "Client UI Automation Fast Check"
 description: "Comprehensive verification of UI responsiveness, state synchronization, and visual consistency."
 
+scenario_sources:
+  - "client_ui.yaml"
+
 scenarios:
   - id: ui_startup_state
   - id: ui_loadout_activation_latency
