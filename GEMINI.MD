@@ -13,8 +13,8 @@ This file contains foundational mandates for the AI assistant (Jarvis). These in
 *   **VRAM Allocation**: vLLM must be configured using the "GB-first" strategy from the physics database. Tuning via `vram_safety_buffer` and `vram_static_floor` in `system_config/config.yaml` is mandatory for pipeline stability.
 
 ## 🧪 Testing & Refactoring Directives
-*   **Refactor Guard**: Always run `python tests/runner.py tests/plans/ALL_fast.yaml --mock-all` after code changes.
-*   **Domain Testing**: `python tests/runner.py tests/plans/atomic_[DOMAIN]_fast.yaml` (Start here for features)
+*   **Refactor Guard**: Always run `python tests/runner.py tests/plans/integration_fast.yaml --mock-all` after code changes.
+*   **Domain Testing**: `python tests/runner.py tests/plans/components_fast.yaml` (Start here for features)
 *   **Calibrate on Success**: When adding a new model to a suite, you must generate its physics datasheet using `python tools/calibrate_models.py`.
 
 ## 📂 Engineering Standards

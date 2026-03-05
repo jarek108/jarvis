@@ -30,7 +30,7 @@ Common issues and solutions for the Jarvis infrastructure.
 *   **Cause:** The model weights are not in the local cache.
 *   **Fix:** Run with force download enabled:
     ```powershell
-    python tests/runner.py tests/plans/ALL_fast.yaml --force-download
+    python tests/runner.py tests/plans/integration_fast.yaml --force-download
     ```
 
 ### "Status: UNCALIBRATED"

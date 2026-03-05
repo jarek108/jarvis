@@ -60,7 +60,7 @@ python manage_loadout.py --status
 
 ### 🛠️ How-to Guides (Tasks)
 - **[Benchmarking](docs/HOWTO_BENCHMARK.md)**: Running component tests and performance reports.
-- **[Integration Testing](docs/PLAN_E2E_INTEGRATION.md)**: Verifying the integration system logic and state machine.
+- **[Hardware Testing](docs/HOWTO_HARDWARE_TESTING.md)**: Verifying Mic, Screen, and Camera with virtual drivers.
 - **[Reporting](docs/HOWTO_REPORTING.md)**: Regenerating and synchronizing benchmark data.
 - **[Engine Management](docs/HOWTO_ENGINE_MANAGEMENT.md)**: Configuring Ollama and vLLM (Docker) lifecycles.
 - **[Troubleshooting](docs/HOWTO_TROUBLESHOOTING.md)**: Common errors, CUDA issues, and log analysis.
@@ -68,12 +68,11 @@ python manage_loadout.py --status
 
 ### 📚 Concepts (Understanding)
 - **[System Architecture](docs/CONCEPT_ARCHITECTURE.md)**: High-level component breakdown and data flow.
-- **[Integration Interaction Pipeline](docs/ARCHITECTURE_INTEGRATION_PIPELINE.md)**: Configurable interaction flows and WebSocket transport.
+- **[The Testing Pyramid](docs/CONCEPT_TESTING_PYRAMID.md)**: Multi-tiered validation strategy (Mocking vs. Virtualizing).
+- **[Unified Node Abstraction](docs/CONCEPT_UNIFIED_ABSTRACTION.md)**: Functional execution model for models and hardware.
+- **[Reactive Flow Engine](docs/CONCEPT_FLOW_GRAPH_ENGINE.md)**: Declarative graph orchestration and transport.
 - **[Operational Concepts](docs/CONCEPT_OPERATIONAL_CONCEPTS.md)**: Behavioral templates, triggers, and stateless turn logic.
 - **[Model Physics](docs/CONCEPT_MODEL_PHYSICS.md)**: VRAM management, KV cache scaling, and calibration theory.
-- **[Reporting Architecture](docs/CONCEPT_REPORTING.md)**: Artifact lifecycles and the "Turbo Sync" engine.
-- **[Streaming Strategy](docs/CONCEPT_STREAMING.md)**: Latency trade-offs between batch and streaming modes.
-- **[Vision Strategies](docs/CONCEPT_VLM_STRATEGIES.md)**: How Jarvis handles multi-image and video data.
 - **[Persona & Tone](docs/CONCEPT_PERSONA.md)**: Philosophical stance on assistant behavior and honesty.
 
 ### 📖 Reference (Information)

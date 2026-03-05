@@ -6,52 +6,50 @@ This document outlines the standard operating procedures for verifying changes, 
 
 To optimize for both speed and coverage, testing should follow a strict hierarchy. Always start small and expand only after success.
 
-### Level 0: Refactor Guard (Plumbing Check)
+### Level 0: Fast Infra Check (Plumbing)
 **When to run:** Immediately after ANY code change or refactor.
 **Goal:** Verify that imports, network ports, JSON schemas, and server coordination are still functional. **Does not require a GPU.**
 
-*   **Command:** `python tests/runner.py tests/plans/ALL_fast.yaml --plumbing`
-*   **Behavior:** Runs real server scripts (`stt_server.py`, `tts_server.py`, etc.) but uses lightweight stubs instead of loading model weights.
+*   **Command:** `python tests/runner.py tests/plans/integration_fast.yaml --mock-all`
+*   **Behavior:** Runs real server scripts (`stt_server.py`, `tts_server.py`, etc.) but uses lightweight stubs instead of loading model weights, and mocks hardware drivers.
 *   **Duration:** ~15-30 seconds.
 
-### Level 1: Domain-Specific Fast Checks
+### Level 1: Domain-Specific Checks
 **When to run:** After making changes to a specific component (e.g., updating `llm.py` or `stt_server.py`).
-**Goal:** Verify logic against actual AI kernels on hardware.
+**Goal:** Verify logic in isolation.
 
-*   **LLM Focus:** `python tests/runner.py tests/plans/LLM_fast.yaml`
-*   **STT Focus:** `python tests/runner.py tests/plans/STT_fast.yaml`
-*   **TTS Focus:** `python tests/runner.py tests/plans/TTS_fast.yaml`
-*   **VLM Focus:** `python tests/runner.py tests/plans/VLM_fast.yaml`
-*   **STS Focus:** `python tests/runner.py tests/plans/STS_fast.yaml`
+*   **Command:** `python tests/runner.py tests/plans/components_fast.yaml`
+*   **Behavior:** Tests individual atomic nodes (STT, LLM, TTS) using real models but virtualized hardware inputs.
 
-### Level 2: The "Fast Health Check"
+### Level 2: Fast Deployment Check
 **When to run:** Before committing code or after integrating multiple components.
-**Goal:** Verify full stack hardware compatibility.
+**Goal:** Verify full stack hardware compatibility using a representative production pipeline.
 
-*   **Command:** `python tests/runner.py tests/plans/ALL_fast.yaml`
+*   **Command:** `python tests/runner.py tests/plans/integration_fast.yaml`
 *   **Duration:** ~2-3 minutes.
 
-### Level 3: The "Exhaustive Global Comparison"
+### Level 3: Comprehensive Audit
 **When to run:** Before a major release or after significant hardware/driver updates.
-**Goal:** Stress-test the system and generate official performance benchmarks.
+**Goal:** Stress-test the system and generate official performance benchmarks across all model variants.
 
-*   **Command:** `python tests/runner.py tests/plans/ALL_exhaustive.yaml`
+*   **Atomic Audit:** `python tests/runner.py tests/plans/components_exhaustive.yaml`
+*   **System Audit:** `python tests/runner.py tests/plans/integration_exhaustive.yaml`
 *   **Duration:** 20+ minutes.
 
 ---
 
-## 2. Mock vs. Plumbing Mode
+## 2. Orthogonal Mocking Flags
 
-Both modes allow testing without loading actual model weights, but they operate at different depths:
+The test runner uses orthogonal flags to control which parts of the system are real vs. simulated:
 
-| Feature | Mock Mode (`--mock`) | Plumbing Mode (`--plumbing`) |
+| Flag | Component | Behavior |
 | :--- | :--- | :--- |
-| **Logic Layer** | Simulator (in Runner) | **Real Servers** (FastAPI) |
-| **Network** | None (simulated) | **Actual TCP/HTTP** |
-| **JSON API** | Not tested | **Fully Tested** |
-| **Dashboard** | Full Display | Full Display |
-| **Artifacts** | Mocked Data | **Real Structure** (WAVs, JSON) |
-| **Primary Use** | UI/Reporting tweaks | **Refactor Guard / Plumbing** |
+| **`--mock-models`** | AI Models | Uses zero-VRAM stub servers. |
+| **`--mock-edge`** | Hardware | Bypasses `pyaudio`/`mss` drivers; uses file readers/no-ops. |
+| **`--mock-all`** | Everything | Alias for both flags above. Equivalent to old "plumbing" mode. |
+| *(None)* | Production | Uses **Real Models** + **Real Drivers** in a **Virtualized Environment**. |
+
+> **Note on Hard-Crash Philosophy**: Non-mocking tests (standard or `--mock-models` only) require physical or virtualized hardware. If drivers or virtual audio cables are missing, the test will **fail loudly** rather than silently passing.
 
 ---
 
@@ -87,7 +85,7 @@ Jarvis supports side-by-side comparison of **Streaming** (Token-by-token) and **
 ### The Flag Syntax (`#stream`)
 To enable streaming for a specific model loadout, append the `#stream` flag to the model string in the test plan.
 
-**Example (`tests/plans/LLM_fast.yaml`):**
+**Example (`tests/plans/integration_exhaustive.yaml`):**
 ```yaml
 execution:
   - domain: llm
@@ -95,11 +93,6 @@ execution:
       - ["ollama://qwen2.5:0.5b"]          # Runs Batch
       - ["ollama://qwen2.5:0.5b#stream"]   # Runs Streaming
 ```
-
-### Reporting
-*   **Separation:** The test runner treats these as distinct loadouts.
-*   **Labeling:** In the Excel report and Dashboard, scenarios are automatically suffixed with `[Stream]` or `[Batch]` (e.g., `Story Gen [Stream]`).
-*   **Metrics:** Streaming runs will show a significantly lower **TTFT (Time To First Token)**, while Batch runs provide a baseline for total throughput (TPS).
 
 ---
 
@@ -109,20 +102,10 @@ For Vision-Language Models (especially `Qwen3-VL`), you can tune memory and cont
 
 | Flag | Description | Example |
 | :--- | :--- | :--- |
-| `#ctx=N` | Sets `--max-model-len`. Crucial for long videos. | `#ctx=16384` |
-| `#vid_lim=N` | Sets `--limit-mm-per-prompt video=N`. | `#vid_lim=2` |
-| `#img_lim=N` | Sets `--limit-mm-per-prompt image=N`. | `#img_lim=4` |
+| `#ctx=N` | Sets `--max-model-len`. | `#ctx=16384` |
 | `#gpu_util=X` | Overrides config `gpu_memory_utilization`. | `#gpu_util=0.9` |
 
-**Example (`tests/plans/vLLM_fast.yaml`):**
-```yaml
-execution:
-  - domain: vlm
-    loadouts:
-      - ["vllm://QuantTrio/Qwen3-VL-30B-A3B-Instruct-AWQ#nativevideo#stream#ctx=16384"]
-```
-
-For a deep dive on why these parameters matter (and why VRAM usage looks static), see **[VRAM Tuning](analysis/VRAM_TUNING.md)**.
+For a deep dive on why these parameters matter, see **[VRAM Tuning](analysis/VRAM_TUNING.md)**.
 
 ---
 
@@ -142,8 +125,3 @@ Use this after a hardware upgrade (e.g., more VRAM) or a major engine update (Ol
 ```powershell
 python tools/calibrate_models.py system_config/model_calibrations/source_logs/
 ```
-
-### How to Verify a Specification
-1.  Open `system_config/model_calibrations/[engine]_[safe_id].yaml`.
-2.  Check if `base_vram_gb` matches your model's weight size.
-3.  For more details, see the **[Calibration Reference](REFERENCE_CALIBRATION.md)** and the **[Model Physics Concept](CONCEPT_MODEL_PHYSICS.md)**.

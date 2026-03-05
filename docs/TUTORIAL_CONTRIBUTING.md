@@ -6,9 +6,9 @@ This guide explains the engineering standards and development workflows required
 Before committing ANY code change, you must run the **Refactor Guard**. Jarvis is a complex real-time system; small logic changes can break the STS pipeline in subtle ways.
 
 ```powershell
-# Run the Refactor Guard (Plumbing Mode)
+# Run the Refactor Guard (Fast Infra Check)
 # This simulates the entire cluster using lightweight stubs (No GPU required)
-python tests/runner.py tests/plans/ALL_fast.yaml --plumbing
+python tests/runner.py tests/plans/integration_fast.yaml --mock-all
 ```
 
 ## 2. Strict Path Policy (Anti-Bloat)

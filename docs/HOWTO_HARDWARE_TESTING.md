@@ -1,6 +1,6 @@
 # How-To: Realistic Hardware Testing
 
-This guide explains how to verify Jarvis hardware interaction logic using either virtualized environments or physical verification.
+This guide explains how to verify Jarvis hardware interaction logic using either virtualized environments or physical verification. For a high-level overview of the testing strategy, see **[The Testing Pyramid](CONCEPT_TESTING_PYRAMID.md)**.
 
 ## 1. Running Virtualized Tests (The Default)
 By default, the test runner drives your **actual production code** using deterministic virtual devices. No flags are required to enable this.
