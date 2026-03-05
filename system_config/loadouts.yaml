@@ -1,13 +1,13 @@
-base-qwen30-multi:
+Speech-to-Speech, heavy:
   desc: "High-performance vision-capable loadout using Qwen 30B."
   models:
     - "native://faster-whisper-base"
     - "native://chatterbox-multilingual"
     - "vllm://QuantTrio/Qwen3-VL-30B-A3B-Instruct-AWQ#ctx=32768"
     
-tiny-gpt20-turbo:
+Speech-to-Speech, light:
   desc: "Ultra-fast lightweight loadout for rapid interaction."
   models:
-    - "native://faster-whisper-tiny"
+    - "native://faster-whisper-base"
     - "native://chatterbox-turbo"
     - "ollama://qwen2.5:0.5b#ctx=4096"

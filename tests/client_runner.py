@@ -40,6 +40,15 @@ class StatusDumper:
                 text = widget.get("1.0", "end-1c").strip()
             elif hasattr(widget, "cget"): # Label / Button / Frame
                 text = str(widget.cget("text"))
+            
+            # Expanded fallback for CustomTkinter widgets with variables
+            if not text:
+                for var_attr in ["_variable", "variable", "_var"]:
+                    if hasattr(widget, var_attr):
+                        var = getattr(widget, var_attr)
+                        if hasattr(var, "get"):
+                            text = str(var.get())
+                            break
         except: pass
         
         latency = (time.perf_counter() - start_t) * 1000
@@ -64,8 +73,7 @@ class StatusDumper:
             "pipe_opt": self.app.pipe_opt,
             "record_btn": self.app.record_btn,
             "terminal": self.app.terminal,
-            "mode_label": self.app.mode_label,
-            "view_mode_btn": self.app.view_mode_btn
+            "mode_label": self.app.mode_label
         }
         return mapping.get(path)
 
@@ -116,11 +124,6 @@ class AutomationController:
             logger.info(f"🔽 Selecting Pipeline: '{value}'")
             self.app.pipe_var.set(value)
             self.app.on_config_change(value)
-
-    def set_view_mode(self, mode: str):
-        logger.info(f"🖥️  Setting View Mode: '{mode}'")
-        self.app.view_mode_var.set(mode)
-        self.app.on_view_mode_change(mode)
 
     def _resolve_widget(self, path: str) -> Optional[Any]:
         return StatusDumper(self.app)._resolve_widget(path)
@@ -185,8 +188,6 @@ class ClientTestRunner:
             self.automation.select_dropdown(target, value)
         elif action == "click_element":
             self.automation.click(target)
-        elif action == "set_view_mode":
-            self.automation.set_view_mode(value)
         elif action == "take_screenshot":
             self.visual.capture_window(step.get('file', 'test_snap.jpg'))
         elif action == "assert_ui_text":
@@ -195,7 +196,8 @@ class ClientTestRunner:
             if contains in actual:
                 logger.info(f"✅ Assertion Passed: '{target}' contains '{contains}'")
             else:
-                logger.error(f"❌ Assertion Failed: '{target}' (Actual: '{actual[:50]}...') does not contain '{contains}'")
+                display_actual = f"'{actual}'" if actual else "EMPTY"
+                logger.error(f"❌ Assertion Failed: '{target}' (Actual: {display_actual}) does not contain '{contains}'")
         elif action == "assert_system_state":
             snap = self.dumper.get_system_snapshot()
             cond = step.get('condition')

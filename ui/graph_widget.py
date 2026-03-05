@@ -17,7 +17,6 @@ class PipelineGraphWidget(ctk.CTkFrame):
         self.dragging_node_id = None
         self.drag_offset = (0, 0)
         self.has_dragged = False
-        self.view_mode = "MAPPING"
         self.health_data = {} # port -> {status, info}
         
         self.canvas.bind("<Configure>", self.on_resize)
@@ -32,10 +31,9 @@ class PipelineGraphWidget(ctk.CTkFrame):
     def on_resize(self, event):
         self.draw_graph()
 
-    def set_graph_data(self, bound_graph, manual_positions=None, view_mode=None, health_data=None):
+    def set_graph_data(self, bound_graph, manual_positions=None, health_data=None):
         self.bound_graph = bound_graph
         if manual_positions is not None: self.manual_positions = manual_positions
-        if view_mode: self.view_mode = view_mode
         if health_data is not None: self.health_data = health_data
         self.draw_graph()
 
@@ -121,7 +119,7 @@ class PipelineGraphWidget(ctk.CTkFrame):
         return self.canvas.create_polygon(points, fill=color, outline=outline_color, width=outline_width, smooth=True)
 
     def draw_edge(self, x1, y1, x2, y2, color=None, style=None):
-        if color is None: color = self.ui_cfg['graph']['edge']['color']
+        if color is None: color = self.ui_cfg['colors']['gray']
         width = self.ui_cfg['graph']['edge']['width']
         ashape = tuple(self.ui_cfg['graph']['edge']['arrow_shape'])
         
@@ -132,7 +130,7 @@ class PipelineGraphWidget(ctk.CTkFrame):
 
     def draw_label(self, x1, y1, x2, y2, label, color=None):
         if not label: return
-        if color is None: color = self.ui_cfg['graph']['edge']['color']
+        if color is None: color = self.ui_cfg['colors']['gray']
         
         # Midpoint of the vertical flow, following the 30% elbow weight
         mid_x = (x1 + x2) / 2
@@ -238,28 +236,46 @@ class PipelineGraphWidget(ctk.CTkFrame):
             role = node.get('role', ntype)
             binding = node.get('binding')
             
-            # Color Coding Strategy
-            if ntype == 'source':
-                is_sys_prompt = any(n.get('system_prompt') == nid for n in self.bound_graph.values())
-                outline_color = self.ui_cfg['colors']['purple'] if is_sys_prompt else self.ui_cfg['colors']['accent']
-            elif ntype == 'sink':
-                outline_color = self.ui_cfg['colors']['warning']
-            elif ntype == 'processing':
-                if role == 'utility':
-                    outline_color = self.ui_cfg['colors']['gray']
-                elif not binding:
-                    outline_color = self.ui_cfg['colors']['error']
+            # COLOR CODING Logic
+            title_color = self.ui_cfg['colors']['gray'] # Default: not mapped (Grey)
+            subtext = "Unbound"
+            subtext_color = self.ui_cfg['colors']['gray']
+
+            if binding:
+                # If bound, we check health if it has a port
+                port = getattr(binding, 'config', {}).get('binding', {}).get('port') if not isinstance(binding, dict) else binding.get('config', {}).get('binding', {}).get('port')
+                if port:
+                    health = self.health_data.get(port, {"status": "OFF"})
+                    s = health['status']
+                    if s in ["ON", "BUSY"]:
+                        title_color = self.ui_cfg['colors']['success'] # Ready (Green)
+                        subtext_color = self.ui_cfg['colors']['success']
+                    elif s == "STARTUP":
+                        title_color = self.ui_cfg['colors']['warning'] # Loading (Yellow)
+                        subtext_color = self.ui_cfg['colors']['warning']
+                    else:
+                        title_color = self.ui_cfg['colors']['error'] # Error (Red)
+                        subtext_color = self.ui_cfg['colors']['error']
                 else:
-                    outline_color = self.ui_cfg['colors']['success']
-            else:
-                outline_color = self.ui_cfg['colors']['gray']
+                    # Local logic (no port) - assume Green if bound
+                    title_color = self.ui_cfg['colors']['success']
+                    subtext_color = self.ui_cfg['colors']['success']
+                
+                # Determine subtext (ID)
+                subtext = getattr(binding, 'id', 'Unknown') if not isinstance(binding, dict) else binding.get('id', 'Unknown')
+            elif ntype in ['source', 'sink']:
+                # Hardware sources/sinks are Green if the system is "Live"
+                # (Simpler for now: if pipeline is resolved, hardware is ready)
+                title_color = self.ui_cfg['colors']['success']
+                subtext = "Hardware"
+                subtext_color = self.ui_cfg['colors']['accent']
 
             outline_w = 2.5 if is_selected else 1.5
             if is_selected: bg_color = node_cfg.get('selected_bg_color', "#1A202C")
 
-            self.draw_rounded_rect(bx1, by1, node_w, node_h, r, bg_color, outline_color, outline_w)
+            self.draw_rounded_rect(bx1, by1, node_w, node_h, r, bg_color, self.ui_cfg['colors']['gray'], outline_w)
             
-            # Label Selection (favor YAML display_name, fallback to cleaned ID)
+            # Label Selection
             if 'display_name' in node:
                 display_name = node['display_name'].upper()
             else:
@@ -267,42 +283,15 @@ class PipelineGraphWidget(ctk.CTkFrame):
                 if display_name.startswith("input_"): display_name = display_name[6:]
                 if display_name.startswith("output_"): display_name = display_name[7:]
                 if display_name.startswith("proc_"): display_name = display_name[5:]
-                
-                # Internal common abbreviations
                 abbrevs = {"conversation_memory": "conv mem", "system_prompt": "sys prompt"}
                 display_name = abbrevs.get(display_name, display_name).replace("_", " ").upper()
             
             # Text Content
             f_pri, f_sec = tuple(self.ui_cfg['graph']['font']['primary']), tuple(self.ui_cfg['graph']['font']['secondary'])
-            self.canvas.create_text(cx, cy - 10, text=display_name, fill="#FFFFFF", font=f_pri)
             
-            if self.view_mode == "STATUS":
-                # STATUS MODE: Show functional state
-                status_text = ""
-                status_color = self.ui_cfg['colors']['gray']
-                
-                if binding:
-                    port = binding.get('port')
-                    health = self.health_data.get(port, {"status": "OFF"})
-                    s = health['status']
-                    if s == "ON": status_text = "READY"; status_color = self.ui_cfg['colors']['success']
-                    elif s == "BUSY": status_text = "PROCESSING"; status_color = self.ui_cfg['colors']['accent']
-                    elif s == "STARTUP": status_text = "STARTUP"; status_color = self.ui_cfg['colors']['warning']
-                    else: status_text = "ERROR"; status_color = self.ui_cfg['colors']['error']
-                elif ntype == 'processing' and role != 'utility':
-                    status_text = "UNBOUND"; status_color = self.ui_cfg['colors']['error']
-                elif ntype in ['source', 'sink']:
-                    status_text = "READY"; status_color = self.ui_cfg['colors']['success']
-                
-                if status_text:
-                    self.canvas.create_text(cx, cy + 10, text=status_text, fill=status_color, font=f_sec if status_text != "UNBOUND" else f_pri)
-            else:
-                # MAPPING MODE: Show model IDs (Original behavior)
-                if binding:
-                    subtext = getattr(binding, 'id', 'Unknown') if not isinstance(binding, dict) else binding.get('id', 'Unknown')
-                    # Check if it was an auto-binding
-                    is_auto = getattr(binding, 'is_auto', True) if not isinstance(binding, dict) else binding.get('is_auto', True)
-                    display_sub = f"{subtext[:22]} [AUTO]" if is_auto else subtext[:22]
-                    self.canvas.create_text(cx, cy + 10, text=display_sub, fill=self.ui_cfg['colors']['success'], font=f_sec)
-                elif ntype == 'processing' and role != 'utility':
-                    self.canvas.create_text(cx, cy + 10, text="[UNBOUND]", fill=self.ui_cfg['colors']['error'], font=f_pri)
+            # Draw Title (Color coded)
+            self.canvas.create_text(cx, cy - 10, text=display_name, fill=title_color, font=f_pri)
+            
+            # Draw Subtext (Model ID or Status)
+            display_sub = subtext[:28] if len(subtext) > 28 else subtext
+            self.canvas.create_text(cx, cy + 10, text=display_sub, fill=subtext_color, font=f_sec)

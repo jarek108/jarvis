@@ -84,11 +84,6 @@ class JarvisApp(ctk.CTk):
         self.auto_btn = ctk.CTkButton(self.header, text="AUTO LAYOUT", width=100, height=24, fg_color=self.colors.get('gray'), text_color="white", command=self.on_auto_layout)
         self.auto_btn.pack(side="left", padx=20)
 
-        # View Mode Selector
-        self.view_mode_var = ctk.StringVar(value="MAPPING")
-        self.view_mode_btn = ctk.CTkSegmentedButton(self.header, values=["MAPPING", "STATUS"], variable=self.view_mode_var, command=self.on_view_mode_change)
-        self.view_mode_btn.pack(side="left", padx=10)
-
         # Mode Indicator
         self.mode_label = ctk.CTkLabel(self.header, text="MODE: TERMINAL", font=("Consolas", 12, "bold"), text_color=self.colors.get('accent'))
         self.mode_label.pack(side="right", padx=20)
@@ -132,9 +127,6 @@ class JarvisApp(ctk.CTk):
     def on_auto_layout(self):
         self.graph_widget.apply_auto_layout()
 
-    def on_view_mode_change(self, val):
-        self.update_graph_view()
-
     def on_loadout_change(self, val):
         if val != "NONE" and val == self.controller.current_loadout: return
         self.transition_lock = True; self.selected_mid = None; self.switch_to_terminal()
@@ -146,7 +138,7 @@ class JarvisApp(ctk.CTk):
         except: vram_snap = None
         if val != "NONE":
             try:
-                loadouts_path = os.path.join(script_dir, "system_config", "loadouts.yaml")
+                loadouts_path = os.path.join(self.controller.project_root, "system_config", "loadouts.yaml")
                 with open(loadouts_path, "r") as f: all_loadouts = yaml.safe_load(f)
                 target = all_loadouts.get(val)
                 if target:
@@ -160,10 +152,13 @@ class JarvisApp(ctk.CTk):
                             mock_port = -1 - i
                             instant_models.append({"id": m_data['id'], "engine": m_data['engine'], "params": m_data['params'], "port": mock_port, "capabilities": self.controller.resolver.get_model_capabilities(m_data['id'], m_data['engine'])})
                             instant_health[mock_port] = {"status": "STARTUP", "info": "Initializing..."}
+                    
+                    self.controller.health_state = instant_health
                     self.update_health_ui(instant_health, {"runnable": False, "errors": ["Loading..."]}, active_models=instant_models, vram=vram_snap)
             except Exception as e: logger.error(f"Instant UI refresh failed: {e}")
         else:
             self.transition_lock = False
+            self.controller.health_state = {}
             self.update_health_ui({}, {"runnable": False, "errors": ["Offline"]}, active_models=[], vram=vram_snap)
         def execute_backend_changes():
             self.controller.trigger_loadout_change(val)
@@ -171,18 +166,17 @@ class JarvisApp(ctk.CTk):
         self.after(100, execute_backend_changes)
 
     def update_graph_view(self):
-        mode = self.view_mode_var.get()
         health = self.controller.health_state
         try:
             bound_graph = self.controller.resolver.resolve(self.controller.current_pipeline, self.controller.current_strategy)
             manual_pos = self.controller.node_positions.get(self.controller.current_pipeline)
-            self.graph_widget.set_graph_data(bound_graph, manual_positions=manual_pos, view_mode=mode, health_data=health)
+            self.graph_widget.set_graph_data(bound_graph, manual_positions=manual_pos, health_data=health)
         except:
             try:
                 raw_pipeline = self.controller.resolver.load_yaml(self.controller.current_pipeline)
                 unbound_graph = {n['id']: n.copy() for n in raw_pipeline.get('nodes', [])}
                 manual_pos = self.controller.node_positions.get(self.controller.current_pipeline)
-                self.graph_widget.set_graph_data(unbound_graph, manual_positions=manual_pos, view_mode=mode, health_data=health)
+                self.graph_widget.set_graph_data(unbound_graph, manual_positions=manual_pos, health_data=health)
             except: self.graph_widget.set_graph_data(None)
 
     def switch_to_terminal(self):
@@ -271,9 +265,8 @@ class JarvisApp(ctk.CTk):
             
         self._update_selection_ui()
         
-        # Refresh Graph if in Status Mode
-        if self.view_mode_var.get() == "STATUS":
-            self.update_graph_view()
+        # Refresh Graph with new health data
+        self.update_graph_view()
 
         # Loadout Opt color coding
         if self.controller.current_loadout == "NONE": self.loadout_opt.configure(fg_color=self.colors.get('gray'))

@@ -6,5 +6,4 @@ scenarios:
   - id: ui_loadout_activation_latency
   - id: ui_loadout_deactivation
   - id: ui_loadout_idempotency
-  - id: ui_view_mode_toggle
   - id: ui_graph_mapping_status

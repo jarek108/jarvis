@@ -93,7 +93,7 @@ ui:
     purple: "#BF40BF"
   graph:
     node:
-      width: 160
+      width: 210
       height: 60
       radius: 8
       bg_color: "#12161E"

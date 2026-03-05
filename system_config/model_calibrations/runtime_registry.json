@@ -5,7 +5,7 @@
       "engine": "native",
       "port": 8101,
       "params": {},
-      "log_path": "C:\\Users\\chojn\\projects\\jarvis\\logs\\sessions\\RUN_20260305_040528\\svc_stt_faster-whisper-base.log",
+      "log_path": "C:\\Users\\chojn\\projects\\jarvis\\logs\\sessions\\RUN_20260305_084139\\svc_stt_faster-whisper-base.log",
       "type": "stt",
       "required_gb": 0.5
     },
@@ -14,7 +14,7 @@
       "engine": "native",
       "port": 8201,
       "params": {},
-      "log_path": "C:\\Users\\chojn\\projects\\jarvis\\logs\\sessions\\RUN_20260305_040528\\svc_tts_chatterbox-multilingual.log",
+      "log_path": "C:\\Users\\chojn\\projects\\jarvis\\logs\\sessions\\RUN_20260305_084139\\svc_tts_chatterbox-multilingual.log",
       "type": "tts",
       "required_gb": 4.5
     },
@@ -25,12 +25,12 @@
       "params": {
         "num_ctx": 32768
       },
-      "log_path": "C:\\Users\\chojn\\projects\\jarvis\\logs\\sessions\\RUN_20260305_040528\\svc_llm_quanttrio--qwen3-vl-30b-a3b-instruct-awq.log",
+      "log_path": "C:\\Users\\chojn\\projects\\jarvis\\logs\\sessions\\RUN_20260305_084139\\svc_llm_quanttrio--qwen3-vl-30b-a3b-instruct-awq.log",
       "type": "llm",
       "required_gb": 20.96
     }
   ],
-  "loadout_id": "base-qwen30-multi",
-  "system_external_vram": 7.4169921875,
-  "last_updated": "2026-03-05 04:05:29"
+  "loadout_id": "Speech-to-Speech, heavy",
+  "system_external_vram": 2.5283203125,
+  "last_updated": "2026-03-05 08:41:40"
 }
