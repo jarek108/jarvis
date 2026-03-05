@@ -1,0 +1,54 @@
+# Jarvis Client UI Automation Scenarios
+
+ui_loadout_switch_latency:
+  name: "Verify UI responsiveness and visual state during loadout transitions."
+  timeline:
+    # 1. Trigger the switch
+    - t: 1.0s
+      action: select_dropdown
+      target: "loadout_opt"
+      value: "ollama------qwen2.5--0.5b" # Valid loadout ID
+    
+    # 2. Immediate feedback check (Is the UI hanging?)
+    - t: 1.1s
+      action: assert_ui_text
+      target: "mode_label"
+      contains: "TERMINAL"
+      
+    # 3. Capture visual state mid-transition
+    - t: 3.0s
+      action: take_screenshot
+      file: "loadout_transition_3s.jpg"
+      
+    # 4. Verify System and UI Synchronization
+    - t: 8.0s
+      action: assert_system_state
+      condition: "all_models_active"
+      
+    - t: 8.5s
+      action: assert_ui_text
+      target: "terminal"
+      contains: "LOADOUT APPLIED"
+    
+    - t: 9.0s
+      action: take_screenshot
+      file: "loadout_final_state.jpg"
+
+ui_view_mode_toggle:
+  name: "Verify Graph View updates when toggling View Modes."
+  timeline:
+    - t: 1.0s
+      action: set_view_mode
+      value: "STATUS"
+    
+    - t: 1.5s
+      action: take_screenshot
+      file: "view_mode_status.jpg"
+      
+    - t: 2.5s
+      action: set_view_mode
+      value: "MAPPING"
+      
+    - t: 3.0s
+      action: take_screenshot
+      file: "view_mode_mapping.jpg"

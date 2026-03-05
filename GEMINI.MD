@@ -14,6 +14,7 @@ This file contains foundational mandates for the AI assistant (Jarvis). These in
 
 ## 🧪 Testing & Refactoring Directives
 *   **Refactor Guard**: Always run `python tests/runner.py tests/plans/integration_fast.yaml --mock-all` after code changes.
+*   **Client Guard**: Run `python tests/client_runner.py tests/scenarios/client_ui.yaml --mock-all` for UI changes.
 *   **Domain Testing**: `python tests/runner.py tests/plans/components_fast.yaml` (Start here for features)
 *   **Calibrate on Success**: When adding a new model to a suite, you must generate its physics datasheet using `python tools/calibrate_models.py`.
 
