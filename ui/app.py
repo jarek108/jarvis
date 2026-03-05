@@ -74,7 +74,7 @@ class JarvisApp(ctk.CTk):
         self.header.grid(row=0, column=1, sticky="ew")
         
         # Pipeline
-        ctk.CTkLabel(self.header, text="Pipeline:").pack(side="left", padx=(20, 5))
+        ctk.CTkLabel(self.header, text="Pipeline:", font=("Consolas", 12, "bold")).pack(side="left", padx=(20, 5))
         pipes = [f.replace(".yaml", "") for f in os.listdir(os.path.join(script_dir, "system_config", "pipelines")) if f.endswith(".yaml")]
         self.pipe_var = ctk.StringVar(value=self.controller.current_pipeline)
         self.pipe_opt = ctk.CTkOptionMenu(self.header, values=pipes, variable=self.pipe_var, command=self.on_config_change)

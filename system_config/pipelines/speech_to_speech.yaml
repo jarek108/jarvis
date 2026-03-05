@@ -1,4 +1,4 @@
-id: voice_to_voice
+id: speech_to_speech
 description: "Reactive Speech-to-Speech interaction loop."
 nodes:
   - id: sys_prompt

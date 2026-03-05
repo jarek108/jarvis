@@ -36,7 +36,7 @@ class JarvisController:
         self.session_dir = os.path.join(script_dir, "logs", "sessions", self.current_session_id)
         os.makedirs(self.session_dir, exist_ok=True)
         
-        self.current_pipeline = "voice_to_voice"
+        self.current_pipeline = "speech_to_speech"
         self.current_strategy = "fast_interaction"
         self.current_loadout = "NONE"
         self.node_positions = {} # Scoped per pipeline: { pid: { nid: [x,y] } }

@@ -6,11 +6,11 @@ settings:
 
 execution:
   - domain: "sts_voice"
-    pipeline: "voice_to_voice"
+    pipeline: "speech_to_speech"
     loadouts:
       - ["native://faster-whisper-tiny", "native://chatterbox-turbo", "ollama://qwen2.5:0.5b"]
       - ["native://faster-whisper-base", "native://chatterbox-multilingual", "vllm://QuantTrio/Qwen3-VL-30B-A3B-Instruct-AWQ#stream"]
-    scenarios: [sts_voice, token_explosion]
+    scenarios: [speech_to_speech, token_explosion]
 
   - domain: "hybrid_chat"
     pipeline: "hybrid_chat"

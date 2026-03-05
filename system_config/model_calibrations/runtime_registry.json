@@ -1,36 +1,6 @@
 {
-  "active_loadout": [
-    {
-      "id": "faster-whisper-base",
-      "engine": "native",
-      "port": 8101,
-      "params": {},
-      "log_path": "C:\\Users\\chojn\\projects\\jarvis\\logs\\sessions\\RUN_20260305_084139\\svc_stt_faster-whisper-base.log",
-      "type": "stt",
-      "required_gb": 0.5
-    },
-    {
-      "id": "chatterbox-multilingual",
-      "engine": "native",
-      "port": 8201,
-      "params": {},
-      "log_path": "C:\\Users\\chojn\\projects\\jarvis\\logs\\sessions\\RUN_20260305_084139\\svc_tts_chatterbox-multilingual.log",
-      "type": "tts",
-      "required_gb": 4.5
-    },
-    {
-      "id": "QuantTrio/Qwen3-VL-30B-A3B-Instruct-AWQ",
-      "engine": "vllm",
-      "port": 8300,
-      "params": {
-        "num_ctx": 32768
-      },
-      "log_path": "C:\\Users\\chojn\\projects\\jarvis\\logs\\sessions\\RUN_20260305_084139\\svc_llm_quanttrio--qwen3-vl-30b-a3b-instruct-awq.log",
-      "type": "llm",
-      "required_gb": 20.96
-    }
-  ],
-  "loadout_id": "Speech-to-Speech, heavy",
-  "system_external_vram": 2.5283203125,
-  "last_updated": "2026-03-05 08:41:40"
+  "active_loadout": [],
+  "loadout_id": "NONE",
+  "system_external_vram": 1.9931640625,
+  "last_updated": "2026-03-05 08:51:22"
 }

@@ -17,7 +17,7 @@ def main():
     print("="*40)
     
     # Test 1: Resolve with explicit strategy
-    pipeline = "voice_to_voice"
+    pipeline = "speech_to_speech"
     strategy = "fast_interaction"
     
     print(f"Target: {pipeline} + {strategy}")

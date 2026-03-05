@@ -109,7 +109,7 @@ memory_recall:
       expect: [{"type": "log", "content": "neon blue"}]
 
 # --- COMPLEX INTEGRATION (Multi-Turn / Multi-Input) ---
-sts_voice:
+speech_to_speech:
   description: "Voice-driven Speech-to-Speech (Polish)"
   turns:
     - send: {node: "input_mic", content: "tests/data/polish.wav"}
