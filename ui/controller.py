@@ -51,12 +51,15 @@ class JarvisController:
 
         # Force system state to match UI "NONE" state
         def init_cleanup():
+            self._send_loading(True)
             self.ui_queue.put({"type": "log", "msg": "🧹 Cleaning up previous session state...", "tag": "system"})
             kill_loadout("all")
+            self._send_loading(False)
         threading.Thread(target=init_cleanup, daemon=True).start()
         
         self.is_recording = False
         self.is_polling = True
+        self.is_loading = False
         self.health_state = {}
         self.runnability = {"runnable": False, "errors": ["Initializing..."], "map": {}}
         
@@ -68,6 +71,10 @@ class JarvisController:
         self.ptt_signal = threading.Event()
         
         threading.Thread(target=self._status_polling_loop, daemon=True).start()
+
+    def _send_loading(self, loading: bool):
+        self.is_loading = loading
+        self.ui_queue.put({"type": "loading", "is_loading": loading})
 
     def load_checkpoint(self):
         if os.path.exists(CHECKPOINT_PATH):
@@ -140,6 +147,7 @@ class JarvisController:
         self.save_checkpoint()
         
         def task():
+            self._send_loading(True)
             if loadout_id == "NONE":
                 self.ui_queue.put({"type": "log", "msg": "☢️ KILLING ALL SERVICES...", "tag": "system"})
                 kill_loadout("all")
@@ -151,27 +159,32 @@ class JarvisController:
                     self.ui_queue.put({"type": "log", "msg": "✅ LOADOUT APPLIED", "tag": "system"})
                 except Exception as e:
                     self.ui_queue.put({"type": "log", "msg": f"❌ LOADOUT ERROR: {e}", "tag": "system"})
+            self._send_loading(False)
 
         threading.Thread(target=task, daemon=True).start()
 
     def trigger_service_restart(self, sid):
         def task():
+            self._send_loading(True)
             self.ui_queue.put({"type": "log", "msg": f"🔄 RESTARTING SERVICE: {sid}", "tag": "system"})
             try:
                 restart_service(sid, self.current_loadout)
                 self.ui_queue.put({"type": "log", "msg": f"✅ RESTARTED: {sid}", "tag": "system"})
             except Exception as e:
                 self.ui_queue.put({"type": "log", "msg": f"❌ RESTART ERROR [{sid}]: {e}", "tag": "system"})
+            self._send_loading(False)
         threading.Thread(target=task, daemon=True).start()
 
     def trigger_service_kill(self, sid):
         def task():
+            self._send_loading(True)
             self.ui_queue.put({"type": "log", "msg": f"🔪 CLOSING SERVICE: {sid}", "tag": "system"})
             try:
                 kill_service(sid)
                 self.ui_queue.put({"type": "log", "msg": f"✅ CLOSED: {sid}", "tag": "system"})
             except Exception as e:
                 self.ui_queue.put({"type": "log", "msg": f"❌ CLOSE ERROR [{sid}]: {e}", "tag": "system"})
+            self._send_loading(False)
         threading.Thread(target=task, daemon=True).start()
 
     def start_recording(self):

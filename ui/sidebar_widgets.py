@@ -2,6 +2,40 @@ import os
 import customtkinter as ctk
 from loguru import logger
 
+class LoadingSpinner(ctk.CTkCanvas):
+    def __init__(self, master, colors, size=30, **kwargs):
+        super().__init__(master, width=size, height=size, bg=colors.get('bg', '#0B0F19'), highlightthickness=0, **kwargs)
+        self.colors = colors
+        self.size = size
+        self.angle = 0
+        self.is_running = False
+        self._draw_arc()
+
+    def _draw_arc(self):
+        self.delete("all")
+        # Draw a subtle background circle
+        padding = 4
+        self.create_oval(padding, padding, self.size-padding, self.size-padding, outline="#1A202C", width=2)
+        # Draw the spinning arc
+        self.create_arc(padding, padding, self.size-padding, self.size-padding, 
+                        start=self.angle, extent=120, outline=self.colors.get('accent', '#00CF91'), 
+                        width=3, style="arc")
+        
+    def animate(self):
+        if not self.is_running or not self.winfo_exists(): return
+        self.angle = (self.angle + 10) % 360
+        self._draw_arc()
+        self.after(30, self.animate)
+
+    def start(self):
+        if self.is_running: return
+        self.is_running = True
+        self.animate()
+
+    def stop(self):
+        self.is_running = False
+        self.delete("all")
+
 class VramMonitor(ctk.CTkFrame):
     def __init__(self, master, colors, **kwargs):
         super().__init__(master, fg_color="transparent", **kwargs)

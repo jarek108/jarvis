@@ -7,7 +7,7 @@ import customtkinter as ctk
 
 from .controller import JarvisController
 from .graph_widget import PipelineGraphWidget
-from .sidebar_widgets import VramMonitor, ModelHealthCard
+from .sidebar_widgets import VramMonitor, ModelHealthCard, LoadingSpinner
 
 import utils
 
@@ -74,7 +74,10 @@ class JarvisApp(ctk.CTk):
         self.header.grid(row=0, column=1, sticky="ew")
         
         # Pipeline
-        ctk.CTkLabel(self.header, text="Pipeline:", font=("Consolas", 12, "bold")).pack(side="left", padx=(20, 5))
+        self.loading_spinner = LoadingSpinner(self.header, self.colors, size=24)
+        self.loading_spinner.pack(side="left", padx=(20, 0))
+        
+        ctk.CTkLabel(self.header, text="Pipeline:", font=("Consolas", 12, "bold")).pack(side="left", padx=(10, 5))
         pipes = [f.replace(".yaml", "") for f in os.listdir(os.path.join(script_dir, "system_config", "pipelines")) if f.endswith(".yaml")]
         self.pipe_var = ctk.StringVar(value=self.controller.current_pipeline)
         self.pipe_opt = ctk.CTkOptionMenu(self.header, values=pipes, variable=self.pipe_var, command=self.on_config_change)
@@ -286,5 +289,9 @@ class JarvisApp(ctk.CTk):
             if msg['type'] == "log": self.terminal.insert("end", f"{msg['msg']}\n"); self.terminal.see("end")
             elif msg['type'] == "state":
                 if msg.get('recording'): self.record_btn.configure(fg_color=self.colors.get('error'), text="RECORDING...")
-            elif msg['type'] == "health_update": self.update_health_ui(msg['health'], msg['runnability'], active_models=msg.get('active_models'), vram=msg.get('vram'))
+            elif msg['type'] == "loading":
+                if msg['is_loading']: self.loading_spinner.start()
+                else: self.loading_spinner.stop()
+            elif msg['type'] == "health_update":
+                self.update_health_ui(msg['health'], msg['runnability'], active_models=msg.get('active_models'), vram=msg.get('vram'))
         self.after(100, self.poll_queue)
