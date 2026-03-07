@@ -4,22 +4,31 @@ from loguru import logger
 
 class LoadingSpinner(ctk.CTkCanvas):
     def __init__(self, master, colors, size=30, **kwargs):
-        super().__init__(master, width=size, height=size, bg=colors.get('bg', '#0B0F19'), highlightthickness=0, **kwargs)
+        # Use master's fg_color if available to blend perfectly, fallback to app bg
+        bg_color = "#0D1117" # Default header color from app.py
+        try: bg_color = master.cget("fg_color")
+        except: pass
+        
+        super().__init__(master, width=size, height=size, bg=bg_color, highlightthickness=0, **kwargs)
         self.colors = colors
         self.size = size
         self.angle = 0
         self.is_running = False
         self._draw_arc()
+        self.bind("<Configure>", lambda e: self._draw_arc())
 
     def _draw_arc(self):
+        if not self.winfo_exists(): return
         self.delete("all")
-        # Draw a subtle background circle
+        # Draw a subtle background circle (always visible)
         padding = 4
         self.create_oval(padding, padding, self.size-padding, self.size-padding, outline="#1A202C", width=2)
-        # Draw the spinning arc
-        self.create_arc(padding, padding, self.size-padding, self.size-padding, 
-                        start=self.angle, extent=120, outline=self.colors.get('accent', '#00CF91'), 
-                        width=3, style="arc")
+        
+        # Draw the spinning arc only if running
+        if self.is_running:
+            self.create_arc(padding, padding, self.size-padding, self.size-padding, 
+                            start=self.angle, extent=120, outline=self.colors.get('accent', '#00CF91'), 
+                            width=3, style="arc")
         
     def animate(self):
         if not self.is_running or not self.winfo_exists(): return
@@ -28,13 +37,14 @@ class LoadingSpinner(ctk.CTkCanvas):
         self.after(30, self.animate)
 
     def start(self):
-        if self.is_running: return
+        if not self.winfo_exists() or self.is_running: return
         self.is_running = True
         self.animate()
 
     def stop(self):
         self.is_running = False
-        self.delete("all")
+        if self.winfo_exists():
+            self._draw_arc() # Redraw one last time to show only the background circle
 
 class VramMonitor(ctk.CTkFrame):
     def __init__(self, master, colors, **kwargs):

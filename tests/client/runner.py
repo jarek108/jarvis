@@ -75,7 +75,10 @@ class StatusDumper:
             "loadout": ctrl.current_loadout,
             "pipeline": ctrl.current_pipeline,
             "runnable": ctrl.runnability.get("runnable", False),
-            "health_summary": {p: s['status'] for p, s in ctrl.health_state.items()}
+            "health_summary": {p: s['status'] for p, s in ctrl.health_state.items()},
+            "is_loading": ctrl.is_loading,
+            "is_maximized": self.app.state() == "zoomed",
+            "spinner_active": self.app.loading_spinner.is_running
         }
 
     def _resolve_widget(self, path: str) -> Optional[Any]:
@@ -132,6 +135,12 @@ class AutomationController:
             widget.invoke()
         else:
             logger.error(f"❌ Cannot click non-invocable widget '{target_path}'")
+
+    def maximize(self):
+        logger.info("🔲 Maximizing window")
+        self.app.state("zoomed")
+        self.app.update_idletasks()
+        self.app.update()
 
     def select_dropdown(self, target_path: str, value: str):
         if target_path == "loadout_opt":
@@ -232,6 +241,8 @@ class ClientTestRunner:
                 self.automation.select_dropdown(target, value)
             elif action == "click_element":
                 self.automation.click(target)
+            elif action == "maximize_window":
+                self.automation.maximize()
             elif action == "take_screenshot":
                 self.visual.capture_window(step.get('file', 'test_snap.jpg'))
             elif action == "assert_ui_text":
@@ -264,13 +275,37 @@ class ClientTestRunner:
                     err = f"System State Condition '{cond}' failed. Health: {h}"
                     logger.error(f"❌ {err}")
                     return False, err
+            elif action == "assert_ux_state":
+                snap = self.dumper.get_system_snapshot()
+                cond = step.get('condition')
+                
+                success = False
+                if cond == "spinner_active":
+                    success = snap['spinner_active']
+                elif cond == "spinner_inactive":
+                    success = not snap['spinner_active']
+                elif cond == "maximized":
+                    success = snap['is_maximized']
+                elif cond == "not_maximized":
+                    success = not snap['is_maximized']
+
+                if success: 
+                    logger.info(f"✅ UX State: {cond}")
+                else:
+                    err = f"UX State Condition '{cond}' failed. Snapshot: {snap}"
+                    logger.error(f"❌ {err}")
+                    return False, err
             return True, None
         except Exception as e:
             return False, str(e)
 
     def cleanup(self):
         if self.app:
-            try: self.app.destroy()
+            try:
+                if hasattr(self.app, "on_closing"):
+                    self.app.on_closing()
+                else:
+                    self.app.destroy()
             except: pass
 
     def print_summary(self):
