@@ -76,22 +76,21 @@ ui_graph_mapping_status:
       action: take_screenshot
       file: "graph_bound_nodes.jpg"
 
-ui_ux_spinner_lifecycle:
-  name: "Verify Loading Spinner follows loadout lifecycle."
+ui_ux_initial_vram_boot:
+  name: "Verify spinner active during initial boot scan and stops correctly."
   timeline:
-    - t: 1.0s
-      action: select_dropdown
-      target: "loadout_opt"
-      value: "Speech-to-Speech, light"
-    - t: 1.1s
+    - t: 0.2s
       action: assert_ux_state
       condition: "spinner_active"
-    - t: 1.5s
+    - t: 0.5s
       action: take_screenshot
-      file: "spinner_active.jpg"
-    - t: 15.0s
+      file: "boot_spin.jpg"
+    - t: 2.5s
       action: assert_ux_state
       condition: "spinner_inactive"
+    - t: 3.0s
+      action: take_screenshot
+      file: "boot_finished.jpg"
 
 ui_ux_persistence_maximize_stage1:
   name: "Verify window maximization state capture."
@@ -126,23 +125,6 @@ ui_ux_persistence_maximize_stage2:
     - t: 4.1s
       action: take_desktop_screenshot
       file: "stable_4s.jpg"
-
-ui_ux_vram_spinner_sync:
-  name: "Verify spinner stops EXACTLY when VRAM breakdown appears."
-  timeline:
-    - t: 1.0s
-      action: select_dropdown
-      target: "loadout_opt"
-      value: "Speech-to-Speech, light"
-    - t: 1.1s
-      action: assert_ux_state
-      condition: "spinner_active"
-    - t: 8.0s
-      action: assert_ux_state
-      condition: "vram_breakdown_visible"
-    - t: 15.0s
-      action: assert_ux_state
-      condition: "spinner_inactive"
 
 # Legacy / Original Scenarios
 ui_loadout_switch_latency:

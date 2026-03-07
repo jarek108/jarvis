@@ -46,10 +46,14 @@ class JarvisApp(ctk.CTk):
         self.selected_mid = None
         self.last_log_content = ""
         self.transition_lock = False
-        self.spinner_locked = False
+        self.initial_scan_pending = True
         
         self.setup_ui()
         self.update_graph_view()
+        
+        # Start initial scan spinner
+        self.loading_spinner.start()
+        
         self.poll_queue()
         self._update_log_viewer_loop()
         
@@ -174,7 +178,6 @@ class JarvisApp(ctk.CTk):
     def on_loadout_change(self, val):
         if val != "NONE" and val == self.controller.current_loadout: return
         self.transition_lock = True; self.selected_mid = None; self.switch_to_terminal()
-        self.spinner_locked = False # Allow spinner for this new operation
         for widget in self.health_frame.winfo_children(): widget.destroy()
 
         try:
@@ -272,6 +275,10 @@ class JarvisApp(ctk.CTk):
     def update_health_ui(self, health, runnability, active_models=None, vram=None):
         if vram:
             self.vram_monitor.update(vram['used'], vram['total'], vram['external'])
+            # Retirement trigger: first VRAM data (even 0.0) stops the spinner forever
+            if self.initial_scan_pending:
+                self.loading_spinner.stop()
+                self.initial_scan_pending = False
 
         if self.transition_lock and active_models is not None and not active_models: return
         if active_models: self.transition_lock = False
@@ -331,32 +338,10 @@ class JarvisApp(ctk.CTk):
             if msg['type'] == "log": self.terminal.insert("end", f"{msg['msg']}\n"); self.terminal.see("end")
             elif msg['type'] == "state":
                 if msg.get('recording'): self.record_btn.configure(fg_color=self.colors.get('error'), text="RECORDING...")
-            elif msg['type'] == "loading":
-                # ABSOLUTE GUARD: If UI has locked the spinner OR if VRAM is already 
-                # clearly displayed, ignore all 'start' signals from backend.
-                is_start_signal = msg.get('is_loading', False)
-                vram_is_visible = self.vram_monitor.v_lbl_ext_part.winfo_viewable()
-                
-                if is_start_signal and (self.spinner_locked or vram_is_visible):
-                    continue 
-                
-                if is_start_signal: self.loading_spinner.start()
-                else: 
-                    self.loading_spinner.stop()
-                    self.spinner_locked = False # Reset lock on explicit stop signal
             elif msg['type'] == "health_update":
-                # 1. First, check if this update brings the VRAM breakdown we've been waiting for
-                vram = msg.get('vram')
-                if vram and self.controller.is_loading:
-                    # Stop as soon as we have a breakdown to show (vram data present)
-                    is_none_loadout = self.controller.current_loadout == "NONE"
-                    has_data = not (vram['used'] == vram['external'] == 0)
-
-                    if (is_none_loadout and not has_data) or (not is_none_loadout and has_data):
-                        self.loading_spinner.stop()
-                        self.controller.stop_loading()
-                        self.spinner_locked = True 
-
-                # 2. Proceed with normal UI update
-                self.update_health_ui(msg['health'], msg['runnability'], active_models=msg.get('active_models'), vram=vram)
+                # Retirement trigger: first valid VRAM update stops the initial boot spinner forever
+                if self.initial_scan_pending and msg.get('vram'):
+                    self.loading_spinner.stop()
+                    self.initial_scan_pending = False
+                self.update_health_ui(msg['health'], msg['runnability'], active_models=msg.get('active_models'), vram=msg.get('vram'))
         self.after(100, self.poll_queue)

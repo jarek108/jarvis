@@ -78,7 +78,6 @@ class StatusDumper:
             "pipeline": ctrl.current_pipeline,
             "runnable": ctrl.runnability.get("runnable", False),
             "health_summary": {p: s['status'] for p, s in ctrl.health_state.items()},
-            "is_loading": ctrl.is_loading,
             "is_maximized": self.app.state() == "zoomed",
             "spinner_active": self.app.loading_spinner.is_running,
             "geometry": self.app.geometry(),
