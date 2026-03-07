@@ -111,15 +111,21 @@ ui_ux_persistence_maximize_stage2:
     - t: 1.0s
       action: assert_ux_state
       condition: "stable_maximized" # Initial restoration check
+    - t: 1.1s
+      action: take_desktop_screenshot
+      file: "stable_1s.jpg"
     - t: 2.0s
       action: assert_ux_state
       condition: "stable_maximized" # Stability check
+    - t: 2.1s
+      action: take_desktop_screenshot
+      file: "stable_2s.jpg"
     - t: 4.0s
       action: assert_ux_state
       condition: "stable_maximized" # Final persistence check
-    - t: 4.5s
-      action: take_screenshot
-      file: "stage2_maximized_persisted.jpg"
+    - t: 4.1s
+      action: take_desktop_screenshot
+      file: "stable_4s.jpg"
 
 # Legacy / Original Scenarios
 ui_loadout_switch_latency:

@@ -129,6 +129,24 @@ class VisualVerifier:
             img.save(out_path, quality=85)
             logger.info(f"📸 Screenshot saved: {out_path}")
 
+    def capture_desktop(self, filename: str):
+        """Captures the entire primary monitor."""
+        if not mss or not PIL: return
+
+        with mss.mss() as sct:
+            # monitors[0] is all monitors, monitors[1] is the primary
+            monitor = sct.monitors[1]
+            sct_img = sct.grab(monitor)
+            img = PIL.Image.frombytes("RGB", sct_img.size, sct_img.bgra, "raw", "BGRX")
+            
+            img_dir = os.path.join(self.session_dir, "images")
+            os.makedirs(img_dir, exist_ok=True)
+            
+            prefixed_name = f"{self.current_scenario_id}_desktop_{filename}"
+            out_path = os.path.join(img_dir, prefixed_name)
+            img.save(out_path, quality=85)
+            logger.info(f"🖥️  Desktop Screenshot saved: {out_path}")
+
 class AutomationController:
     """Simulates deterministic human actions against UI widgets."""
     def __init__(self, app: JarvisApp):
@@ -251,6 +269,8 @@ class ClientTestRunner:
                 self.automation.maximize()
             elif action == "take_screenshot":
                 self.visual.capture_window(step.get('file', 'test_snap.jpg'))
+            elif action == "take_desktop_screenshot":
+                self.visual.capture_desktop(step.get('file', 'desktop_snap.jpg'))
             elif action == "assert_ui_text":
                 actual = self.dumper.get_ui_text(target)
                 contains = step.get('contains', '')
