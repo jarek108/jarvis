@@ -40,6 +40,7 @@ class JarvisController:
         self.current_strategy = "fast_interaction"
         self.current_loadout = "NONE"
         self.node_positions = {} # Scoped per pipeline: { pid: { nid: [x,y] } }
+        self.geometry = None
         self.load_checkpoint()
         
         # 3.1 IMMEDIATE SYNC: Clear runtime registry to prevent stale UI
@@ -84,6 +85,7 @@ class JarvisController:
                     self.current_pipeline = data.get("pipeline", self.current_pipeline)
                     self.current_strategy = data.get("strategy", self.current_strategy)
                     self.node_positions = data.get("node_positions", {})
+                    self.geometry = data.get("geometry")
                     # Force NONE on startup
                     self.current_loadout = "NONE"
             except: pass
@@ -95,7 +97,8 @@ class JarvisController:
                     "pipeline": self.current_pipeline, 
                     "strategy": self.current_strategy,
                     "loadout": self.current_loadout,
-                    "node_positions": self.node_positions
+                    "node_positions": self.node_positions,
+                    "geometry": self.geometry
                 }, f)
         except: pass
 

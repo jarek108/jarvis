@@ -20,10 +20,16 @@ class JarvisApp(ctk.CTk):
     def __init__(self):
         super().__init__()
         self.title("JARVIS CORE CONSOLE")
-        self.geometry("1200x850")
         
         self.queue = queue.Queue()
         self.controller = JarvisController(self.queue)
+
+        if self.controller.geometry:
+            self.geometry(self.controller.geometry)
+        else:
+            self.geometry("1200x850")
+        
+        self.protocol("WM_DELETE_WINDOW", self.on_closing)
         
         # Load UI Config dynamically
         self.ui_cfg = self.controller.cfg.get('ui', {})
@@ -129,6 +135,11 @@ class JarvisApp(ctk.CTk):
 
     def on_auto_layout(self):
         self.graph_widget.apply_auto_layout()
+
+    def on_closing(self):
+        self.controller.geometry = self.geometry()
+        self.controller.save_checkpoint()
+        self.destroy()
 
     def on_loadout_change(self, val):
         if val != "NONE" and val == self.controller.current_loadout: return
