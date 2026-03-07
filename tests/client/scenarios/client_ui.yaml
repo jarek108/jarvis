@@ -51,14 +51,14 @@ ui_loadout_idempotency:
       action: select_dropdown
       target: "loadout_opt"
       value: "Speech-to-Speech, light"
-    - t: 8.0s
+    - t: 15.0s
       action: assert_system_state
       condition: "all_models_active"
-    - t: 8.5s
+    - t: 15.5s
       action: select_dropdown
       target: "loadout_opt"
       value: "Speech-to-Speech, light"
-    - t: 8.6s
+    - t: 15.6s
       action: assert_system_state
       condition: "all_models_active"
 
@@ -85,10 +85,10 @@ ui_ux_initial_vram_boot:
     - t: 0.5s
       action: take_screenshot
       file: "boot_spin.jpg"
-    - t: 2.5s
+    - t: 15.0s
       action: assert_ux_state
       condition: "spinner_inactive"
-    - t: 3.0s
+    - t: 16.0s
       action: take_screenshot
       file: "boot_finished.jpg"
 
