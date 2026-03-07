@@ -84,7 +84,8 @@ class StatusDumper:
             "geometry": self.app.geometry(),
             "state": self.app.state(),
             "x": self.app.winfo_x(),
-            "y": self.app.winfo_y()
+            "y": self.app.winfo_y(),
+            "vram_breakdown_visible": self.app.vram_monitor.v_lbl_ext_part.winfo_viewable()
         }
 
     def _resolve_widget(self, path: str) -> Optional[Any]:
@@ -317,6 +318,10 @@ class ClientTestRunner:
                     success = snap['is_maximized'] and snap['x'] <= 0 and snap['y'] <= 0
                 elif cond == "not_maximized":
                     success = not snap['is_maximized']
+                elif cond == "vram_breakdown_visible":
+                    success = snap['vram_breakdown_visible']
+                elif cond == "vram_breakdown_hidden":
+                    success = not snap['vram_breakdown_visible']
 
                 if success: 
                     logger.info(f"✅ UX State: {cond}")

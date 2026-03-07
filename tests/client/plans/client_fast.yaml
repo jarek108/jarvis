@@ -13,3 +13,4 @@ scenarios:
   - id: ui_ux_spinner_lifecycle
   - id: ui_ux_persistence_maximize_stage1
   - id: ui_ux_persistence_maximize_stage2
+  - id: ui_ux_vram_spinner_sync
