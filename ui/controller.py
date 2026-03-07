@@ -41,6 +41,7 @@ class JarvisController:
         self.current_loadout = "NONE"
         self.node_positions = {} # Scoped per pipeline: { pid: { nid: [x,y] } }
         self.geometry = None
+        self.is_maximized = False
         self.load_checkpoint()
         
         # 3.1 IMMEDIATE SYNC: Clear runtime registry to prevent stale UI
@@ -86,6 +87,7 @@ class JarvisController:
                     self.current_strategy = data.get("strategy", self.current_strategy)
                     self.node_positions = data.get("node_positions", {})
                     self.geometry = data.get("geometry")
+                    self.is_maximized = data.get("is_maximized", False)
                     # Force NONE on startup
                     self.current_loadout = "NONE"
             except: pass
@@ -98,7 +100,8 @@ class JarvisController:
                     "strategy": self.current_strategy,
                     "loadout": self.current_loadout,
                     "node_positions": self.node_positions,
-                    "geometry": self.geometry
+                    "geometry": self.geometry,
+                    "is_maximized": self.is_maximized
                 }, f)
         except: pass
 

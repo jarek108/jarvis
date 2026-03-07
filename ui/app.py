@@ -24,7 +24,9 @@ class JarvisApp(ctk.CTk):
         self.queue = queue.Queue()
         self.controller = JarvisController(self.queue)
 
-        if self.controller.geometry:
+        if self.controller.is_maximized:
+            self.state("zoomed")
+        elif self.controller.geometry:
             self.geometry(self.controller.geometry)
         else:
             self.geometry("1200x850")
@@ -138,6 +140,7 @@ class JarvisApp(ctk.CTk):
 
     def on_closing(self):
         self.controller.geometry = self.geometry()
+        self.controller.is_maximized = (self.state() == "zoomed")
         self.controller.save_checkpoint()
         self.destroy()
 
