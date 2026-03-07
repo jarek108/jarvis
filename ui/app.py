@@ -51,6 +51,26 @@ class JarvisApp(ctk.CTk):
         self.update_graph_view()
         self.poll_queue()
         self._update_log_viewer_loop()
+        
+        # Deferred restoration to ensure OS mapping is complete
+        self.after(500, self._restore_window_state)
+
+    def _restore_window_state(self):
+        """Final window state application after initial layout stabilization."""
+        try:
+            # 1. Apply saved geometry first
+            if self.controller.geometry:
+                self.geometry(self.controller.geometry)
+            else:
+                self.geometry("1200x850")
+
+            # 2. If maximized, force a 'Double-Pump' transition to wake up Windows DWM
+            if self.controller.is_maximized or self.controller.geometry is None:
+                self.state("normal")
+                self.update_idletasks()
+                self.state("zoomed")
+        except Exception as e:
+            logger.error(f"Failed to restore window state: {e}")
 
     def setup_ui(self):
         self.grid_columnconfigure(1, weight=1)
@@ -68,8 +88,14 @@ class JarvisApp(ctk.CTk):
         self.loadout_opt = ctk.CTkOptionMenu(self.sidebar, values=loadouts, variable=self.loadout_var, command=self.on_loadout_change, width=200)
         self.loadout_opt.pack(pady=(0, 10), padx=10)
 
-        # VRAM Monitor
-        self.vram_monitor = VramMonitor(self.sidebar, self.colors)
+        # VRAM Monitor Container (with Spinner)
+        self.vram_container = ctk.CTkFrame(self.sidebar, fg_color="transparent")
+        self.vram_container.pack(fill="x", padx=10)
+        
+        self.loading_spinner = LoadingSpinner(self.vram_container, self.colors, size=20)
+        self.loading_spinner.pack(side="right", padx=(0, 5), pady=(5, 0))
+
+        self.vram_monitor = VramMonitor(self.vram_container, self.colors)
         try:
             # Fast initial update (no breakdown)
             self.vram_monitor.update(utils.get_gpu_vram_usage(), utils.get_gpu_total_vram(), None)
@@ -85,9 +111,6 @@ class JarvisApp(ctk.CTk):
         self.header.grid(row=0, column=1, sticky="ew")
         
         # Pipeline
-        self.loading_spinner = LoadingSpinner(self.header, self.colors, size=24)
-        self.loading_spinner.pack(side="left", padx=(20, 0))
-        
         ctk.CTkLabel(self.header, text="Pipeline:", font=("Consolas", 12, "bold")).pack(side="left", padx=(10, 5))
         pipes = [f.replace(".yaml", "") for f in os.listdir(os.path.join(script_dir, "system_config", "pipelines")) if f.endswith(".yaml")]
         self.pipe_var = ctk.StringVar(value=self.controller.current_pipeline)

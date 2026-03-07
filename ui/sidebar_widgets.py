@@ -4,9 +4,16 @@ from loguru import logger
 
 class LoadingSpinner(ctk.CTkCanvas):
     def __init__(self, master, colors, size=30, **kwargs):
-        # Use master's fg_color if available to blend perfectly, fallback to app bg
-        bg_color = "#0D1117" # Default header color from app.py
-        try: bg_color = master.cget("fg_color")
+        # Canvas doesn't support 'transparent', must use actual color
+        bg_color = "#0B0F19"
+        try:
+            # Try to get master's fg_color (for CTk frames) or bg
+            for attr in ["fg_color", "bg"]:
+                if hasattr(master, "cget"):
+                    val = master.cget(attr)
+                    if val and val != "transparent":
+                        bg_color = val
+                        break
         except: pass
         
         super().__init__(master, width=size, height=size, bg=bg_color, highlightthickness=0, **kwargs)
@@ -51,29 +58,29 @@ class VramMonitor(ctk.CTkFrame):
         super().__init__(master, fg_color="transparent", **kwargs)
         self.colors = colors
         
-        self.pack(pady=(5, 0))
+        self.pack(pady=(5, 0), fill="x")
         
-        # Labels
-        self.lbl_container = ctk.CTkFrame(self, fg_color="transparent")
-        self.lbl_container.pack()
+        # Line 1: [Used] GB ([Int] GB int., [Ext] GB ext.)
+        self.line1 = ctk.CTkFrame(self, fg_color="transparent")
+        self.line1.pack(fill="x")
         
-        ctk.CTkLabel(self.lbl_container, text="Vram: ", font=("Consolas", 11), text_color="#D0D0D0").pack(side="left")
-        self.v_lbl_used = ctk.CTkLabel(self.lbl_container, text="0.0", font=("Consolas", 11, "bold"), text_color="#FFFFFF")
+        ctk.CTkLabel(self.line1, text="Vram: ", font=("Consolas", 11), text_color="#D0D0D0").pack(side="left")
+        self.v_lbl_used = ctk.CTkLabel(self.line1, text="0.0 GB", font=("Consolas", 11, "bold"), text_color="#FFFFFF")
         self.v_lbl_used.pack(side="left")
         
-        # Breakdown components (can be hidden)
-        self.v_lbl_open_bracket = ctk.CTkLabel(self.lbl_container, text=" (", font=("Consolas", 11), text_color="#D0D0D0")
-        self.v_lbl_model = ctk.CTkLabel(self.lbl_container, text="0.0", font=("Consolas", 11), text_color="#FFFFFF")
-        self.v_lbl_plus = ctk.CTkLabel(self.lbl_container, text=" + ", font=("Consolas", 11), text_color="#D0D0D0")
-        self.v_lbl_ext = ctk.CTkLabel(self.lbl_container, text="0.0 ext", font=("Consolas", 11, "bold"), text_color=self.colors.get('warning'))
-        self.v_lbl_close_bracket = ctk.CTkLabel(self.lbl_container, text=")", font=("Consolas", 11), text_color="#D0D0D0")
+        self.v_lbl_breakdown = ctk.CTkLabel(self.line1, text="", font=("Consolas", 10), text_color="#A0A0A0")
+        self.v_lbl_breakdown.pack(side="left", padx=(5, 0))
 
-        self.v_lbl_total = ctk.CTkLabel(self.lbl_container, text=" / 0.0 GB (0%)", font=("Consolas", 11), text_color="#D0D0D0")
-        self.v_lbl_total.pack(side="left")
+        # Line 2: total [Total] GB ([Percent]% used)
+        self.line2 = ctk.CTkFrame(self, fg_color="transparent")
+        self.line2.pack(fill="x", pady=(0, 2))
+        
+        self.v_lbl_total_info = ctk.CTkLabel(self.line2, text="total 0.0 GB (0% used)", font=("Consolas", 10), text_color="#D0D0D0")
+        self.v_lbl_total_info.pack(side="left", padx=(30, 0))
 
         # Visual Bar
         self.bar_bg = ctk.CTkFrame(self, width=200, height=8, fg_color="#10141B", corner_radius=4)
-        self.bar_bg.pack(pady=(2, 20))
+        self.bar_bg.pack(pady=(2, 10), padx=10)
         self.bar_ext = ctk.CTkFrame(self.bar_bg, width=0, height=8, fg_color=self.colors.get('warning'), corner_radius=4)
         self.bar_ext.place(x=0, y=0)
         self.bar_model = ctk.CTkFrame(self.bar_bg, width=0, height=8, fg_color=self.colors.get('accent'), corner_radius=4)
@@ -81,24 +88,14 @@ class VramMonitor(ctk.CTkFrame):
 
     def update(self, used, total, external=None):
         pct = used / total if total > 0 else 0
-        self.v_lbl_used.configure(text=f"{used:.1f}")
-        self.v_lbl_total.configure(text=f" / {total:.1f} GB ({int(pct*100)}%)")
+        self.v_lbl_used.configure(text=f"{used:.1f} GB")
+        self.v_lbl_total_info.configure(text=f"total {total:.1f} GB ({int(pct*100)}% used)")
 
         bar_max_w = 200
 
         if external is None:
             # SIMPLE MODE: Hide breakdown
-            self.v_lbl_open_bracket.pack_forget()
-            self.v_lbl_model.pack_forget()
-            self.v_lbl_plus.pack_forget()
-            self.v_lbl_ext.pack_forget()
-            self.v_lbl_close_bracket.pack_forget()
-            
-            # Repack total to ensure it's after used
-            self.v_lbl_total.pack_forget()
-            self.v_lbl_total.pack(side="left")
-
-            # Simple bar
+            self.v_lbl_breakdown.configure(text="")
             self.bar_ext.configure(width=0)
             self.bar_model.place(x=0, y=0)
             self.bar_model.configure(width=pct * bar_max_w)
@@ -107,17 +104,9 @@ class VramMonitor(ctk.CTkFrame):
             if used < external: external = used
             model_vram = max(0, used - external)
             
-            self.v_lbl_model.configure(text=f"{model_vram:.1f}")
-            self.v_lbl_ext.configure(text=f"{external:.1f} ext")
-
-            # Packing order: used -> ( -> model -> + -> ext -> ) -> total
-            self.v_lbl_total.pack_forget()
-            self.v_lbl_open_bracket.pack(side="left")
-            self.v_lbl_model.pack(side="left")
-            self.v_lbl_plus.pack(side="left")
-            self.v_lbl_ext.pack(side="left")
-            self.v_lbl_close_bracket.pack(side="left")
-            self.v_lbl_total.pack(side="left")
+            # (0.1 GB int., 2.4 GB ext.)
+            breakdown_text = f"({model_vram:.1f} GB int., {external:.1f} GB ext.)"
+            self.v_lbl_breakdown.configure(text=breakdown_text)
 
             ext_w = (external / total) * bar_max_w if total > 0 else 0
             model_w = (model_vram / total) * bar_max_w if total > 0 else 0

@@ -72,9 +72,14 @@ class JarvisController:
         # Edge Hardware (bound via registry, so no need to instantiate physical sensor here)
         self.ptt_signal = threading.Event()
         
+        self.loading_start_time = 0
+        self.LOADING_TIMEOUT = 60 # 60s max spin
+        
         threading.Thread(target=self._status_polling_loop, daemon=True).start()
 
     def _send_loading(self, loading: bool):
+        if loading: self.loading_start_time = time.time()
+        else: self.loading_start_time = 0
         self.is_loading = loading
         self.ui_queue.put({"type": "loading", "is_loading": loading})
 
@@ -139,6 +144,24 @@ class JarvisController:
                     "active_models": active_models,
                     "vram": {"used": vram_used, "total": vram_total, "external": system_external_vram}
                 })
+
+                # 5. State-Aware Loading Trigger
+                if self.is_loading:
+                    elapsed = time.time() - self.loading_start_time
+                    is_stable = False
+                    
+                    if self.current_loadout == "NONE":
+                        # Stable if no active models and VRAM scan finished
+                        if not active_models: is_stable = True
+                    else:
+                        # Stable if runnable and all models are ON/BUSY
+                        has_startup = any(s['status'] == "STARTUP" for s in self.health_state.values())
+                        if self.runnability.get("runnable") and not has_startup:
+                            is_stable = True
+                    
+                    if is_stable or elapsed > self.LOADING_TIMEOUT:
+                        self._send_loading(False)
+
             except Exception as e:
                 logger.error(f"Status Polling Error: {e}")
             time.sleep(1.5)
@@ -165,7 +188,7 @@ class JarvisController:
                     self.ui_queue.put({"type": "log", "msg": "✅ LOADOUT APPLIED", "tag": "system"})
                 except Exception as e:
                     self.ui_queue.put({"type": "log", "msg": f"❌ LOADOUT ERROR: {e}", "tag": "system"})
-            self._send_loading(False)
+                    self._send_loading(False) # Stop on error
 
         threading.Thread(target=task, daemon=True).start()
 
@@ -178,7 +201,7 @@ class JarvisController:
                 self.ui_queue.put({"type": "log", "msg": f"✅ RESTARTED: {sid}", "tag": "system"})
             except Exception as e:
                 self.ui_queue.put({"type": "log", "msg": f"❌ RESTART ERROR [{sid}]: {e}", "tag": "system"})
-            self._send_loading(False)
+                self._send_loading(False) # Stop on error
         threading.Thread(target=task, daemon=True).start()
 
     def trigger_service_kill(self, sid):
@@ -190,7 +213,7 @@ class JarvisController:
                 self.ui_queue.put({"type": "log", "msg": f"✅ CLOSED: {sid}", "tag": "system"})
             except Exception as e:
                 self.ui_queue.put({"type": "log", "msg": f"❌ CLOSE ERROR [{sid}]: {e}", "tag": "system"})
-            self._send_loading(False)
+                self._send_loading(False) # Stop on error
         threading.Thread(target=task, daemon=True).start()
 
     def start_recording(self):
