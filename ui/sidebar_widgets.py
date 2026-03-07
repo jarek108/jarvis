@@ -60,23 +60,27 @@ class VramMonitor(ctk.CTkFrame):
         
         self.pack(pady=(5, 0), fill="x")
         
-        # Line 1: [Used] GB ([Int] GB int., [Ext] GB ext.)
+        # Line 1: Vram total: [Total] GB ([Percent]% used)
         self.line1 = ctk.CTkFrame(self, fg_color="transparent")
         self.line1.pack(fill="x")
         
-        ctk.CTkLabel(self.line1, text="Vram: ", font=("Consolas", 11), text_color="#D0D0D0").pack(side="left")
-        self.v_lbl_used = ctk.CTkLabel(self.line1, text="0.0 GB", font=("Consolas", 11, "bold"), text_color="#FFFFFF")
-        self.v_lbl_used.pack(side="left")
+        ctk.CTkLabel(self.line1, text="Vram total: ", font=("Consolas", 11), text_color="#D0D0D0").pack(side="left")
+        self.v_lbl_total = ctk.CTkLabel(self.line1, text="0.0 GB", font=("Consolas", 11, "bold"), text_color="#FFFFFF")
+        self.v_lbl_total.pack(side="left")
         
-        self.v_lbl_breakdown = ctk.CTkLabel(self.line1, text="", font=("Consolas", 10), text_color="#A0A0A0")
-        self.v_lbl_breakdown.pack(side="left", padx=(5, 0))
+        self.v_lbl_total_pct = ctk.CTkLabel(self.line1, text="(0% used)", font=("Consolas", 10), text_color="#A0A0A0")
+        self.v_lbl_total_pct.pack(side="left", padx=(5, 0))
 
-        # Line 2: total [Total] GB ([Percent]% used)
+        # Line 2: Used: [Used] GB ([Int] int., [Ext] ext.)
         self.line2 = ctk.CTkFrame(self, fg_color="transparent")
         self.line2.pack(fill="x", pady=(0, 2))
         
-        self.v_lbl_total_info = ctk.CTkLabel(self.line2, text="total 0.0 GB (0% used)", font=("Consolas", 10), text_color="#D0D0D0")
-        self.v_lbl_total_info.pack(side="left", padx=(30, 0))
+        ctk.CTkLabel(self.line2, text="Used: ", font=("Consolas", 10), text_color="#D0D0D0").pack(side="left", padx=(30, 0))
+        self.v_lbl_used = ctk.CTkLabel(self.line2, text="0.0 GB", font=("Consolas", 10, "bold"), text_color="#FFFFFF")
+        self.v_lbl_used.pack(side="left")
+        
+        self.v_lbl_breakdown = ctk.CTkLabel(self.line2, text="", font=("Consolas", 9), text_color="#A0A0A0")
+        self.v_lbl_breakdown.pack(side="left", padx=(5, 0))
 
         # Visual Bar
         self.bar_bg = ctk.CTkFrame(self, width=200, height=8, fg_color="#10141B", corner_radius=4)
@@ -88,8 +92,10 @@ class VramMonitor(ctk.CTkFrame):
 
     def update(self, used, total, external=None):
         pct = used / total if total > 0 else 0
+        self.v_lbl_total.configure(text=f"{total:.1f} GB")
+        self.v_lbl_total_pct.configure(text=f"({int(pct*100)}% used)")
+        
         self.v_lbl_used.configure(text=f"{used:.1f} GB")
-        self.v_lbl_total_info.configure(text=f"total {total:.1f} GB ({int(pct*100)}% used)")
 
         bar_max_w = 200
 
@@ -104,8 +110,8 @@ class VramMonitor(ctk.CTkFrame):
             if used < external: external = used
             model_vram = max(0, used - external)
             
-            # (0.1 GB int., 2.4 GB ext.)
-            breakdown_text = f"({model_vram:.1f} GB int., {external:.1f} GB ext.)"
+            # (0.1 int., 2.4 ext.) - No GB labels here as requested
+            breakdown_text = f"({model_vram:.1f} int., {external:.1f} ext.)"
             self.v_lbl_breakdown.configure(text=breakdown_text)
 
             ext_w = (external / total) * bar_max_w if total > 0 else 0
