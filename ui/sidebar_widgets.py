@@ -79,8 +79,12 @@ class VramMonitor(ctk.CTkFrame):
         self.v_lbl_used = ctk.CTkLabel(self.line2, text="0.0 GB", font=("Consolas", 10, "bold"), text_color="#FFFFFF")
         self.v_lbl_used.pack(side="left")
         
-        self.v_lbl_breakdown = ctk.CTkLabel(self.line2, text="", font=("Consolas", 9), text_color="#A0A0A0")
-        self.v_lbl_breakdown.pack(side="left", padx=(5, 0))
+        # Breakdown components (Ext first, then Int)
+        self.v_lbl_open = ctk.CTkLabel(self.line2, text=" (", font=("Consolas", 9), text_color="#A0A0A0")
+        self.v_lbl_ext_part = ctk.CTkLabel(self.line2, text="", font=("Consolas", 9, "bold"), text_color=self.colors.get('warning'))
+        self.v_lbl_plus = ctk.CTkLabel(self.line2, text=" + ", font=("Consolas", 9), text_color="#A0A0A0")
+        self.v_lbl_int_part = ctk.CTkLabel(self.line2, text="", font=("Consolas", 9, "bold"), text_color=self.colors.get('accent'))
+        self.v_lbl_close = ctk.CTkLabel(self.line2, text=")", font=("Consolas", 9), text_color="#A0A0A0")
 
         # Visual Bar
         self.bar_bg = ctk.CTkFrame(self, width=200, height=8, fg_color="#10141B", corner_radius=4)
@@ -99,9 +103,11 @@ class VramMonitor(ctk.CTkFrame):
 
         bar_max_w = 200
 
-        if external is None:
+        if external is None or (used == external == 0):
             # SIMPLE MODE: Hide breakdown
-            self.v_lbl_breakdown.configure(text="")
+            for lbl in [self.v_lbl_open, self.v_lbl_ext_part, self.v_lbl_plus, self.v_lbl_int_part, self.v_lbl_close]:
+                lbl.pack_forget()
+            
             self.bar_ext.configure(width=0)
             self.bar_model.place(x=0, y=0)
             self.bar_model.configure(width=pct * bar_max_w)
@@ -110,9 +116,15 @@ class VramMonitor(ctk.CTkFrame):
             if used < external: external = used
             model_vram = max(0, used - external)
             
-            # (0.1 int., 2.4 ext.) - No GB labels here as requested
-            breakdown_text = f"({model_vram:.1f} int., {external:.1f} ext.)"
-            self.v_lbl_breakdown.configure(text=breakdown_text)
+            # Repack in order: Ext first, then Int
+            self.v_lbl_open.pack(side="left")
+            self.v_lbl_ext_part.pack(side="left")
+            self.v_lbl_plus.pack(side="left")
+            self.v_lbl_int_part.pack(side="left")
+            self.v_lbl_close.pack(side="left")
+
+            self.v_lbl_ext_part.configure(text=f"{external:.1f} ext.")
+            self.v_lbl_int_part.configure(text=f"{model_vram:.1f} int.")
 
             ext_w = (external / total) * bar_max_w if total > 0 else 0
             model_w = (model_vram / total) * bar_max_w if total > 0 else 0
