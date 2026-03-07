@@ -56,7 +56,6 @@ class JarvisController:
             self._send_loading(True)
             self.ui_queue.put({"type": "log", "msg": "🧹 Cleaning up previous session state...", "tag": "system"})
             kill_loadout("all")
-            self._send_loading(False)
         threading.Thread(target=init_cleanup, daemon=True).start()
         
         self.is_recording = False
@@ -82,6 +81,12 @@ class JarvisController:
         else: self.loading_start_time = 0
         self.is_loading = loading
         self.ui_queue.put({"type": "loading", "is_loading": loading})
+
+    def stop_loading(self):
+        """Thread-safe method to stop loading state from UI or Backend."""
+        if self.is_loading:
+            logger.info("🛑 Stopping loading state (Stability Reached)")
+            self._send_loading(False)
 
     def load_checkpoint(self):
         if os.path.exists(CHECKPOINT_PATH):
@@ -145,25 +150,6 @@ class JarvisController:
                     "vram": {"used": vram_used, "total": vram_total, "external": system_external_vram}
                 })
 
-                # 5. State-Aware Loading Trigger
-                if self.is_loading:
-                    elapsed = time.time() - self.loading_start_time
-                    is_stable = False
-                    
-                    if self.current_loadout == "NONE":
-                        # Stable if no active models and VRAM scan finished
-                        if not active_models: is_stable = True
-                    else:
-                        # Stable if runnable, all models are ON/BUSY, and we have VRAM breakdown
-                        has_startup = any(s['status'] == "STARTUP" for s in self.health_state.values())
-                        has_vram_data = system_external_vram > 0.0 or not active_models
-                        
-                        if self.runnability.get("runnable") and not has_startup and has_vram_data:
-                            is_stable = True
-                    
-                    if is_stable or elapsed > self.LOADING_TIMEOUT:
-                        self._send_loading(False)
-
             except Exception as e:
                 logger.error(f"Status Polling Error: {e}")
             time.sleep(1.5)
@@ -188,6 +174,8 @@ class JarvisController:
                     # Apply loadout using existing logic (Soft apply to avoid full kill if possible)
                     apply_loadout(loadout_id, soft=True)
                     self.ui_queue.put({"type": "log", "msg": "✅ LOADOUT APPLIED", "tag": "system"})
+                    # Stop spinner immediately on success to avoid polling lag
+                    self._send_loading(False)
                 except Exception as e:
                     self.ui_queue.put({"type": "log", "msg": f"❌ LOADOUT ERROR: {e}", "tag": "system"})
                     self._send_loading(False) # Stop on error
