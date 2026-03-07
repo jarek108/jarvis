@@ -50,7 +50,10 @@ vllm:
     "default": '{"image": 8}'
 
 system:
-  log_retention_days: 7    # Keep RUN_ folders for X days (set to -1 to disable)
+  log_retention:
+    APP: 10
+    BE: 20
+    UIT: 10
   health_check_interval: 1.0
   llm_warmup_timeout: 500  # Max seconds to wait for model to hot-load into VRAM
   maximum_scenario_length: 500 # Max seconds to wait for a pipeline to complete before force-failing it

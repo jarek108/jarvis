@@ -16,9 +16,10 @@ sys.path.insert(0, project_root)
 sys.path.insert(1, os.path.dirname(script_dir))
 
 import utils
+from utils.infra.session import init_session
 from test_utils import (
     CYAN, BOLD, RESET, LINE_LEN, 
-    init_session, RichDashboard, AccumulatingReporter,
+    RichDashboard, AccumulatingReporter,
     save_artifact, trigger_report_generation, run_test_lifecycle
 )
 from test_utils.mocks import get_mock_implementation
@@ -59,14 +60,15 @@ class PipelineTestRunner:
     def __init__(self, plan_path, dashboard=None, session_dir=None, reporter=None):
         with open(plan_path, "r") as f:
             self.plan = yaml.safe_load(f)
-        
+
         if 'execution' not in self.plan:
             raise ValueError(f"Invalid Backend Plan: '{plan_path}' missing 'execution' block.")
 
         self.project_root = project_root
         self.session_dir = session_dir
+        self.orch_log = logger.bind(domain="ORCHESTRATOR")
         # SEARCH PATHS: Check tests first, then production
-        search_paths = [
+
             os.path.join(self.project_root, "tests", "pipelines"),
             os.path.join(self.project_root, "system_config", "pipelines")
         ]
@@ -213,8 +215,11 @@ class PipelineTestRunner:
         return success
 
     def log(self, msg, level="info"):
-        fmt_msg = log_msg(msg, tag="runner", level=level)
-        if self.dashboard: self.dashboard.log(fmt_msg)
+        if level == "error":
+            self.orch_log.error(msg)
+        else:
+            self.orch_log.info(msg)
+        if self.dashboard: self.dashboard.log(msg)
 
     def run_all(self, args):
         structure = {}
@@ -348,7 +353,8 @@ def main():
     report_path = None
 
     try:
-        session_dir, session_id = init_session(plan_path)
+        session_dir = init_session("BE")
+        session_id = os.path.basename(session_dir)
         with open(os.path.join(session_dir, "system_info.yaml"), "r") as f: system_info = yaml.safe_load(f)
         dashboard.finalize_boot(session_id, system_info)
         dashboard.vram_total = utils.get_gpu_total_vram()

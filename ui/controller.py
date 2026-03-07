@@ -26,9 +26,10 @@ class JarvisController:
         self.project_root = script_dir
         
         # 1. Redirect System Logs to UI
+        # Legacy UI sink - only routes to visual terminal, does not log to disk
         def ui_sink(message):
             self.ui_queue.put({"type": "log", "msg": message.record["message"], "tag": "system"})
-        logger.add(ui_sink, format="{message}", level="INFO")
+        logger.add(ui_sink, format="{message}", level="INFO", filter=lambda r: "domain" not in r["extra"])
 
         # 3. State
         self.current_session_id = f"CLIENT_{time.strftime('%Y%m%d_%H%M%S')}"
@@ -51,7 +52,7 @@ class JarvisController:
 
         # Force system state to match UI "NONE" state
         def init_cleanup():
-            self.ui_queue.put({"type": "log", "msg": "🧹 Cleaning up previous session state...", "tag": "system"})
+            logger.info("🧹 Cleaning up previous session state...")
             kill_loadout("all")
         threading.Thread(target=init_cleanup, daemon=True).start()
         
@@ -101,6 +102,8 @@ class JarvisController:
 
     def _status_polling_loop(self):
         while self.is_polling:
+            start_t = time.perf_counter()
+            logger.debug("Starting health poll iteration")
             try:
                 registry_data = self.resolver.get_live_models()
                 active_models = registry_data.get("models", [])
@@ -122,6 +125,9 @@ class JarvisController:
                 })
             except Exception as e:
                 logger.error(f"Status Polling Error: {e}")
+            
+            duration = time.perf_counter() - start_t
+            logger.debug(f"Health poll finished in {duration:.3f}s")
             time.sleep(1.5)
 
     def trigger_loadout_change(self, loadout_id):
@@ -131,40 +137,40 @@ class JarvisController:
         self.save_checkpoint()
         def task():
             if loadout_id == "NONE":
-                self.ui_queue.put({"type": "log", "msg": "☢️ KILLING ALL SERVICES...", "tag": "system"})
+                logger.info("☢️ KILLING ALL SERVICES...")
                 kill_loadout("all")
             else:
-                self.ui_queue.put({"type": "log", "msg": f"⚙️ APPLYING LOADOUT: {loadout_id}", "tag": "system"})
+                logger.info(f"⚙️ APPLYING LOADOUT: {loadout_id}")
                 try:
                     apply_loadout(loadout_id, soft=True)
-                    self.ui_queue.put({"type": "log", "msg": "✅ LOADOUT APPLIED", "tag": "system"})
+                    logger.info("✅ LOADOUT APPLIED")
                 except Exception as e:
-                    self.ui_queue.put({"type": "log", "msg": f"❌ LOADOUT ERROR: {e}", "tag": "system"})
+                    logger.error(f"❌ LOADOUT ERROR: {e}")
         threading.Thread(target=task, daemon=True).start()
 
     def trigger_service_restart(self, sid):
         def task():
-            self.ui_queue.put({"type": "log", "msg": f"🔄 RESTARTING SERVICE: {sid}", "tag": "system"})
+            logger.info(f"🔄 RESTARTING SERVICE: {sid}")
             try:
                 restart_service(sid, self.current_loadout)
-                self.ui_queue.put({"type": "log", "msg": f"✅ RESTARTED: {sid}", "tag": "system"})
+                logger.info(f"✅ RESTARTED: {sid}")
             except Exception as e:
-                self.ui_queue.put({"type": "log", "msg": f"❌ RESTART ERROR [{sid}]: {e}", "tag": "system"})
+                logger.error(f"❌ RESTART ERROR [{sid}]: {e}")
         threading.Thread(target=task, daemon=True).start()
 
     def trigger_service_kill(self, sid):
         def task():
-            self.ui_queue.put({"type": "log", "msg": f"🔪 CLOSING SERVICE: {sid}", "tag": "system"})
+            logger.info(f"🔪 CLOSING SERVICE: {sid}")
             try:
                 kill_service(sid)
-                self.ui_queue.put({"type": "log", "msg": f"✅ CLOSED: {sid}", "tag": "system"})
+                logger.info(f"✅ CLOSED: {sid}")
             except Exception as e:
-                self.ui_queue.put({"type": "log", "msg": f"❌ CLOSE ERROR [{sid}]: {e}", "tag": "system"})
+                logger.error(f"❌ CLOSE ERROR [{sid}]: {e}")
         threading.Thread(target=task, daemon=True).start()
 
     def start_recording(self):
         if not self.runnability.get('runnable'):
-            self.ui_queue.put({"type": "log", "msg": f"❌ CANNOT RUN: {', '.join(self.runnability['errors'])}", "tag": "system"})
+            logger.error(f"❌ CANNOT RUN: {', '.join(self.runnability['errors'])}")
             return
         self.is_recording = True
         self.ptt_signal.set()
@@ -181,7 +187,7 @@ class JarvisController:
         try:
             bound_graph = self.resolver.resolve(self.current_pipeline)
         except Exception as e:
-            self.ui_queue.put({"type": "log", "msg": f"Resolution Error: {e}", "tag": "system"})
+            logger.error(f"Resolution Error: {e}")
             return
         inputs = {"ptt_active": self.ptt_signal}
         async def run_and_monitor():

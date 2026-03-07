@@ -2,6 +2,7 @@ import os
 import sys
 import queue
 import yaml
+import time
 from loguru import logger
 import customtkinter as ctk
 
@@ -18,8 +19,11 @@ if script_dir not in sys.path:
 
 class JarvisApp(ctk.CTk):
     def __init__(self):
+        self._boot_time = time.perf_counter()
+        
         super().__init__()
         self.title("JARVIS CORE CONSOLE")
+        self._ui_log("APP_BOOT", "Initializing JarvisApp")
         
         self.queue = queue.Queue()
         self.controller = JarvisController(self.queue)
@@ -47,18 +51,24 @@ class JarvisApp(ctk.CTk):
         self.last_log_content = ""
         self.transition_lock = False
         self.initial_scan_pending = True
+        self._last_vram_str = ""
         
         self.setup_ui()
         self.update_graph_view()
         
         # Start initial scan spinner
         self.loading_spinner.start()
+        self._ui_log("SPINNER_STATE", "start")
         
         self.poll_queue()
         self._update_log_viewer_loop()
         
         # Deferred restoration to ensure OS mapping is complete
         self.after(500, self._restore_window_state)
+
+    def _ui_log(self, event: str, details: str = ""):
+        delta = time.perf_counter() - self._boot_time
+        logger.bind(domain="UI").debug(f"[+{delta:.3f}s] [{event}] {details}")
 
     def _restore_window_state(self):
         """Final window state application after initial layout stabilization."""
@@ -78,6 +88,7 @@ class JarvisApp(ctk.CTk):
             logger.error(f"Failed to restore window state: {e}")
 
     def setup_ui(self):
+        self._ui_log("UI_READY", "Starting UI widget packing")
         self.grid_columnconfigure(1, weight=1)
         self.grid_rowconfigure(1, weight=1)
 
@@ -176,6 +187,7 @@ class JarvisApp(ctk.CTk):
         self.destroy()
 
     def on_loadout_change(self, val):
+        self._ui_log("USER_ACTION", f"Requested loadout: {val}")
         if val != "NONE" and val == self.controller.current_loadout: return
         self.transition_lock = True; self.selected_mid = None; self.switch_to_terminal()
         for widget in self.health_frame.winfo_children(): widget.destroy()
@@ -274,11 +286,11 @@ class JarvisApp(ctk.CTk):
 
     def update_health_ui(self, health, runnability, active_models=None, vram=None):
         if vram:
+            vram_str = f"used={vram['used']:.1f}, ext={vram['external']:.1f}"
+            if vram_str != self._last_vram_str:
+                self._ui_log("VRAM_RENDER", vram_str)
+                self._last_vram_str = vram_str
             self.vram_monitor.update(vram['used'], vram['total'], vram['external'])
-            # Retirement trigger: first VRAM data (even 0.0) stops the spinner forever
-            if self.initial_scan_pending:
-                self.loading_spinner.stop()
-                self.initial_scan_pending = False
 
         if self.transition_lock and active_models is not None and not active_models: return
         if active_models: self.transition_lock = False
@@ -342,6 +354,7 @@ class JarvisApp(ctk.CTk):
                 # Retirement trigger: first valid VRAM update stops the initial boot spinner forever
                 if self.initial_scan_pending and msg.get('vram'):
                     self.loading_spinner.stop()
+                    self._ui_log("SPINNER_STATE", "stop (first health report arrived)")
                     self.initial_scan_pending = False
                 self.update_health_ui(msg['health'], msg['runnability'], active_models=msg.get('active_models'), vram=msg.get('vram'))
         self.after(100, self.poll_queue)

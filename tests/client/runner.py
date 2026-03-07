@@ -10,14 +10,18 @@ from loguru import logger
 from typing import Any, Optional, Dict, List
 from dataclasses import dataclass, asdict
 
-# Add project root to sys.path
+# Add project root and tests directory to sys.path
 script_dir = os.path.dirname(os.path.abspath(__file__))
 project_root = os.path.dirname(os.path.dirname(script_dir))
-sys.path.insert(0, project_root)
+tests_dir = os.path.join(project_root, "tests")
+
+if project_root not in sys.path: sys.path.insert(0, project_root)
+if tests_dir not in sys.path: sys.path.insert(0, tests_dir)
 
 from ui import JarvisApp
 import utils
-from test_utils import init_session, BOLD, GREEN, RED, YELLOW, RESET, LINE_LEN
+from utils.infra.session import init_session
+from test_utils import BOLD, GREEN, RED, YELLOW, RESET, LINE_LEN
 from test_utils.scenarios import load_scenarios_from_sources
 
 # --- Optional Dependencies ---
@@ -184,17 +188,18 @@ class ClientTestRunner:
         self.args = args
         self.session_dir = session_dir
         self.app = None
-        self.automation = None
-        self.dumper = None
-        self.visual = None
+        self.automation = AutomationController(self.app) if self.app else None
+        self.dumper = StatusDumper(self.app) if self.app else None
+        self.visual = VisualVerifier(self.app, self.session_dir) if self.app else None
         self.is_running = True
         self.start_time = 0
         self.results: List[TestResult] = []
+        self.orch_log = logger.bind(domain="ORCHESTRATOR")
 
     async def run_scenario(self, scenario_id: str, scenario_data: Dict[str, Any]) -> bool:
-        logger.info(f"🎬 Starting Scenario: {scenario_data.get('name', scenario_id)}")
+        self.orch_log.info(f"🎬 Starting Scenario: {scenario_data.get('name', scenario_id)}")
         self.is_running = True
-        
+
         self.app = JarvisApp()
         self.automation = AutomationController(self.app)
         self.dumper = StatusDumper(self.app)
@@ -385,8 +390,8 @@ async def main():
     if 'scenarios' not in plan_data:
         raise ValueError(f"Invalid Client Plan: '{plan_path}' missing 'scenarios' block.")
 
-    # Initialize Session
-    session_dir, session_id = init_session(plan_path, prefix="CLIENT_RUN_")
+    # Initialize Unified Session
+    session_dir = init_session("UIT")
     
     # Pre-test backend cleanup
     if not args.keep_alive:
