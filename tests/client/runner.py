@@ -198,10 +198,10 @@ class ClientTestRunner:
         self.results: List[TestResult] = []
         self.orch_log = logger.bind(domain="ORCHESTRATOR")
 
-    async def run_scenario(self, scenario_id: str, scenario_data: Dict[str, Any]) -> bool:
+    async def run_scenario(self, scenario_id: str, scenario_data: Dict[str, Any], domain_id: str) -> bool:
         self.orch_log.info(f"🎬 Starting Scenario: {scenario_id}")
         if self.dashboard:
-            self.dashboard.update_phase("ui_tests", "client_fast", "execution", status="wip")
+            self.dashboard.update_phase(domain_id, "UI_SUITE", "execution", status="wip")
             self.dashboard.current_loadout = scenario_id
             
         self.is_running = True
@@ -269,7 +269,7 @@ class ClientTestRunner:
                 error=error_msg
             ))
             if self.dashboard:
-                self.dashboard.update_scenario("ui_tests", "client_fast", scenario_id, status, result=error_msg or "")
+                self.dashboard.update_scenario(domain_id, "UI_SUITE", scenario_id, status, result=error_msg or "")
             self.cleanup()
             
         return scenario_success
@@ -407,8 +407,8 @@ async def main():
     with open(plan_path, 'r') as f:
         plan_data = yaml.safe_load(f)
 
-    if 'scenarios' not in plan_data:
-        raise ValueError(f"Invalid Client Plan: '{plan_path}' missing 'scenarios' block.")
+    if 'execution' not in plan_data:
+        raise ValueError(f"Invalid Client Plan: '{plan_path}' missing 'execution' block.")
 
     # Initialize Unified Session
     session_dir = init_session("UIT")
@@ -418,20 +418,21 @@ async def main():
     dashboard = RichDashboard("Jarvis UI Test", session_id=session_id)
     dashboard.active_log_path = os.path.join(session_dir, "orchestrator.log")
     
-    # Build the fake domain structure for UI tests
-    scen_ids = [s['id'] for s in plan_data['scenarios']]
-    structure = {
-        "ui_tests": {
-            "status": "pending", "done": 0, "total": len(scen_ids),
-            "models_done": 0, "start_time": time.perf_counter(), "duration": 0,
+    # Build the dashboard structure based on the plan's execution domains
+    structure = {}
+    for block in plan_data['execution']:
+        d_id = block.get('domain', 'UI_TESTS').lower()
+        scenarios = block.get('scenarios', [])
+        structure[d_id] = {
+            "status": "pending", "done": 0, "total": len(scenarios),
+            "models_done": 0, "start_time": None, "duration": 0,
             "loadouts": {
-                "client_fast": {
-                    "status": "pending", "done": 0, "total": len(scen_ids),
+                "UI_SUITE": {
+                    "status": "pending", "done": 0, "total": len(scenarios),
                     "duration": 0, "errors": 0, "phase": None, "models": ["UI Automation Controller"]
                 }
             }
         }
-    }
     dashboard.init_plan_structure(structure)
     
     # Load system info for dashboard
@@ -456,18 +457,24 @@ async def main():
         all_scenarios = load_scenarios_from_sources(project_root, "client", sources)
 
         # Execute
-        for item in plan_data['scenarios']:
-            sid = item['id']
-            if sid in all_scenarios:
-                sdata = all_scenarios[sid]
-                success = await runner.run_scenario(sid, sdata)
-                if not success and args.fail_fast:
-                    break
-            else:
-                logger.error(f"Scenario '{sid}' not found in sources {sources}")
+        for block in plan_data['execution']:
+            domain_id = block.get('domain', 'UI_TESTS').lower()
+            scen_ids = block.get('scenarios', [])
+            
+            for sid in scen_ids:
+                if sid in all_scenarios:
+                    sdata = all_scenarios[sid]
+                    success = await runner.run_scenario(sid, sdata, domain_id)
+                    if not success and args.fail_fast:
+                        break
+                else:
+                    logger.error(f"Scenario '{sid}' not found in sources {sources}")
+            
+            dashboard.finalize_loadout(domain_id, "UI_SUITE", 0, status="passed")
+            dashboard.finalize_domain(domain_id)
+            if not success and args.fail_fast:
+                break
 
-        dashboard.finalize_loadout("ui_tests", "client_fast", 0, status="passed")
-        dashboard.finalize_domain("ui_tests")
         runner.print_summary()
 
     finally:
