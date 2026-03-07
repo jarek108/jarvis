@@ -60,11 +60,11 @@ class VramMonitor(ctk.CTkFrame):
         
         self.pack(pady=(5, 0), fill="x")
         
-        # Line 1: Vram total: [Total] GB ([Percent]% used)
+        # Line 1: VRAM total: [Total] GB ([Percent]% used)
         self.line1 = ctk.CTkFrame(self, fg_color="transparent")
         self.line1.pack(fill="x")
         
-        ctk.CTkLabel(self.line1, text="Vram total: ", font=("Consolas", 11), text_color="#D0D0D0").pack(side="left")
+        ctk.CTkLabel(self.line1, text="VRAM total: ", font=("Consolas", 11), text_color="#D0D0D0").pack(side="left")
         self.v_lbl_total = ctk.CTkLabel(self.line1, text="0.0 GB", font=("Consolas", 11, "bold"), text_color="#FFFFFF")
         self.v_lbl_total.pack(side="left")
         
@@ -75,7 +75,7 @@ class VramMonitor(ctk.CTkFrame):
         self.line2 = ctk.CTkFrame(self, fg_color="transparent")
         self.line2.pack(fill="x", pady=(0, 2))
         
-        ctk.CTkLabel(self.line2, text="Used: ", font=("Consolas", 10), text_color="#D0D0D0").pack(side="left", padx=(30, 0))
+        ctk.CTkLabel(self.line2, text="Used: ", font=("Consolas", 10), text_color="#D0D0D0").pack(side="left")
         self.v_lbl_used = ctk.CTkLabel(self.line2, text="0.0 GB", font=("Consolas", 10, "bold"), text_color="#FFFFFF")
         self.v_lbl_used.pack(side="left")
         
