@@ -1,0 +1,17 @@
+[
+  {
+    "t": 806853.3280858,
+    "node": "input_instruction",
+    "type": "START"
+  },
+  {
+    "t": 806853.373678,
+    "node": "input_instruction",
+    "type": "FINISH"
+  },
+  {
+    "t": 806853.373708,
+    "node": "proc_llm",
+    "type": "START"
+  }
+]

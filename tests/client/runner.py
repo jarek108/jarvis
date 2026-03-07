@@ -21,7 +21,7 @@ if tests_dir not in sys.path: sys.path.insert(0, tests_dir)
 from ui import JarvisApp
 import utils
 from utils.infra.session import init_session
-from test_utils import BOLD, GREEN, RED, YELLOW, RESET, LINE_LEN
+from test_utils import BOLD, GREEN, RED, YELLOW, RESET, LINE_LEN, RichDashboard
 from test_utils.scenarios import load_scenarios_from_sources
 
 # --- Optional Dependencies ---
@@ -131,7 +131,8 @@ class VisualVerifier:
             prefixed_name = f"{self.current_scenario_id}_{filename}"
             out_path = os.path.join(img_dir, prefixed_name)
             img.save(out_path, quality=85)
-            logger.info(f"📸 Screenshot saved: {out_path}")
+            # Log with domain="ORCHESTRATOR" to avoid console spam but show in footer
+            logger.bind(domain="ORCHESTRATOR").info(f"📸 Screenshot saved: {out_path}")
 
     def capture_desktop(self, filename: str):
         """Captures the entire primary monitor."""
@@ -149,7 +150,7 @@ class VisualVerifier:
             prefixed_name = f"{self.current_scenario_id}_desktop_{filename}"
             out_path = os.path.join(img_dir, prefixed_name)
             img.save(out_path, quality=85)
-            logger.info(f"🖥️  Desktop Screenshot saved: {out_path}")
+            logger.bind(domain="ORCHESTRATOR").info(f"🖥️  Desktop Screenshot saved: {out_path}")
 
 class AutomationController:
     """Simulates deterministic human actions against UI widgets."""
@@ -159,24 +160,24 @@ class AutomationController:
     def click(self, target_path: str):
         widget = self._resolve_widget(target_path)
         if hasattr(widget, "invoke"):
-            logger.info(f"🖱️  Invoking click on '{target_path}'")
+            logger.bind(domain="ORCHESTRATOR").info(f"🖱️  Invoking click on '{target_path}'")
             widget.invoke()
         else:
             logger.error(f"❌ Cannot click non-invocable widget '{target_path}'")
 
     def maximize(self):
-        logger.info("🔲 Maximizing window")
+        logger.bind(domain="ORCHESTRATOR").info("🔲 Maximizing window")
         self.app.state("zoomed")
         self.app.update_idletasks()
         self.app.update()
 
     def select_dropdown(self, target_path: str, value: str):
         if target_path == "loadout_opt":
-            logger.info(f"🔽 Selecting Loadout: '{value}'")
+            logger.bind(domain="ORCHESTRATOR").info(f"🔽 Selecting Loadout: '{value}'")
             self.app.loadout_var.set(value)
             self.app.on_loadout_change(value)
         elif target_path == "pipe_opt":
-            logger.info(f"🔽 Selecting Pipeline: '{value}'")
+            logger.bind(domain="ORCHESTRATOR").info(f"🔽 Selecting Pipeline: '{value}'")
             self.app.pipe_var.set(value)
             self.app.on_config_change(value)
 
@@ -184,20 +185,25 @@ class AutomationController:
         return StatusDumper(self.app)._resolve_widget(path)
 
 class ClientTestRunner:
-    def __init__(self, args, session_dir: str):
+    def __init__(self, args, session_dir: str, dashboard: Optional[RichDashboard] = None):
         self.args = args
         self.session_dir = session_dir
         self.app = None
-        self.automation = AutomationController(self.app) if self.app else None
-        self.dumper = StatusDumper(self.app) if self.app else None
-        self.visual = VisualVerifier(self.app, self.session_dir) if self.app else None
+        self.dashboard = dashboard
+        self.automation = None
+        self.dumper = None
+        self.visual = None
         self.is_running = True
         self.start_time = 0
         self.results: List[TestResult] = []
         self.orch_log = logger.bind(domain="ORCHESTRATOR")
 
     async def run_scenario(self, scenario_id: str, scenario_data: Dict[str, Any]) -> bool:
-        self.orch_log.info(f"🎬 Starting Scenario: {scenario_data.get('name', scenario_id)}")
+        self.orch_log.info(f"🎬 Starting Scenario: {scenario_id}")
+        if self.dashboard:
+            self.dashboard.update_phase("ui_tests", "client_fast", "execution", status="wip")
+            self.dashboard.current_loadout = scenario_id
+            
         self.is_running = True
 
         self.app = JarvisApp()
@@ -222,8 +228,13 @@ class ClientTestRunner:
                 try:
                     self.app.update_idletasks()
                     self.app.update()
+                    # Feed system metrics to dashboard
+                    if self.dashboard and step_idx % 10 == 0:
+                        import psutil
+                        self.dashboard.ram_usage = psutil.virtual_memory().used / (1024**3)
+                        self.dashboard.vram_usage = utils.get_gpu_vram_usage()
                 except:
-                    logger.info("👋 Window closed. Terminating scenario.")
+                    self.orch_log.info("👋 Window closed. Terminating scenario.")
                     break
                 
                 elapsed = time.perf_counter() - self.start_time
@@ -246,16 +257,19 @@ class ClientTestRunner:
         except Exception as e:
             scenario_success = False
             error_msg = str(e)
-            logger.error(f"💥 Scenario execution failed: {e}")
+            self.orch_log.error(f"💥 Scenario execution failed: {e}")
         finally:
             duration = time.perf_counter() - self.start_time
+            status = "PASSED" if scenario_success else "FAILED"
             self.results.append(TestResult(
                 id=scenario_id,
                 name=scenario_data.get('name', scenario_id),
-                status="PASSED" if scenario_success else "FAILED",
+                status=status,
                 duration=duration,
                 error=error_msg
             ))
+            if self.dashboard:
+                self.dashboard.update_scenario("ui_tests", "client_fast", scenario_id, status, result=error_msg or "")
             self.cleanup()
             
         return scenario_success
@@ -280,10 +294,10 @@ class ClientTestRunner:
                 actual = self.dumper.get_ui_text(target)
                 contains = step.get('contains', '')
                 if contains in actual:
-                    logger.info(f"✅ Assertion Passed: '{target}' contains '{contains}'")
+                    self.orch_log.info(f"✅ Assertion Passed: '{target}' contains '{contains}'")
                 else:
                     err = f"Assertion Failed: '{target}' (Actual: {actual or 'EMPTY'}) does not contain '{contains}'"
-                    logger.error(f"❌ {err}")
+                    self.orch_log.error(f"❌ {err}")
                     return False, err
             elif action == "assert_system_state":
                 snap = self.dumper.get_system_snapshot()
@@ -301,10 +315,10 @@ class ClientTestRunner:
                     success = len(h) > 0
 
                 if success: 
-                    logger.info(f"✅ System State: {cond}")
+                    self.orch_log.info(f"✅ System State: {cond}")
                 else:
                     err = f"System State Condition '{cond}' failed. Health: {h}"
-                    logger.error(f"❌ {err}")
+                    self.orch_log.error(f"❌ {err}")
                     return False, err
             elif action == "assert_ux_state":
                 snap = self.dumper.get_system_snapshot()
@@ -328,10 +342,10 @@ class ClientTestRunner:
                     success = not snap['vram_breakdown_visible']
 
                 if success: 
-                    logger.info(f"✅ UX State: {cond}")
+                    self.orch_log.info(f"✅ UX State: {cond}")
                 else:
                     err = f"UX State Condition '{cond}' failed. Snapshot: {snap}"
-                    logger.error(f"❌ {err}")
+                    self.orch_log.error(f"❌ {err}")
                     return False, err
             return True, None
         except Exception as e:
@@ -340,6 +354,10 @@ class ClientTestRunner:
     def cleanup(self):
         if self.app:
             try:
+                # Cancel all pending .after callbacks to prevent "invalid command" errors
+                for call in self.app.tk.call('after', 'info'):
+                    self.app.after_cancel(call)
+                
                 if hasattr(self.app, "on_closing"):
                     self.app.on_closing()
                 else:
@@ -347,22 +365,24 @@ class ClientTestRunner:
             except: pass
 
     def print_summary(self):
-        print(f"\n{BOLD}JARVIS CLIENT TEST SUMMARY{RESET}")
-        print("-" * LINE_LEN)
-        print(f"{'Scenario ID':<40} | {'Status':<10} | {'Time':<8}")
-        print("-" * LINE_LEN)
-        
-        total_passed = 0
-        for r in self.results:
-            color = GREEN if r.status == "PASSED" else RED
-            if r.status == "PASSED": total_passed += 1
-            print(f"{r.id:<40} | {color}{r.status:<10}{RESET} | {r.duration:>6.1f}s")
-            if r.error:
-                print(f"   {YELLOW}↳ Error: {r.error}{RESET}")
+        # Only print if no dashboard was used, or as a final fallback
+        if not self.dashboard:
+            print(f"\n{BOLD}JARVIS CLIENT TEST SUMMARY{RESET}")
+            print("-" * LINE_LEN)
+            print(f"{'Scenario ID':<40} | {'Status':<10} | {'Time':<8}")
+            print("-" * LINE_LEN)
+            
+            total_passed = 0
+            for r in self.results:
+                color = GREEN if r.status == "PASSED" else RED
+                if r.status == "PASSED": total_passed += 1
+                print(f"{r.id:<40} | {color}{r.status:<10}{RESET} | {r.duration:>6.1f}s")
+                if r.error:
+                    print(f"   {YELLOW}↳ Error: {r.error}{RESET}")
 
-        print("-" * LINE_LEN)
-        final_color = GREEN if total_passed == len(self.results) else RED
-        print(f"OVERALL: {final_color}{total_passed}/{len(self.results)} PASSED{RESET} | Session: {os.path.basename(self.session_dir)}")
+            print("-" * LINE_LEN)
+            final_color = GREEN if total_passed == len(self.results) else RED
+            print(f"OVERALL: {final_color}{total_passed}/{len(self.results)} PASSED{RESET} | Session: {os.path.basename(self.session_dir)}")
         
         # Save JSON report
         report_path = os.path.join(self.session_dir, "client_report.json")
@@ -392,34 +412,67 @@ async def main():
 
     # Initialize Unified Session
     session_dir = init_session("UIT")
+    session_id = os.path.basename(session_dir)
     
-    # Pre-test backend cleanup
-    if not args.keep_alive:
-        from manage_loadout import kill_loadout
-        kill_loadout("all")
+    # Setup Dashboard
+    dashboard = RichDashboard("Jarvis UI Test", session_id=session_id)
+    dashboard.active_log_path = os.path.join(session_dir, "orchestrator.log")
     
-    if args.mock_all: os.environ['JARVIS_MOCK_ALL'] = "1"
-    if args.mock_models: os.environ['JARVIS_MOCK_MODELS'] = "1"
-    if args.mock_edge: os.environ['JARVIS_MOCK_EDGE'] = "1"
-
-    runner = ClientTestRunner(args, session_dir)
+    # Build the fake domain structure for UI tests
+    scen_ids = [s['id'] for s in plan_data['scenarios']]
+    structure = {
+        "ui_tests": {
+            "status": "pending", "done": 0, "total": len(scen_ids),
+            "models_done": 0, "start_time": time.perf_counter(), "duration": 0,
+            "loadouts": {
+                "client_fast": {
+                    "status": "pending", "done": 0, "total": len(scen_ids),
+                    "duration": 0, "errors": 0, "phase": None, "models": ["UI Automation Controller"]
+                }
+            }
+        }
+    }
+    dashboard.init_plan_structure(structure)
     
-    # Resolve Scenarios from sources
-    sources = plan_data.get('scenario_sources', ["client_ui.yaml"])
-    all_scenarios = load_scenarios_from_sources(project_root, "client", sources)
+    # Load system info for dashboard
+    with open(os.path.join(session_dir, "system_info.yaml"), "r") as f: system_info = yaml.safe_load(f)
+    dashboard.finalize_boot(session_id, system_info)
+    dashboard.start()
 
-    # Execute
-    for item in plan_data['scenarios']:
-        sid = item['id']
-        if sid in all_scenarios:
-            sdata = all_scenarios[sid]
-            success = await runner.run_scenario(sid, sdata)
-            if not success and args.fail_fast:
-                break
-        else:
-            logger.error(f"Scenario '{sid}' not found in sources {sources}")
+    try:
+        # Pre-test backend cleanup
+        if not args.keep_alive:
+            from manage_loadout import kill_loadout
+            kill_loadout("all")
+        
+        if args.mock_all: os.environ['JARVIS_MOCK_ALL'] = "1"
+        if args.mock_models: os.environ['JARVIS_MOCK_MODELS'] = "1"
+        if args.mock_edge: os.environ['JARVIS_MOCK_EDGE'] = "1"
 
-    runner.print_summary()
+        runner = ClientTestRunner(args, session_dir, dashboard=dashboard)
+        
+        # Resolve Scenarios from sources
+        sources = plan_data.get('scenario_sources', ["client_ui.yaml"])
+        all_scenarios = load_scenarios_from_sources(project_root, "client", sources)
+
+        # Execute
+        for item in plan_data['scenarios']:
+            sid = item['id']
+            if sid in all_scenarios:
+                sdata = all_scenarios[sid]
+                success = await runner.run_scenario(sid, sdata)
+                if not success and args.fail_fast:
+                    break
+            else:
+                logger.error(f"Scenario '{sid}' not found in sources {sources}")
+
+        dashboard.finalize_loadout("ui_tests", "client_fast", 0, status="passed")
+        dashboard.finalize_domain("ui_tests")
+        runner.print_summary()
+
+    finally:
+        dashboard.stop()
+        print(f"\n✅ UI Test Session Complete\n📂 Session: {session_dir}")
 
 if __name__ == "__main__":
     try:

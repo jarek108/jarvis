@@ -1,0 +1,51 @@
+[
+  {
+    "t": 807772.2047668,
+    "node": "input_history",
+    "type": "START"
+  },
+  {
+    "t": 807772.2377893,
+    "node": "input_history",
+    "type": "FINISH"
+  },
+  {
+    "t": 807772.2378235,
+    "node": "input_instruction",
+    "type": "START"
+  },
+  {
+    "t": 807772.2851227,
+    "node": "input_instruction",
+    "dir": "OUT",
+    "type": "data_path",
+    "seq": 0,
+    "content": null,
+    "data_len": 43
+  },
+  {
+    "t": 807772.2851367,
+    "node": "input_instruction",
+    "type": "FINISH"
+  },
+  {
+    "t": 807772.2851593,
+    "node": "proc_memory",
+    "type": "START"
+  },
+  {
+    "t": 807772.2898043,
+    "node": "proc_llm",
+    "type": "START"
+  },
+  {
+    "t": 807772.2936439,
+    "node": "output_ui",
+    "type": "START"
+  },
+  {
+    "t": 807772.3331737,
+    "node": "output_ui",
+    "type": "FINISH"
+  }
+]

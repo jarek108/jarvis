@@ -1,6 +1,13 @@
 {
-  "active_loadout": [],
-  "loadout_id": "NONE",
-  "system_external_vram": 1.517578125,
-  "last_updated": "2026-03-07 14:30:12"
+  "timestamp": 1772899739.8520105,
+  "loadout": "NONE",
+  "external": 3.0673828125,
+  "models": [
+    {
+      "id": "qwen2.5:0.5b",
+      "engine": "ollama",
+      "port": 11434,
+      "params": {}
+    }
+  ]
 }

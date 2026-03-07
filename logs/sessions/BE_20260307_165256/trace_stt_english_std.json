@@ -1,0 +1,17 @@
+[
+  {
+    "t": 806830.1625425,
+    "node": "input_mic",
+    "type": "START"
+  },
+  {
+    "t": 806830.2055304,
+    "node": "input_mic",
+    "type": "FINISH"
+  },
+  {
+    "t": 806830.2055542,
+    "node": "proc_stt",
+    "type": "START"
+  }
+]

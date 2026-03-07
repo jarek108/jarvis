@@ -1,0 +1,54 @@
+[
+    {
+        "loadout": "native------faster-whisper-tiny",
+        "scenarios": [
+            {
+                "name": "stt_polish_std",
+                "status": "PASSED",
+                "duration": 0.041995500097982585,
+                "pipeline": "atomic_stt",
+                "domain": "stt",
+                "loadout_id": "native------faster-whisper-tiny",
+                "node_metrics": {
+                    "proc_stt": {
+                        "status": "INCOMPLETE_DATA"
+                    }
+                },
+                "vram_external": 3.0654296875,
+                "vram_static": 0.0,
+                "vram_peak": 3.0673828125,
+                "stt_text": "",
+                "llm_text": "",
+                "input_file": "tests/data/polish.wav",
+                "output_file": "",
+                "detailed_model": "FASTER-WHISPER-TINY",
+                "setup_time": 2.080465400009416,
+                "cleanup_time": 1.971268199966289
+            },
+            {
+                "name": "stt_english_std",
+                "status": "PASSED",
+                "duration": 0.04869109997525811,
+                "pipeline": "atomic_stt",
+                "domain": "stt",
+                "loadout_id": "native------faster-whisper-tiny",
+                "node_metrics": {
+                    "proc_stt": {
+                        "status": "INCOMPLETE_DATA"
+                    }
+                },
+                "vram_external": 3.0654296875,
+                "vram_static": 0.0,
+                "vram_peak": 3.0673828125,
+                "stt_text": "",
+                "llm_text": "",
+                "input_file": "tests/data/input.wav",
+                "output_file": "",
+                "detailed_model": "FASTER-WHISPER-TINY",
+                "setup_time": 2.080465400009416,
+                "cleanup_time": 1.971268199966289
+            }
+        ],
+        "status": "PASSED"
+    }
+]

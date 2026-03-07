@@ -1,0 +1,58 @@
+[
+  {
+    "id": "ui_startup_state",
+    "name": "Verify initial UI state on startup.",
+    "status": "PASSED",
+    "duration": 2.5178829999640584,
+    "error": null
+  },
+  {
+    "id": "ui_loadout_activation_latency",
+    "name": "Verify immediate UI response when activating a loadout.",
+    "status": "PASSED",
+    "duration": 2.223752800025977,
+    "error": null
+  },
+  {
+    "id": "ui_loadout_deactivation",
+    "name": "Verify immediate UI teardown when selecting NONE loadout.",
+    "status": "PASSED",
+    "duration": 5.216372899943963,
+    "error": null
+  },
+  {
+    "id": "ui_loadout_idempotency",
+    "name": "Verify that selecting the already active loadout does nothing.",
+    "status": "FAILED",
+    "duration": 16.61914500000421,
+    "error": "System State Condition 'all_models_active' failed. Health: {-1: 'STARTUP', -2: 'STARTUP', -3: 'STARTUP'}"
+  },
+  {
+    "id": "ui_graph_mapping_status",
+    "name": "Verify Graph nodes update color based on loadout bindings.",
+    "status": "PASSED",
+    "duration": 8.030214199912734,
+    "error": null
+  },
+  {
+    "id": "ui_ux_initial_vram_boot",
+    "name": "Verify spinner active during initial boot scan and stops correctly.",
+    "status": "FAILED",
+    "duration": 17.022055099951103,
+    "error": "UX State Condition 'spinner_inactive' failed. Snapshot: {'loadout': 'NONE', 'pipeline': 'speech_to_speech', 'runnable': False, 'health_summary': {}, 'is_maximized': True, 'spinner_active': True, 'geometry': '2560x1377+456+456', 'state': 'zoomed', 'x': -11, 'y': -11, 'vram_breakdown_visible': 0}"
+  },
+  {
+    "id": "ui_ux_persistence_maximize_stage1",
+    "name": "Verify window maximization state capture.",
+    "status": "PASSED",
+    "duration": 3.0170499000232667,
+    "error": null
+  },
+  {
+    "id": "ui_ux_persistence_maximize_stage2",
+    "name": "Verify window remains maximized after restart.",
+    "status": "PASSED",
+    "duration": 5.122984100016765,
+    "error": null
+  }
+]

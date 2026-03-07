@@ -1,0 +1,54 @@
+[
+    {
+        "loadout": "ollama------qwen2.5--0.5b",
+        "scenarios": [
+            {
+                "name": "llm_basic_chat",
+                "status": "PASSED",
+                "duration": 0.041405500029213727,
+                "pipeline": "atomic_llm",
+                "domain": "llm",
+                "loadout_id": "ollama------qwen2.5--0.5b",
+                "node_metrics": {
+                    "proc_llm": {
+                        "status": "INCOMPLETE_DATA"
+                    }
+                },
+                "vram_external": 3.0673828125,
+                "vram_static": 0.0,
+                "vram_peak": 3.0673828125,
+                "stt_text": "",
+                "llm_text": "",
+                "input_file": "",
+                "output_file": "",
+                "detailed_model": "STUB-ollama://qwen2.5:0.5b",
+                "setup_time": 0.5530191999860108,
+                "cleanup_time": 1.9137103999964893
+            },
+            {
+                "name": "memory_recall",
+                "status": "PASSED",
+                "duration": 0.12948579993098974,
+                "pipeline": "memory_verification",
+                "domain": "memory",
+                "loadout_id": "ollama------qwen2.5--0.5b",
+                "node_metrics": {
+                    "proc_llm": {
+                        "status": "INCOMPLETE_DATA"
+                    }
+                },
+                "vram_external": 3.0673828125,
+                "vram_static": 0.0,
+                "vram_peak": 3.0654296875,
+                "stt_text": "",
+                "llm_text": "",
+                "input_file": "",
+                "output_file": "",
+                "detailed_model": "STUB-ollama://qwen2.5:0.5b",
+                "setup_time": 0.5530191999860108,
+                "cleanup_time": 1.9137103999964893
+            }
+        ],
+        "status": "PASSED"
+    }
+]

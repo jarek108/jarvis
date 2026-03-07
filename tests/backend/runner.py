@@ -25,7 +25,6 @@ from test_utils import (
 from test_utils.mocks import get_mock_implementation
 from test_utils.env_simulators import AudioFeeder, ScreenFeeder, KeyboardSandbox
 from test_utils.scenarios import load_scenarios_from_sources
-from utils import log_msg
 from utils.engine import PipelineResolver, PipelineExecutor
 
 class E2EOrchestrator:
@@ -68,7 +67,7 @@ class PipelineTestRunner:
         self.session_dir = session_dir
         self.orch_log = logger.bind(domain="ORCHESTRATOR")
         # SEARCH PATHS: Check tests first, then production
-
+        search_paths = [
             os.path.join(self.project_root, "tests", "pipelines"),
             os.path.join(self.project_root, "system_config", "pipelines")
         ]
@@ -370,7 +369,7 @@ def main():
                 dashboard.report_url, dashboard.current_status = report_path, "Finished"
             except Exception as e:
                 import traceback
-                log_msg(f"CRITICAL ERROR: {e}", tag="runner", level="error")
+                logger.error(f"CRITICAL ERROR: {e}")
                 logger.error(traceback.format_exc())
 
         worker = threading.Thread(target=execution_worker, daemon=True)

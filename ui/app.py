@@ -264,7 +264,8 @@ class JarvisApp(ctk.CTk):
                             self.log_viewer.insert("1.0", content); self.log_viewer.see("end")
                             self.log_viewer.configure(state="disabled"); self.last_log_content = content
                 except: pass
-        self.after(1000, self._update_log_viewer_loop)
+        if self.winfo_exists():
+            self.after(1000, self._update_log_viewer_loop)
 
     def on_model_click(self, mid):
         if self.selected_mid == mid: self.selected_mid = None; self.switch_to_terminal()
