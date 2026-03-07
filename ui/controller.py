@@ -154,9 +154,11 @@ class JarvisController:
                         # Stable if no active models and VRAM scan finished
                         if not active_models: is_stable = True
                     else:
-                        # Stable if runnable and all models are ON/BUSY
+                        # Stable if runnable, all models are ON/BUSY, and we have VRAM breakdown
                         has_startup = any(s['status'] == "STARTUP" for s in self.health_state.values())
-                        if self.runnability.get("runnable") and not has_startup:
+                        has_vram_data = system_external_vram > 0.0 or not active_models
+                        
+                        if self.runnability.get("runnable") and not has_startup and has_vram_data:
                             is_stable = True
                     
                     if is_stable or elapsed > self.LOADING_TIMEOUT:
