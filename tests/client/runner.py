@@ -71,6 +71,8 @@ class StatusDumper:
     def get_system_snapshot(self) -> Dict[str, Any]:
         """Captures the controller's internal health and runnability state."""
         ctrl = self.app.controller
+        self.app.update_idletasks()
+        self.app.update()
         return {
             "loadout": ctrl.current_loadout,
             "pipeline": ctrl.current_pipeline,
@@ -78,7 +80,11 @@ class StatusDumper:
             "health_summary": {p: s['status'] for p, s in ctrl.health_state.items()},
             "is_loading": ctrl.is_loading,
             "is_maximized": self.app.state() == "zoomed",
-            "spinner_active": self.app.loading_spinner.is_running
+            "spinner_active": self.app.loading_spinner.is_running,
+            "geometry": self.app.geometry(),
+            "state": self.app.state(),
+            "x": self.app.winfo_x(),
+            "y": self.app.winfo_y()
         }
 
     def _resolve_widget(self, path: str) -> Optional[Any]:
@@ -286,6 +292,9 @@ class ClientTestRunner:
                     success = not snap['spinner_active']
                 elif cond == "maximized":
                     success = snap['is_maximized']
+                elif cond == "stable_maximized":
+                    # Maximized on Windows usually means state is zoomed AND top-left is at (0,0) or slightly negative
+                    success = snap['is_maximized'] and snap['x'] <= 0 and snap['y'] <= 0
                 elif cond == "not_maximized":
                     success = not snap['is_maximized']
 

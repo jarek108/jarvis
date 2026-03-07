@@ -110,8 +110,14 @@ ui_ux_persistence_maximize_stage2:
   timeline:
     - t: 1.0s
       action: assert_ux_state
-      condition: "maximized"
-    - t: 1.5s
+      condition: "stable_maximized" # Initial restoration check
+    - t: 2.0s
+      action: assert_ux_state
+      condition: "stable_maximized" # Stability check
+    - t: 4.0s
+      action: assert_ux_state
+      condition: "stable_maximized" # Final persistence check
+    - t: 4.5s
       action: take_screenshot
       file: "stage2_maximized_persisted.jpg"
 

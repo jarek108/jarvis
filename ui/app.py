@@ -24,10 +24,15 @@ class JarvisApp(ctk.CTk):
         self.queue = queue.Queue()
         self.controller = JarvisController(self.queue)
 
+        # 1. Set restored geometry first if it exists
+        if self.controller.geometry:
+            self.geometry(self.controller.geometry)
+        else:
+            self.geometry("1200x850")
+
+        # 2. Apply maximization state last (if it was maximized, this overrides geometry)
         if self.controller.is_maximized or self.controller.geometry is None:
             self.state("zoomed")
-        elif self.controller.geometry:
-            self.geometry(self.controller.geometry)
         
         self.protocol("WM_DELETE_WINDOW", self.on_closing)
         
