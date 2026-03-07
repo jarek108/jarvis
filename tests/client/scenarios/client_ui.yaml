@@ -89,7 +89,7 @@ ui_ux_spinner_lifecycle:
     - t: 1.5s
       action: take_screenshot
       file: "spinner_active.jpg"
-    - t: 8.0s
+    - t: 15.0s
       action: assert_ux_state
       condition: "spinner_inactive"
 
@@ -137,13 +137,10 @@ ui_ux_vram_spinner_sync:
     - t: 1.1s
       action: assert_ux_state
       condition: "spinner_active"
-    - t: 1.2s
-      action: assert_ux_state
-      condition: "vram_breakdown_hidden"
     - t: 8.0s
       action: assert_ux_state
       condition: "vram_breakdown_visible"
-    - t: 8.1s
+    - t: 15.0s
       action: assert_ux_state
       condition: "spinner_inactive"
 

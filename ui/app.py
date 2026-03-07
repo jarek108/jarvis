@@ -272,10 +272,6 @@ class JarvisApp(ctk.CTk):
     def update_health_ui(self, health, runnability, active_models=None, vram=None):
         if vram:
             self.vram_monitor.update(vram['used'], vram['total'], vram['external'])
-            # Trigger stop if we have breakdown, poll_queue will handle the lock/state
-            if self.controller.is_loading and vram.get('external', 0) > 0:
-                self.loading_spinner.stop()
-
 
         if self.transition_lock and active_models is not None and not active_models: return
         if active_models: self.transition_lock = False
@@ -336,10 +332,12 @@ class JarvisApp(ctk.CTk):
             elif msg['type'] == "state":
                 if msg.get('recording'): self.record_btn.configure(fg_color=self.colors.get('error'), text="RECORDING...")
             elif msg['type'] == "loading":
-                # ABSOLUTE GUARD: If UI has locked the spinner (e.g. VRAM shown), 
-                # ignore all 'start' signals from backend threads.
+                # ABSOLUTE GUARD: If UI has locked the spinner OR if VRAM is already 
+                # clearly displayed, ignore all 'start' signals from backend.
                 is_start_signal = msg.get('is_loading', False)
-                if is_start_signal and self.spinner_locked:
+                vram_is_visible = self.vram_monitor.v_lbl_ext_part.winfo_viewable()
+                
+                if is_start_signal and (self.spinner_locked or vram_is_visible):
                     continue 
                 
                 if is_start_signal: self.loading_spinner.start()
@@ -351,7 +349,6 @@ class JarvisApp(ctk.CTk):
                 vram = msg.get('vram')
                 if vram and self.controller.is_loading:
                     # Stop as soon as we have a breakdown to show (vram data present)
-                    # For NONE loadout, we stop when used is 0. For models, when data arrives.
                     is_none_loadout = self.controller.current_loadout == "NONE"
                     has_data = not (vram['used'] == vram['external'] == 0)
 
@@ -362,4 +359,4 @@ class JarvisApp(ctk.CTk):
 
                 # 2. Proceed with normal UI update
                 self.update_health_ui(msg['health'], msg['runnability'], active_models=msg.get('active_models'), vram=vram)
-
+        self.after(100, self.poll_queue)
