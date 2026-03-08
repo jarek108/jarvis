@@ -54,6 +54,7 @@ class RichDashboard:
         
         self.project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
         self._session_path = None
+        self.active_log_path = None
         
         self.overall_progress = Progress(
             TextColumn("[bold blue]{task.description}", justify="right"),
@@ -180,10 +181,20 @@ class RichDashboard:
     def init_plan_structure(self, structure):
         self.test_data = structure
 
-    def finalize_boot(self, session_id=None, system_info=None):
+        # Calculate and update totals for progress bars
+        total_scenarios = sum(d['total'] for d in self.test_data.values())
+        total_models = sum(len(d['loadouts']) for d in self.test_data.values())
+
+        # Reset task completed states and set new totals
+        self.overall_progress.update(self.overall_task, total=total_scenarios, completed=0, visible=True)
+        self.overall_progress.update(self.models_task, total=total_models, completed=0, visible=True)
+
+    def finalize_boot(self, session_id=None, system_info=None, session_dir=None):
         if session_id: 
             self.session_id = session_id
-            self._session_path = os.path.join(self.project_root, "tests", "logs", self.session_id)
+        if session_dir:
+            self._session_path = session_dir
+        
         if system_info: 
             self.system_info = system_info
             host = system_info.get('host', {})
@@ -236,7 +247,9 @@ class RichDashboard:
 
     def update_scenario(self, domain, loadout, scenario_name, status, result=""):
         d_data = self.test_data.get(domain.lower())
+        if not d_data: return
         l_data = d_data['loadouts'].get(loadout)
+        if not l_data: return
         l_data['done'] += 1
         d_data['done'] += 1
         if status != "PASSED":
@@ -253,7 +266,9 @@ class RichDashboard:
 
     def finalize_loadout(self, domain, loadout, duration, status="passed", error_message=""):
         d_data = self.test_data.get(domain.lower())
+        if not d_data: return
         l_data = d_data['loadouts'].get(loadout)
+        if not l_data: return
         
         old_phase = l_data.get('phase')
         if old_phase and old_phase in l_data['phase_starts']:
@@ -274,6 +289,7 @@ class RichDashboard:
 
     def finalize_domain(self, domain):
         d_data = self.test_data.get(domain.lower())
+        if not d_data: return
         if d_data['start_time']:
             d_data['duration'] = time.perf_counter() - d_data['start_time']
         if d_data['status'] == "wip":

@@ -6,6 +6,7 @@ import argparse
 import threading
 import yaml
 import json
+import shutil
 from loguru import logger
 from typing import Any, Optional, Dict, List
 from dataclasses import dataclass, asdict
@@ -69,7 +70,7 @@ class StatusDumper:
         
         latency = (time.perf_counter() - start_t) * 1000
         if latency > 5.0:
-            logger.warning(f"⚠️ Slow UI Dump: {latency:.2f}ms for '{target_path}'")
+            logger.bind(domain="ORCHESTRATOR").warning(f"⚠️ Slow UI Dump: {latency:.2f}ms for '{target_path}'")
         return text
 
     def get_system_snapshot(self) -> Dict[str, Any]:
@@ -103,11 +104,10 @@ class StatusDumper:
         return mapping.get(path)
 
 class VisualVerifier:
-    """Handles window-specific screenshot captures."""
-    def __init__(self, app: JarvisApp, session_dir: str):
+    """Handles window-specific screenshot captures within scenario folders."""
+    def __init__(self, app: JarvisApp, scenario_dir: str):
         self.app = app
-        self.session_dir = session_dir
-        self.current_scenario_id = "unknown"
+        self.scenario_dir = scenario_dir
 
     def capture_window(self, filename: str):
         """Captures the exact bounding box of the app window."""
@@ -124,14 +124,9 @@ class VisualVerifier:
             sct_img = sct.grab(monitor)
             img = PIL.Image.frombytes("RGB", sct_img.size, sct_img.bgra, "raw", "BGRX")
             
-            img_dir = os.path.join(self.session_dir, "images")
-            os.makedirs(img_dir, exist_ok=True)
-            
-            # Prefix with scenario ID to prevent collisions
-            prefixed_name = f"{self.current_scenario_id}_{filename}"
-            out_path = os.path.join(img_dir, prefixed_name)
+            os.makedirs(self.scenario_dir, exist_ok=True)
+            out_path = os.path.join(self.scenario_dir, filename)
             img.save(out_path, quality=85)
-            # Log with domain="ORCHESTRATOR" to avoid console spam but show in footer
             logger.bind(domain="ORCHESTRATOR").info(f"📸 Screenshot saved: {out_path}")
 
     def capture_desktop(self, filename: str):
@@ -139,18 +134,14 @@ class VisualVerifier:
         if not mss or not PIL: return
 
         with mss.mss() as sct:
-            # monitors[0] is all monitors, monitors[1] is the primary
             monitor = sct.monitors[1]
             sct_img = sct.grab(monitor)
             img = PIL.Image.frombytes("RGB", sct_img.size, sct_img.bgra, "raw", "BGRX")
             
-            img_dir = os.path.join(self.session_dir, "images")
-            os.makedirs(img_dir, exist_ok=True)
-            
-            prefixed_name = f"{self.current_scenario_id}_desktop_{filename}"
-            out_path = os.path.join(img_dir, prefixed_name)
+            os.makedirs(self.scenario_dir, exist_ok=True)
+            out_path = os.path.join(self.scenario_dir, f"desktop_{filename}")
             img.save(out_path, quality=85)
-            logger.bind(domain="ORCHESTRATOR").info(f"🖥️  Desktop Screenshot saved: {out_path}")
+            logger.bind(domain="ORCHESTRATOR").info(f"🖥️ Desktop Screenshot saved: {out_path}")
 
 class AutomationController:
     """Simulates deterministic human actions against UI widgets."""
@@ -160,10 +151,10 @@ class AutomationController:
     def click(self, target_path: str):
         widget = self._resolve_widget(target_path)
         if hasattr(widget, "invoke"):
-            logger.bind(domain="ORCHESTRATOR").info(f"🖱️  Invoking click on '{target_path}'")
+            logger.bind(domain="ORCHESTRATOR").info(f"🖱️ Invoking click on '{target_path}'")
             widget.invoke()
         else:
-            logger.error(f"❌ Cannot click non-invocable widget '{target_path}'")
+            logger.bind(domain="ORCHESTRATOR").error(f"❌ Cannot click non-invocable widget '{target_path}'")
 
     def maximize(self):
         logger.bind(domain="ORCHESTRATOR").info("🔲 Maximizing window")
@@ -206,11 +197,14 @@ class ClientTestRunner:
             
         self.is_running = True
 
+        # Initialize Scenario Directory (Temporary name)
+        temp_scenario_dir = os.path.join(self.session_dir, f"{domain_id}__{scenario_id}")
+        os.makedirs(temp_scenario_dir, exist_ok=True)
+
         self.app = JarvisApp()
         self.automation = AutomationController(self.app)
         self.dumper = StatusDumper(self.app)
-        self.visual = VisualVerifier(self.app, self.session_dir)
-        self.visual.current_scenario_id = scenario_id
+        self.visual = VisualVerifier(self.app, temp_scenario_dir)
         
         self.start_time = time.perf_counter()
         
@@ -270,7 +264,18 @@ class ClientTestRunner:
             ))
             if self.dashboard:
                 self.dashboard.update_scenario(domain_id, "UI_SUITE", scenario_id, status, result=error_msg or "")
+                # Increment models task
+                self.dashboard.finalize_loadout(domain_id, "UI_SUITE", duration, status=status.lower())
+
             self.cleanup()
+
+            # RENAME Scenario Directory with Status Prefix
+            final_scenario_dir = os.path.join(self.session_dir, f"{status}__{domain_id}__{scenario_id}")
+            try:
+                if os.path.exists(temp_scenario_dir):
+                    os.rename(temp_scenario_dir, final_scenario_dir)
+            except Exception as e:
+                self.orch_log.error(f"Failed to rename scenario folder: {e}")
             
         return scenario_success
 
@@ -332,7 +337,6 @@ class ClientTestRunner:
                 elif cond == "maximized":
                     success = snap['is_maximized']
                 elif cond == "stable_maximized":
-                    # Maximized on Windows usually means state is zoomed AND top-left is at (0,0) or slightly negative
                     success = snap['is_maximized'] and snap['x'] <= 0 and snap['y'] <= 0
                 elif cond == "not_maximized":
                     success = not snap['is_maximized']
@@ -354,10 +358,8 @@ class ClientTestRunner:
     def cleanup(self):
         if self.app:
             try:
-                # Cancel all pending .after callbacks to prevent "invalid command" errors
                 for call in self.app.tk.call('after', 'info'):
                     self.app.after_cancel(call)
-                
                 if hasattr(self.app, "on_closing"):
                     self.app.on_closing()
                 else:
@@ -365,7 +367,6 @@ class ClientTestRunner:
             except: pass
 
     def print_summary(self):
-        # Only print if no dashboard was used, or as a final fallback
         if not self.dashboard:
             print(f"\n{BOLD}JARVIS CLIENT TEST SUMMARY{RESET}")
             print("-" * LINE_LEN)
@@ -384,8 +385,8 @@ class ClientTestRunner:
             final_color = GREEN if total_passed == len(self.results) else RED
             print(f"OVERALL: {final_color}{total_passed}/{len(self.results)} PASSED{RESET} | Session: {os.path.basename(self.session_dir)}")
         
-        # Save JSON report
-        report_path = os.path.join(self.session_dir, "client_report.json")
+        # Save summary report as report.json
+        report_path = os.path.join(self.session_dir, "report.json")
         with open(report_path, "w") as f:
             json.dump([asdict(r) for r in self.results], f, indent=2)
 
@@ -411,17 +412,17 @@ async def main():
         raise ValueError(f"Invalid Client Plan: '{plan_path}' missing 'execution' block.")
 
     # Initialize Unified Session
-    session_dir = init_session("UIT")
+    session_dir = init_session("test_ui")
     session_id = os.path.basename(session_dir)
     
     # Setup Dashboard
     dashboard = RichDashboard("Jarvis UI Test", session_id=session_id)
-    dashboard.active_log_path = os.path.join(session_dir, "orchestrator.log")
+    dashboard.active_log_path = os.path.join(session_dir, "timeline.log")
     
-    # Build the dashboard structure based on the plan's execution domains
+    # Build the dashboard structure
     structure = {}
     for block in plan_data['execution']:
-        d_id = block.get('domain', 'UI_TESTS').lower()
+        d_id = block.get('domain', 'UI_TESTS').upper()
         scenarios = block.get('scenarios', [])
         structure[d_id] = {
             "status": "pending", "done": 0, "total": len(scenarios),
@@ -437,7 +438,7 @@ async def main():
     
     # Load system info for dashboard
     with open(os.path.join(session_dir, "system_info.yaml"), "r") as f: system_info = yaml.safe_load(f)
-    dashboard.finalize_boot(session_id, system_info)
+    dashboard.finalize_boot(session_id, system_info, session_dir=session_dir)
     dashboard.start()
 
     try:
@@ -458,7 +459,7 @@ async def main():
 
         # Execute
         for block in plan_data['execution']:
-            domain_id = block.get('domain', 'UI_TESTS').lower()
+            domain_id = block.get('domain', 'UI_TESTS').upper()
             scen_ids = block.get('scenarios', [])
             
             for sid in scen_ids:
