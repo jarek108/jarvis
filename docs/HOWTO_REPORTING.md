@@ -13,20 +13,20 @@ Use the standalone `generate_report.py` script to recreate a report from an exis
 
 ### Basic Regeneration
 ```powershell
-python tests/generate_report.py --dir tests/logs/RUN_20260221_093804
+python tests/generate_report.py --dir logs/test_ui/ or logs/test_be/RUN_20260221_093804
 ```
 *   This will refresh the Excel file in the target folder and ensure its links are up to date.
 
 ### Full Cloud Sync (Including Outputs)
 By default, transient output audio is not uploaded to save time. To create a fully portable cloud report:
 ```powershell
-python tests/generate_report.py --dir tests/logs/RUN_XYZ --upload-outputs
+python tests/generate_report.py --dir logs/test_ui/ or logs/test_be/RUN_XYZ --upload-outputs
 ```
 
 ### Local Only (No Network)
 If you are working offline or want a quick draft:
 ```powershell
-python tests/generate_report.py --dir tests/logs/RUN_XYZ --no-upload-report
+python tests/generate_report.py --dir logs/test_ui/ or logs/test_be/RUN_XYZ --no-upload-report
 ```
 
 ## 3. Organizing the Archive

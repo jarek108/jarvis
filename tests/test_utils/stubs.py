@@ -2,25 +2,36 @@ import argparse
 import time
 import json
 import asyncio
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, Response
 from fastapi.responses import JSONResponse, StreamingResponse
 
 app = FastAPI()
 
+START_TIME = time.time()
+DELAY = 0.0
+
+def check_delay():
+    if time.time() - START_TIME < DELAY:
+        return JSONResponse(status_code=503, content={"status": "STARTUP"})
+    return None
+
 @app.get("/api/tags")
 async def tags():
     """Mimics Ollama model listing."""
+    if d := check_delay(): return d
     return {"models": [{"name": "stub-model:latest"}], "service": "llm_stub"}
 
 @app.get("/v1/models")
 async def models():
     """Mimics vLLM model listing."""
+    if d := check_delay(): return d
     return {"data": [{"id": "stub-model:latest"}], "service": "llm_stub"}
 
 @app.post("/api/chat")
 @app.post("/v1/chat/completions")
 async def chat(request: Request):
     """Mimics Ollama/vLLM chat API with streaming support."""
+    if d := check_delay(): return d
     data = await request.json()
     model = data.get("model", "stub")
     stream = data.get("stream", False)
@@ -85,11 +96,30 @@ async def chat(request: Request):
 
 @app.get("/health")
 async def health():
+    if d := check_delay(): return d
     return {"status": "ON", "service": "llm_stub"}
 
 if __name__ == "__main__":
     import uvicorn
+    import os
+    import sys
+    import random
+    
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    project_root = os.path.dirname(os.path.dirname(script_dir))
+    if project_root not in sys.path:
+        sys.path.append(project_root)
+        
+    try:
+        from utils import load_config
+        cfg = load_config()
+        mock_range = cfg.get('system', {}).get('mock_startup_range', [1.5, 3.0])
+        DELAY = round(random.uniform(mock_range[0], mock_range[1]), 2)
+    except:
+        DELAY = 0.0
+
     parser = argparse.ArgumentParser()
     parser.add_argument("--port", type=int, default=11434)
     args = parser.parse_args()
+    
     uvicorn.run(app, host="127.0.0.1", port=args.port)

@@ -21,7 +21,7 @@ python tests/client/runner.py tests/client/plans/client_fast.yaml --mock-all
 | `--keep-alive` | No backend cleanup | Running tests against an active cluster. |
 
 ## 3. Investigating Failures
-Every test run generates a session folder in `tests/logs/CLIENT_RUN_YYYYMMDD_HHMMSS/`.
+Every test run generates a session folder in `logs/test_ui/ or logs/test_be/CLIENT_RUN_YYYYMMDD_HHMMSS/`.
 
 1.  **Visual Proof**: Check the `images/` subfolder for screenshots taken at specific timeline marks (e.g., `boot_spin.jpg`, `loadout_final_state.jpg`).
 2.  **State Snapshots**: Open `client_report.json` to see the exact logical state (Health, VRAM visibility, Maximization status) at the moment of failure.

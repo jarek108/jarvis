@@ -1,0 +1,24 @@
+timestamp: '2026-03-08 11:07:03'
+host:
+  os: Windows-10-10.0.26200-SP0
+  cpu: AMD64 Family 26 Model 68 Stepping 0, AuthenticAMD
+  cpu_count: 32
+  ram_total_gb: 93.64
+  ram_used_gb: 36.78
+  gpu: NVIDIA GeForce RTX 5090
+  vram_total_gb: 31.84
+  vram_used_gb: 3.26
+  docker:
+    status: 'Off'
+    version: 29.2.1, build a5c7197
+    root_dir: N/A
+  ollama:
+    status: 'On'
+    version: 0.17.0
+environment:
+  HF_HOME: e:\critical_storage\huggingface
+  OLLAMA_MODELS: e:\critical_storage\.ollama\models
+git:
+  hash: 3a29c305bb35d72841b4bb99f4444b9b24f3221b
+  branch: main
+plan: {}

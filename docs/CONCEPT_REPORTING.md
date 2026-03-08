@@ -47,6 +47,6 @@ This ensures that legacy logs can be re-processed into modern, data-rich reports
 To prevent local storage bloat from hundreds of historical runs, Jarvis enforces an automatic cleanup policy:
 
 *   **Trigger**: Cleanup runs during every session initialization (Loadout application or Test start).
-*   **Logic**: Any folder starting with `RUN_` in `logs/sessions/` or `tests/logs/` with a modification time older than the configured threshold is deleted.
+*   **Logic**: Any folder starting with `RUN_` in `logs/prod/` or `logs/test_ui/ or logs/test_be/` with a modification time older than the configured threshold is deleted.
 *   **Configuration**: Managed via `system.log_retention_days` in `system_config/config.yaml`.
 *   **Opt-out**: Set `log_retention_days: -1` to disable automatic deletion.

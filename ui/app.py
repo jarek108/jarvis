@@ -184,6 +184,7 @@ class JarvisApp(ctk.CTk):
         self.controller.geometry = self.geometry()
         self.controller.is_maximized = (self.state() == "zoomed")
         self.controller.save_checkpoint()
+        self.controller.is_polling = False
         self.destroy()
 
     def on_loadout_change(self, val):
@@ -191,6 +192,7 @@ class JarvisApp(ctk.CTk):
         if val != "NONE" and val == self.controller.current_loadout: return
         self.transition_lock = True; self.selected_mid = None; self.switch_to_terminal()
         for widget in self.health_frame.winfo_children(): widget.destroy()
+        self.service_widgets.clear()
 
         try:
             registry_data = self.controller.resolver.get_live_models()
@@ -228,7 +230,7 @@ class JarvisApp(ctk.CTk):
     def update_graph_view(self):
         health = self.controller.health_state
         try:
-            bound_graph = self.controller.resolver.resolve(self.controller.current_pipeline, self.controller.current_strategy)
+            bound_graph = self.controller.resolver.resolve(self.controller.current_pipeline, self.controller.current_strategy, silent=True)
             manual_pos = self.controller.node_positions.get(self.controller.current_pipeline)
             self.graph_widget.set_graph_data(bound_graph, manual_positions=manual_pos, health_data=health)
         except:
@@ -309,7 +311,7 @@ class JarvisApp(ctk.CTk):
         bound_mids = set()
         try:
             # We use the current view_mode's bound graph
-            bound_graph = self.controller.resolver.resolve(self.controller.current_pipeline)
+            bound_graph = self.controller.resolver.resolve(self.controller.current_pipeline, silent=True)
             for node in bound_graph.values():
                 binding = node.get('binding')
                 if binding: bound_mids.add(binding['id'])

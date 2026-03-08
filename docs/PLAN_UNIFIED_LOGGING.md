@@ -8,7 +8,7 @@ This strategy focuses on **High-Signal Telemetry**, **Crash Resilience**, and **
 ## 2. ARCHITECTURAL REQUIREMENTS
 
 ### Requirement A: The Session Directory Standard
-*   All runtime artifacts must reside within a single session-specific directory inside `logs/sessions/`.
+*   All runtime artifacts must reside within a single session-specific directory inside `logs/prod/`.
 *   Session directories must be strictly prefixed by the entry point that created them:
     *   `BE_YYYYMMDD_HHMMSS` for Backend Test Runner (`tests/backend/runner.py`)
     *   `UIT_YYYYMMDD_HHMMSS` for UI Test Runner (`tests/client/runner.py`)

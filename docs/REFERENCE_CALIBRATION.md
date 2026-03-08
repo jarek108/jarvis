@@ -12,7 +12,7 @@ The primary tool for extracting physical constants from engine logs.
 python tools/calibrate_models.py [PATH]
 
 # Explicitly calibrate all logs in a directory
-python tools/calibrate_models.py tests/logs/RUN_20260225_183014/
+python tools/calibrate_models.py logs/test_ui/ or logs/test_be/RUN_20260225_183014/
 ```
 
 ### Positional Arguments

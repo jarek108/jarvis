@@ -1,0 +1,58 @@
+[
+  {
+    "id": "ui_startup_state",
+    "name": "Verify initial UI state on startup.",
+    "status": "PASSED",
+    "duration": 2.516497500007972,
+    "error": null
+  },
+  {
+    "id": "ui_ux_initial_vram_boot",
+    "name": "Verify spinner active during initial boot scan and stops correctly.",
+    "status": "PASSED",
+    "duration": 17.022400900023058,
+    "error": null
+  },
+  {
+    "id": "ui_loadout_activation_latency",
+    "name": "Verify immediate UI response when activating a loadout.",
+    "status": "PASSED",
+    "duration": 4.5244789000134915,
+    "error": null
+  },
+  {
+    "id": "ui_loadout_deactivation",
+    "name": "Verify immediate UI teardown when selecting NONE loadout.",
+    "status": "PASSED",
+    "duration": 7.567803299985826,
+    "error": null
+  },
+  {
+    "id": "ui_loadout_idempotency",
+    "name": "Verify that selecting the already active loadout does nothing.",
+    "status": "PASSED",
+    "duration": 10.017582000000402,
+    "error": null
+  },
+  {
+    "id": "ui_graph_mapping_status",
+    "name": "Verify Graph nodes update color based on loadout bindings.",
+    "status": "PASSED",
+    "duration": 8.023221999988891,
+    "error": null
+  },
+  {
+    "id": "ui_ux_persistence_maximize_stage1",
+    "name": "Verify window maximization state capture.",
+    "status": "PASSED",
+    "duration": 3.0276761000277475,
+    "error": null
+  },
+  {
+    "id": "ui_ux_persistence_maximize_stage2",
+    "name": "Verify window remains maximized after restart.",
+    "status": "PASSED",
+    "duration": 5.127993499976583,
+    "error": null
+  }
+]

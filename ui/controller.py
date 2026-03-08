@@ -101,20 +101,45 @@ class JarvisController:
         self.save_checkpoint()
 
     def _status_polling_loop(self):
+        import requests
+        self._last_poll_state = None
         while self.is_polling:
             start_t = time.perf_counter()
-            logger.debug("Starting health poll iteration")
             try:
-                registry_data = self.resolver.get_live_models()
-                active_models = registry_data.get("models", [])
-                system_external_vram = registry_data.get("external", 0.0)
-                active_ports = [m['port'] for m in active_models if m.get('port')]
-                log_map = {m['port']: m['log_path'] for m in active_models if m.get('log_path') and m.get('port')}
-                self.health_state = get_system_health(ports=active_ports, log_paths=log_map)
+                try:
+                    r = requests.get("http://127.0.0.1:5555/status", timeout=1.0)
+                    daemon_status = r.json()
+                    active_models = daemon_status.get("models", [])
+                    system_external_vram = daemon_status.get("vram", {}).get("external", 0.0)
+                    # Convert the daemon's model list back to the health dict format the UI expects
+                    self.health_state = {m['port']: {"status": m.get('state', 'OFF'), "info": m.get('info')} for m in active_models if m.get('port')}
+                except:
+                    # Fallback to local resolver if daemon is unreachable
+                    registry_data = self.resolver.get_live_models()
+                    active_models = registry_data.get("models", [])
+                    system_external_vram = registry_data.get("external", 0.0)
+                    active_ports = [m['port'] for m in active_models if m.get('port')]
+                    log_map = {m['port']: m['log_path'] for m in active_models if m.get('log_path') and m.get('port')}
+                    self.health_state = get_system_health(ports=active_ports, log_paths=log_map)
                 
                 vram_used = utils.get_gpu_vram_usage()
                 vram_total = utils.get_gpu_total_vram()
-                self.runnability = self.resolver.check_runnability(self.current_pipeline, self.current_strategy, external_health=self.health_state)
+                
+                current_state = {
+                    "pipeline": self.current_pipeline,
+                    "strategy": self.current_strategy,
+                    "health": self.health_state,
+                    "models": active_models
+                }
+                
+                if current_state != self._last_poll_state:
+                    self.runnability = self.resolver.check_runnability(
+                        self.current_pipeline, 
+                        self.current_strategy, 
+                        external_health=self.health_state, 
+                        silent=True
+                    )
+                    self._last_poll_state = current_state
                 
                 self.ui_queue.put({
                     "type": "health_update", 
@@ -126,9 +151,8 @@ class JarvisController:
             except Exception as e:
                 logger.error(f"Status Polling Error: {e}")
             
-            duration = time.perf_counter() - start_t
-            logger.debug(f"Health poll finished in {duration:.3f}s")
-            time.sleep(1.5)
+            poll_interval = self.cfg.get('system', {}).get('health_check_interval', 1.0)
+            time.sleep(poll_interval)
 
     def trigger_loadout_change(self, loadout_id):
         if loadout_id != "NONE" and loadout_id == self.current_loadout:
@@ -136,16 +160,30 @@ class JarvisController:
         self.current_loadout = loadout_id
         self.save_checkpoint()
         def task():
-            if loadout_id == "NONE":
-                logger.info("☢️ KILLING ALL SERVICES...")
-                kill_loadout("all")
-            else:
-                logger.info(f"⚙️ APPLYING LOADOUT: {loadout_id}")
-                try:
-                    apply_loadout(loadout_id, soft=True)
-                    logger.info("✅ LOADOUT APPLIED")
-                except Exception as e:
-                    logger.error(f"❌ LOADOUT ERROR: {e}")
+            import requests
+            try:
+                if loadout_id == "NONE":
+                    logger.info("☢️ KILLING ALL SERVICES VIA DAEMON...")
+                    requests.delete("http://127.0.0.1:5555/loadout", timeout=2.0)
+                else:
+                    logger.info(f"⚙️ APPLYING LOADOUT VIA DAEMON: {loadout_id}")
+                    r = requests.post("http://127.0.0.1:5555/loadout", json={"name": loadout_id, "soft": True}, timeout=2.0)
+                    if r.status_code == 200:
+                        logger.info("✅ LOADOUT DELEGATED TO DAEMON")
+                    else:
+                        logger.error(f"❌ DAEMON ERROR: {r.text}")
+            except Exception as e:
+                logger.warning(f"Daemon unreachable, falling back to local execution: {e}")
+                if loadout_id == "NONE":
+                    logger.info("☢️ KILLING ALL SERVICES...")
+                    kill_loadout("all")
+                else:
+                    logger.info(f"⚙️ APPLYING LOADOUT: {loadout_id}")
+                    try:
+                        apply_loadout(loadout_id, soft=True)
+                        logger.info("✅ LOADOUT APPLIED")
+                    except Exception as e2:
+                        logger.error(f"❌ LOADOUT ERROR: {e2}")
         threading.Thread(target=task, daemon=True).start()
 
     def trigger_service_restart(self, sid):

@@ -1,0 +1,37 @@
+[
+    {
+        "loadout": "native------faster-whisper-tiny_native------chatterbox-turbo_ollama------qwen2.5--0.5b",
+        "scenarios": [
+            {
+                "name": "speech_to_speech",
+                "status": "PASSED",
+                "duration": 0.1436954999808222,
+                "pipeline": "speech_to_speech",
+                "domain": "sts_voice",
+                "loadout_id": "native------faster-whisper-tiny_native------chatterbox-turbo_ollama------qwen2.5--0.5b",
+                "node_metrics": {
+                    "proc_stt": {
+                        "status": "INCOMPLETE_DATA"
+                    },
+                    "proc_llm": {
+                        "status": "INCOMPLETE_DATA"
+                    },
+                    "proc_tts": {
+                        "status": "INCOMPLETE_DATA"
+                    }
+                },
+                "vram_external": 0.0,
+                "vram_static": 0.0,
+                "vram_peak": 3.2587890625,
+                "stt_text": "",
+                "llm_text": "",
+                "input_file": "tests/data/polish.wav",
+                "output_file": "",
+                "detailed_model": "STUB-ollama://qwen2.5:0.5b + FASTER-WHISPER-TINY + CHATTERBOX-TURBO",
+                "setup_time": 4.615506000001915,
+                "cleanup_time": 2.0189873999916017
+            }
+        ],
+        "status": "PASSED"
+    }
+]

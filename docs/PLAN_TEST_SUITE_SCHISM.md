@@ -29,7 +29,7 @@ This plan envisions a clean "Schism" of the `tests/` directory into two distinct
 
 ### Phase 3: Path Re-wiring & Utility Sharing
 *   **Action**: Update import paths in both runners to ensure they correctly resolve the shared `tests/test_utils/` directory despite moving one level deeper in the tree.
-*   **Action**: Verify that session directories are still correctly generated in the root `tests/logs/` folder.
+*   **Action**: Verify that session directories are still correctly generated in the root `logs/test_ui/ or logs/test_be/` folder.
 
 ### Phase 4: Documentation Synchronization
 *   **Action**: Update `GEMINI.MD` Refactor and Client Guards.

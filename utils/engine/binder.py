@@ -68,7 +68,7 @@ class AutoBinder:
                 return data.get(key, {}).get(node_id)
         except: return None
 
-    def generate_manifest(self, pipeline_id, nodes, active_models, preference=MappingPreference.PREFER_BIG, loadout_id="unknown", overrides=None):
+    def generate_manifest(self, pipeline_id, nodes, active_models, preference=MappingPreference.PREFER_BIG, loadout_id="unknown", overrides=None, silent=False):
         """
         Creates a binding manifest for a list of nodes.
         Hierarchy: Manual Overrides > Fixed YAML Binding > Cache Override > Heuristic Discovery.
@@ -98,7 +98,7 @@ class AutoBinder:
                     manifest[nid] = bound
                     continue
                 else:
-                    logger.warning(f"Fixed implementation '{fixed_impl_id}' not found for node {nid}")
+                    if not silent: logger.warning(f"Fixed implementation '{fixed_impl_id}' not found for node {nid}")
 
             # B. Strategy 2: Persistent Cache Override
             cache_override = self.get_persisted_binding(pipeline_id, loadout_id, nid)
@@ -116,7 +116,7 @@ class AutoBinder:
                 ]
                 
                 if not candidates:
-                    logger.warning(f"No implementations satisfy capabilities {required_caps} for node {nid}")
+                    if not silent: logger.warning(f"No implementations satisfy capabilities {required_caps} for node {nid}")
                     manifest[nid] = None
                     continue
 

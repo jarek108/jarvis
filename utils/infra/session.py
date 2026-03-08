@@ -46,45 +46,35 @@ class StreamToLogger:
     def closed(self):
         return False
 
-def init_session(prefix: str) -> str:
+def init_session(domain: str) -> str:
     """
     Initializes a unified Jarvis session.
-    1. Generates timestamped directory with prefix (BE_, UIT_, APP_).
-    2. Configures loguru sinks (Console, system.log, ui.log, orchestrator.log).
-    3. Sets up sys.excepthook and redirects raw stdout/stderr for crash resilience.
-    4. Dumps system_info.yaml for environment tracking.
+    1. Generates timestamped directory: logs/{domain}/{YYYYMMDD_HHMMSS}/.
+    2. Configures loguru to stream EVERYTHING into timeline.log.
+    3. Sets up crash resilience (excepthook + stream redirection).
     """
     timestamp = time.strftime("%Y%m%d_%H%M%S")
-    session_id = f"{prefix}_{timestamp}"
     
     project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-    session_dir = os.path.join(project_root, "logs", "sessions", session_id)
+    session_dir = os.path.join(project_root, "logs", domain, timestamp)
     os.makedirs(session_dir, exist_ok=True)
 
     # 1. Configure Loguru
     logger.remove() # Clear default
     
-    # Console Sink (Filtered by JARVIS_DEBUG)
+    # Console Sink (Filtered by JARVIS_DEBUG and Dashboard State)
     log_level = "DEBUG" if os.getenv("JARVIS_DEBUG") == "1" else "INFO"
-    # Note: We use a simple format for console to stay readable with RichDashboard
-    logger.add(sys.stderr, level=log_level, format="<green>{time:HH:mm:ss.SSS}</green> | <level>{level: <8}</level> | <level>{message}</level>")
+    
+    def console_filter(record):
+        # Silence console output if a RichDashboard is currently active to prevent layout corruption
+        return not getattr(sys, "dashboard_active", False)
 
-    # system.log (Everything)
-    logger.add(os.path.join(session_dir, "system.log"), level="DEBUG", rotation="10 MB")
+    # Simple format for console to stay readable with RichDashboard
+    logger.add(sys.stderr, level=log_level, format="<green>{time:HH:mm:ss.SSS}</green> | <level>{level: <8}</level> | <level>{message}</level>", filter=console_filter)
 
-    # ui.log (UI Domain only)
-    logger.add(
-        os.path.join(session_dir, "ui.log"), 
-        level="DEBUG", 
-        filter=lambda r: r["extra"].get("domain") == "UI"
-    )
-
-    # orchestrator.log (Orchestrator Domain only)
-    logger.add(
-        os.path.join(session_dir, "orchestrator.log"), 
-        level="DEBUG", 
-        filter=lambda r: r["extra"].get("domain") == "ORCHESTRATOR"
-    )
+    # timeline.log (The Forensic Heartbeat)
+    # Includes all domains (UI, ORCHESTRATOR, SYSTEM) in one chronological file
+    logger.add(os.path.join(session_dir, "timeline.log"), level="DEBUG", rotation="10 MB")
 
     # 2. Crash Resilience & Raw Stream Redirection
     def exception_handler(exctype, value, tb):
@@ -92,7 +82,6 @@ def init_session(prefix: str) -> str:
     sys.excepthook = exception_handler
     
     # Redirect raw stdout/stderr to capture non-Python errors (e.g. Tkinter/C++)
-    # We log stdout as DEBUG and stderr as ERROR
     sys.stdout = StreamToLogger(level="DEBUG")
     sys.stderr = StreamToLogger(level="ERROR")
 
@@ -103,24 +92,28 @@ def init_session(prefix: str) -> str:
         with open(os.path.join(session_dir, "system_info.yaml"), "w", encoding="utf-8") as f:
             yaml.dump(info, f, sort_keys=False)
     except Exception as e:
-        # Use direct print since we just hijacked logger via sys.stderr
+        # Use direct print since we hijacked logger via sys.stderr
         print(f"Failed to dump system_info: {e}")
 
-    # 4. Retention Policy (Categorized)
+    # 4. Retention Policy (Categorized by Domain Folder)
     try:
         from utils import load_config
         cfg = load_config()
-        retention = cfg.get('system', {}).get('log_retention', {"APP": 10, "BE": 20, "UIT": 10})
+        # Map domain name to config key (test_ui -> UIT, test_be -> BE, prod -> APP)
+        key_map = {"test_ui": "UIT", "test_be": "BE", "prod": "APP"}
+        config_key = key_map.get(domain, "APP")
         
-        sessions_root = os.path.dirname(session_dir)
-        for p, count in retention.items():
-            folders = sorted([f for f in os.listdir(sessions_root) if f.startswith(p)], reverse=True)
-            for old_folder in folders[count:]:
-                import shutil
-                try:
-                    shutil.rmtree(os.path.join(sessions_root, old_folder))
-                except: pass
+        retention_limits = cfg.get('system', {}).get('log_retention', {"APP": 10, "BE": 20, "UIT": 10})
+        limit = retention_limits.get(config_key, 10)
+        
+        domain_root = os.path.dirname(session_dir)
+        folders = sorted([f for f in os.listdir(domain_root)], reverse=True)
+        for old_folder in folders[limit:]:
+            import shutil
+            try:
+                shutil.rmtree(os.path.join(domain_root, old_folder))
+            except: pass
     except: pass
 
-    logger.info(f"🚀 Session Started: {session_id}")
+    logger.info(f"🚀 Session Started: {domain}/{timestamp}")
     return session_dir

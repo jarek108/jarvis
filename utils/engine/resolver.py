@@ -43,9 +43,9 @@ class PipelineResolver:
                 content = f.read().strip()
                 if not content: return {"models": [], "external": 0.0, "loadout_id": "NONE"}
                 data = json.loads(content)
-                models = data.get("active_loadout", [])
-                external = data.get("system_external_vram", 0.0)
-                loadout_id = data.get("loadout_id", "unknown")
+                models = data.get("models", [])
+                external = data.get("external", 0.0)
+                loadout_id = data.get("loadout", "unknown")
                 for m in models:
                     try:
                         m['capabilities'] = self.get_model_capabilities(m['id'], m['engine'])
@@ -79,7 +79,7 @@ class PipelineResolver:
         
         return caps
 
-    def resolve(self, pipeline_name, strategy_name=None, overrides=None):
+    def resolve(self, pipeline_name, strategy_name=None, overrides=None, silent=False):
         """
         Binds a pipeline to live models using the AutoBinder.
         Hierarchy: Manual Overrides > YAML Override > Persistent Cache > Physics Heuristic.
@@ -109,7 +109,8 @@ class PipelineResolver:
             active_models=live_models,
             preference=preference,
             loadout_id=loadout_id,
-            overrides=overrides
+            overrides=overrides,
+            silent=silent
         )
         
         bound_nodes = {}
@@ -125,12 +126,12 @@ class PipelineResolver:
             if not bound_impl:
                 # Only log error for processing nodes that REQUIRE a model/logic
                 if node.get('type') == 'processing' and node.get('role') not in ['utility', 'memory']:
-                    logger.error(f"❌ ARCH_MISMATCH: No model found for {nid}")
+                    if not silent: logger.error(f"❌ ARCH_MISMATCH: No model found for {nid}")
 
-        logger.info(f"✅ Resolved '{pipeline_name}' via AutoBinder [Pref: {pref_str}]")
+        if not silent: logger.info(f"✅ Resolved '{pipeline_name}' via AutoBinder [Pref: {pref_str}]")
         return bound_nodes
 
-    def check_runnability(self, pipeline_name, strategy_name=None, external_health=None):
+    def check_runnability(self, pipeline_name, strategy_name=None, external_health=None, silent=False):
         """
         Proactively verifies if a pipeline is runnable based on live system health.
         Returns: {runnable: bool, errors: list, map: dict}
@@ -145,7 +146,7 @@ class PipelineResolver:
             return {"runnable": False, "errors": [f"Pipeline Load Error: {e}"], "map": {}}
 
         try:
-            bound_graph = self.resolve(pipeline_name, strategy_name)
+            bound_graph = self.resolve(pipeline_name, strategy_name, silent=silent)
         except Exception as e:
             report["runnable"] = False
             report["errors"].append(f"Resolution Error: {e}")

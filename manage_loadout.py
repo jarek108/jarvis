@@ -93,6 +93,7 @@ def apply_loadout(name, project_root=None, soft=False, external_vram=0.0):
 
     # 3. Launching
     config = load_config()
+    is_ui_test = os.environ.get('JARVIS_UI_TEST') == "1"
     
     for s_data in required_services:
         sid = s_data['id']
@@ -114,8 +115,10 @@ def apply_loadout(name, project_root=None, soft=False, external_vram=0.0):
         logger.info(f"Setting up service: {sid} ({engine})")
         log_file = os.path.join(session_dir, f"svc_{role}_{sid}.log")
         
-        # Engine Specific Launchers
-        if engine == "ollama":
+        if is_ui_test:
+            # Fast-path for UI tests: don't actually spawn heavy processes
+            with open(log_file, "w") as lf: lf.write("MOCK PROCESS STARTED\n")
+        elif engine == "ollama":
             # Ollama is usually a persistent background service
             # We just need to make sure the model is pulled and serve is ready
             try:
@@ -196,20 +199,22 @@ def apply_loadout(name, project_root=None, soft=False, external_vram=0.0):
 def kill_loadout(name, project_root=None):
     """Kills all Jarvis-managed Docker containers and Python server processes."""
     if name == "all":
-        # 1. Docker
-        try:
-            res = subprocess.run(["docker", "ps", "--filter", "name=jarvis-", "--format", "{{.Names}}"], capture_output=True, text=True)
-            for container in res.stdout.split():
-                subprocess.run(["docker", "stop", container])
-        except: pass
-
-        # 2. Python Processes (search by script name)
-        for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
+        is_mock = os.environ.get('JARVIS_MOCK_ALL') == "1"
+        if not is_mock:
+            # 1. Docker
             try:
-                cmd = proc.info['cmdline']
-                if cmd and any(s in " ".join(cmd) for s in ["stt_server.py", "tts_server.py", "ollama serve"]):
-                    proc.kill()
+                res = subprocess.run(["docker", "ps", "--filter", "name=jarvis-", "--format", "{{.Names}}"], capture_output=True, text=True)
+                for container in res.stdout.split():
+                    subprocess.run(["docker", "stop", container])
             except: pass
+
+            # 2. Python Processes (search by script name)
+            for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
+                try:
+                    cmd = proc.info['cmdline']
+                    if cmd and any(s in " ".join(cmd) for s in ["stt_server.py", "tts_server.py", "ollama serve"]):
+                        proc.kill()
+                except: pass
             
     # 3. Registry Reset
     save_runtime_registry([], project_root, loadout_id="NONE")
@@ -223,6 +228,8 @@ def restart_service(sid, loadout_id, project_root=None):
 
 def kill_service(sid, project_root=None):
     """Targeted kill of a specific model service."""
+    if os.environ.get('JARVIS_UI_TEST') == "1":
+        return
     # Docker
     subprocess.run(["docker", "stop", f"jarvis-{sid}"], capture_output=True)
     # Python - would need PID tracking in registry for precision

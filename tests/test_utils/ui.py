@@ -245,21 +245,32 @@ class RichDashboard:
         if d_data['status'] != "failed":
             d_data['status'] = status
 
-    def update_scenario(self, domain, loadout, scenario_name, status, result=""):
+    def update_scenario(self, domain, loadout, scenario_name, status, result="", duration=0.0):
         d_data = self.test_data.get(domain.lower())
         if not d_data: return
         l_data = d_data['loadouts'].get(loadout)
         if not l_data: return
+        
+        if not d_data.get('start_time'): d_data['start_time'] = time.perf_counter()
+        
         l_data['done'] += 1
         d_data['done'] += 1
+        
+        # Accumulate duration for flat UI suites that don't use strict phase timers
+        if 'timers' not in l_data: l_data['timers'] = {"stp": 0, "exec": 0, "cln": 0}
+        l_data['timers']['exec'] += duration
+        
         if status != "PASSED":
             l_data['errors'] += 1
             l_data['status'] = "failed"
             d_data['status'] = "failed"
-            # Capture first failure message for display
             if not l_data.get('error_message'):
                 l_data['error_message'] = result
-        
+        elif l_data['status'] in ["pending", "wip"]:
+            # Don't set to passed yet, just keep it wip if it hasn't failed
+            l_data['status'] = "wip"
+            d_data['status'] = "wip"
+
         total_done = sum(d['done'] for d in self.test_data.values())
         total_all = sum(d['total'] for d in self.test_data.values())
         self.overall_progress.update(self.overall_task, completed=total_done, total=total_all)
@@ -277,7 +288,7 @@ class RichDashboard:
             l_data['timers'][key] = dur
 
         l_data['duration'] = duration
-        if l_data['status'] == "wip": # Only update if not already failed
+        if l_data['status'] in ["pending", "wip"]:
             l_data['status'] = status
         l_data['error_message'] = error_message
         l_data['phase'] = None
@@ -473,16 +484,26 @@ class RichDashboard:
         
         footer_panel = Panel(Text(log_content, style="bright_black"), title=f"Model Log: {os.path.basename(self.active_log_path or 'None')}", border_style="bright_black")
         
+        # Don't show the massive log tail for UI tests (which tail timeline.log)
+        if self.active_log_path and "timeline.log" in self.active_log_path:
+            return Group(header_panel, specs_panel, overall_panel, hierarchy_panel, system_panel)
+            
         return Group(header_panel, specs_panel, overall_panel, hierarchy_panel, system_panel, footer_panel)
 
     def start(self, snapshot_path=None): 
         if snapshot_path: 
             self.snapshot_path = snapshot_path # Trigger property setter
         
+        import sys
+        sys.dashboard_active = True
+        
         # self.console.clear() # Removed to prevent scrollback corruption
         self.live.start()
 
     def stop(self):
+        import sys
+        sys.dashboard_active = False
+        
         if self._stop_event:
             self._stop_event.set()
         self.live.stop()

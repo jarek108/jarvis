@@ -55,7 +55,7 @@ The test runner uses orthogonal flags to control which parts of the system are r
 
 ## 3. Artifact & Report Management
 
-Every test run (real, mock, or plumbing) generates a unique session directory in `tests/logs/RUN_YYYYMMDD_HHMMSS/`.
+Every test run (real, mock, or plumbing) generates a unique session directory in `logs/test_ui/ or logs/test_be/RUN_YYYYMMDD_HHMMSS/`.
 
 ### Documentation Suite
 *   **[How-to: Reporting](HOWTO_REPORTING.md)**: Instructions for generating and syncing reports.
@@ -71,7 +71,7 @@ Reports are automatically generated and uploaded to Google Drive at the end of a
 
 *   **"Skipped" Scenarios:** Ensure `LiveFilter` in `ui.py` is correctly passing `SCENARIO_RESULT` lines to stdout.
 *   **Dashboard Duplication:** Ensure all `print` statements in the runner/lifecycle logic are silenced or logged to `progression_logger` instead.
-*   **Missing Logs:** Check `tests/logs/RUN_.../` for `svc_*.log` files. If missing, the service might have failed to start entirely (check `progression.log` for lifecycle errors).
+*   **Missing Logs:** Check `logs/test_ui/ or logs/test_be/RUN_.../` for `svc_*.log` files. If missing, the service might have failed to start entirely (check `progression.log` for lifecycle errors).
 
 ---
 

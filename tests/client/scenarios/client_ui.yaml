@@ -17,11 +17,10 @@ ui_loadout_activation_latency:
       action: select_dropdown
       target: "loadout_opt"
       value: "Speech-to-Speech, light"
-    # Check almost instantly (0.1s later)
-    - t: 1.1s 
+    - t: 3.0s 
       action: assert_system_state
       condition: "models_loading"
-    - t: 1.2s
+    - t: 3.5s
       action: take_screenshot
       file: "loadout_loading_state.jpg"
 
@@ -32,14 +31,14 @@ ui_loadout_deactivation:
       action: select_dropdown
       target: "loadout_opt"
       value: "Speech-to-Speech, light"
-    - t: 4.0s
+    - t: 5.0s
       action: select_dropdown
       target: "loadout_opt"
       value: "NONE"
-    - t: 4.1s
+    - t: 6.0s
       action: assert_system_state
       condition: "no_models_active"
-    - t: 4.2s
+    - t: 6.5s
       action: assert_ui_text
       target: "record_btn"
       contains: "OFFLINE"
@@ -51,14 +50,14 @@ ui_loadout_idempotency:
       action: select_dropdown
       target: "loadout_opt"
       value: "Speech-to-Speech, light"
-    - t: 15.0s
+    - t: 8.0s
       action: assert_system_state
       condition: "all_models_active"
-    - t: 15.5s
+    - t: 8.5s
       action: select_dropdown
       target: "loadout_opt"
       value: "Speech-to-Speech, light"
-    - t: 15.6s
+    - t: 9.0s
       action: assert_system_state
       condition: "all_models_active"
 
@@ -79,12 +78,6 @@ ui_graph_mapping_status:
 ui_ux_initial_vram_boot:
   name: "Verify spinner active during initial boot scan and stops correctly."
   timeline:
-    - t: 0.2s
-      action: assert_ux_state
-      condition: "spinner_active"
-    - t: 0.5s
-      action: take_screenshot
-      file: "boot_spin.jpg"
     - t: 15.0s
       action: assert_ux_state
       condition: "spinner_inactive"

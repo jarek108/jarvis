@@ -338,16 +338,45 @@ class LifecycleManager:
                 proc = utils.start_server(s['cmd'], log_file=f_log)
                 self.owned_processes.append((s['port'], proc))
             
-        # 4. Parallel Wait
+        # 4. Register with Daemon and Wait
         if services_to_start:
-            ports_to_wait = [s['port'] for s in services_to_start]
+            import requests
+            watch_payload = {
+                "loadout_id": self.setup_name,
+                "external_vram": vram_external,
+                "models": self.get_registry_entries(domain)
+            }
+            try:
+                requests.post("http://127.0.0.1:5555/watch", json=watch_payload, timeout=2.0)
+            except Exception as e:
+                logger.warning(f"Failed to register models with Daemon: {e}")
             
             # USE CONFIG TIMEOUT BUT CAP AT GLOBAL TIMEOUT
             startup_timeout = self.cfg.get('vllm', {}).get('model_startup_timeout', 120)
             if timeout and timeout < startup_timeout:
                 startup_timeout = timeout
 
-            if not asyncio.run(utils.wait_for_ports_parallel(ports_to_wait, timeout=startup_timeout, require_stub=self.stub_mode)):
+            # Poll the daemon for global readiness
+            poll_start = time.perf_counter()
+            ready = False
+            while (time.perf_counter() - poll_start) < startup_timeout:
+                try:
+                    r = requests.get("http://127.0.0.1:5555/status", timeout=1.0).json()
+                    if r.get('global_state') == 'READY':
+                        ready = True
+                        break
+                    elif r.get('global_state') == 'ERROR':
+                        raise RuntimeError("Daemon reported ERROR state during model startup.")
+                except Exception as e:
+                    # Fallback if daemon is down
+                    if not asyncio.run(utils.wait_for_ports_parallel([s['port'] for s in services_to_start], timeout=1.0, require_stub=self.stub_mode)):
+                        pass
+                    else:
+                        ready = True
+                        break
+                time.sleep(1.0)
+            
+            if not ready:
                 raise RuntimeError(f"Parallel startup timeout after {startup_timeout}s")
         
         # 5. Warmup

@@ -1,13 +1,33 @@
 {
-  "timestamp": 1772899739.8520105,
-  "loadout": "NONE",
-  "external": 3.0673828125,
+  "timestamp": 1772980550.2095416,
+  "loadout": "Speech-to-Speech, heavy",
+  "external": 0.0,
   "models": [
     {
-      "id": "qwen2.5:0.5b",
-      "engine": "ollama",
-      "port": 11434,
-      "params": {}
+      "id": "faster-whisper-base",
+      "engine": "native",
+      "port": 8101,
+      "role": "stt",
+      "log_path": "C:\\Users\\chojn\\projects\\jarvis\\logs\\sessions\\RUN_20260308_152442\\svc_stt_faster-whisper-base.log",
+      "capabilities": [
+        "audio_in",
+        "text_out"
+      ],
+      "state": "OFF",
+      "info": null
+    },
+    {
+      "id": "chatterbox-multilingual",
+      "engine": "native",
+      "port": 8201,
+      "role": "tts",
+      "log_path": "C:\\Users\\chojn\\projects\\jarvis\\logs\\sessions\\RUN_20260308_152442\\svc_tts_chatterbox-multilingual.log",
+      "capabilities": [
+        "text_in",
+        "audio_out"
+      ],
+      "state": "OFF",
+      "info": null
     }
   ]
 }

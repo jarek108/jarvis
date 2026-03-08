@@ -1,0 +1,75 @@
+[
+  {
+    "t": 872480.6447936,
+    "node": "sys_prompt",
+    "type": "START"
+  },
+  {
+    "t": 872480.6927317,
+    "node": "sys_prompt",
+    "dir": "OUT",
+    "type": "data_path",
+    "seq": 0,
+    "content": null,
+    "data_len": 21
+  },
+  {
+    "t": 872480.6927483,
+    "node": "sys_prompt",
+    "type": "FINISH"
+  },
+  {
+    "t": 872480.6927714,
+    "node": "input_mic",
+    "type": "START"
+  },
+  {
+    "t": 872480.7234739,
+    "node": "input_mic",
+    "dir": "OUT",
+    "type": "data_path",
+    "seq": 0,
+    "content": null,
+    "data_len": 21
+  },
+  {
+    "t": 872480.7234856,
+    "node": "input_mic",
+    "type": "FINISH"
+  },
+  {
+    "t": 872480.7235037,
+    "node": "proc_stt",
+    "type": "START"
+  },
+  {
+    "t": 872480.7270561,
+    "node": "conversation_memory",
+    "type": "START"
+  },
+  {
+    "t": 872480.7302155,
+    "node": "proc_llm",
+    "type": "START"
+  },
+  {
+    "t": 872480.7333328,
+    "node": "logic_chunker",
+    "type": "START"
+  },
+  {
+    "t": 872480.7376662,
+    "node": "proc_tts",
+    "type": "START"
+  },
+  {
+    "t": 872480.7424427,
+    "node": "output_speaker",
+    "type": "START"
+  },
+  {
+    "t": 872480.7872689,
+    "node": "output_speaker",
+    "type": "FINISH"
+  }
+]

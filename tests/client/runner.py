@@ -422,7 +422,7 @@ async def main():
     # Build the dashboard structure
     structure = {}
     for block in plan_data['execution']:
-        d_id = block.get('domain', 'UI_TESTS').upper()
+        d_id = block.get('domain', 'UI_TESTS').lower()
         scenarios = block.get('scenarios', [])
         structure[d_id] = {
             "status": "pending", "done": 0, "total": len(scenarios),
@@ -447,7 +447,10 @@ async def main():
             from manage_loadout import kill_loadout
             kill_loadout("all")
         
-        if args.mock_all: os.environ['JARVIS_MOCK_ALL'] = "1"
+        if args.mock_all: 
+            os.environ['JARVIS_UI_TEST'] = "1"
+            # We purposely do NOT set JARVIS_MOCK_ALL here. 
+            # We want the UI resolver to bind to the external (mocked) ports in the registry.
         if args.mock_models: os.environ['JARVIS_MOCK_MODELS'] = "1"
         if args.mock_edge: os.environ['JARVIS_MOCK_EDGE'] = "1"
 

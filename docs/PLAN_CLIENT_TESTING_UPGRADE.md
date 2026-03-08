@@ -9,12 +9,12 @@ This upgrade will align Client Testing with Backend Testing standards by introdu
 *   **Artifact Preservation**: Every test run must have a unique, timestamped directory. No run should ever overwrite the results of another.
 *   **Result Persistence**: Summary results must be saved as JSON and printed to the terminal in a high-signal table.
 *   **Flexible Filtering**: Developers must be able to run a subset of scenarios from a large plan using pattern matching.
-*   **Standardized Cleanup**: Automated log rotation to prevent `tests/logs/` from consuming excessive disk space.
+*   **Standardized Cleanup**: Automated log rotation to prevent `logs/test_ui/ or logs/test_be/` from consuming excessive disk space.
 
 ## 3. IMPLEMENTATION PHASES
 
 ### Phase 1: Session Management & Image Namespacing
-*   **Action**: Integrate `init_session` from `test_utils` to create `tests/logs/CLIENT_RUN_YYYYMMDD_HHMMSS/`.
+*   **Action**: Integrate `init_session` from `test_utils` to create `logs/test_ui/ or logs/test_be/CLIENT_RUN_YYYYMMDD_HHMMSS/`.
 *   **Action**: Update `VisualVerifier` to store screenshots in `[SESSION_DIR]/images/`.
 *   **Action**: Automatically prefix image filenames with the `scenario_id` to prevent name collisions between scenarios.
 
@@ -37,4 +37,4 @@ This upgrade will align Client Testing with Backend Testing standards by introdu
     *   *Tradeoff*: While automated diffing is the "Holy Grail," it is too brittle for the current high-velocity UI development. Session-based folders make manual review much easier.
 *   **Decision: Reuse Backend Session Logic**
     *   *Choice*: We will use the same `init_session` utility as the backend runner.
-    *   *Tradeoff*: This ensures consistency but results in a mix of `RUN_...` and `CLIENT_RUN_...` folders in the same log directory. This is acceptable as it keeps all artifacts under `tests/logs/`.
+    *   *Tradeoff*: This ensures consistency but results in a mix of `RUN_...` and `CLIENT_RUN_...` folders in the same log directory. This is acceptable as it keeps all artifacts under `logs/test_ui/ or logs/test_be/`.
