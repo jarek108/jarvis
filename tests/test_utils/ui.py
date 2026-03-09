@@ -67,7 +67,6 @@ class RichDashboard:
         )
         self.boot_task = self.overall_progress.add_task("Booting / Pre-flight", total=5)
         self.overall_task = self.overall_progress.add_task("Total Scenarios", total=100)
-        self.models_task = self.overall_progress.add_task("Total Models   ", total=100)
         
         self.current_loadout = None
         self.active_log_path = None
@@ -183,11 +182,9 @@ class RichDashboard:
 
         # Calculate and update totals for progress bars
         total_scenarios = sum(d['total'] for d in self.test_data.values())
-        total_models = sum(len(d['loadouts']) for d in self.test_data.values())
 
         # Reset task completed states and set new totals
         self.overall_progress.update(self.overall_task, total=total_scenarios, completed=0, visible=True)
-        self.overall_progress.update(self.models_task, total=total_models, completed=0, visible=True)
 
     def finalize_boot(self, session_id=None, system_info=None, session_dir=None):
         if session_id: 
@@ -301,11 +298,6 @@ class RichDashboard:
             l_data['status'] = status
         l_data['error_message'] = error_message
         l_data['phase'] = None
-        d_data['models_done'] += 1
-        
-        total_models_done = sum(d['models_done'] for d in self.test_data.values())
-        total_models_all = sum(len(d['loadouts']) for d in self.test_data.values())
-        self.overall_progress.update(self.models_task, completed=total_models_done, total=total_models_all)
 
     def finalize_domain(self, domain):
         d_data = self.test_data.get(domain.lower())
@@ -348,15 +340,19 @@ class RichDashboard:
                 d_exe += self.get_phase_time(l_data, "execution")
                 d_cln += self.get_phase_time(l_data, "cleanup")
 
-            # Domain Row: NAME - TIME, (A/B models) (C/D scenarios) - stp: Xs, exec: Ys, cln: Zs
-            models_total = len(d_data['loadouts'])
+            # Domain Row: NAME - TIME, (C/D scenarios) - stp: Xs, exec: Ys, cln: Zs
             d_text = Text.assemble(
                 (f"• {d_name.upper()}", f"bold {d_color}"),
-                (f" - {d_dur:.1f}s", d_color),
-                (f" ({d_data['models_done']}/{models_total} models)", "white"),
-                (f" ({d_data['done']}/{d_data['total']} scenarios)", "white"),
-                (f" - stp: {d_stp:.1f}s, exec: {d_exe:.1f}s, cln: {d_cln:.1f}s", "gray50")
+                (f" - {d_dur:.1f}s", d_color)
             )
+            
+            # Only show models count if there's more than one distinct loadout
+            models_total = len(d_data['loadouts'])
+            if models_total > 1 or (models_total == 1 and "UI_SUITE" not in d_data['loadouts']):
+                d_text.append(f" ({d_data['models_done']}/{models_total} models)", "white")
+            
+            d_text.append(f" ({d_data['done']}/{d_data['total']} scenarios)", "white")
+            d_text.append(f" - stp: {d_stp:.1f}s, exec: {d_exe:.1f}s, cln: {d_cln:.1f}s", "gray50")
             table.add_row(d_text)
             
             for l_name, l_data in d_data['loadouts'].items():

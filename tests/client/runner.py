@@ -282,8 +282,6 @@ class ClientTestRunner:
                     duration=duration,
                     scenario_dir=final_scenario_dir if status == "FAILED" else None
                 )
-                # Increment models task
-                self.dashboard.finalize_loadout(domain_id, "UI_SUITE", duration, status=status.lower())
             
         return scenario_success
 
