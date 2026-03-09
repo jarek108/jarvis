@@ -1,0 +1,72 @@
+[
+  {
+    "id": "ui_startup_state",
+    "name": "Verify initial UI state on startup.",
+    "status": "PASSED",
+    "duration": 4.516740899998695,
+    "error": null
+  },
+  {
+    "id": "ui_ux_initial_vram_boot",
+    "name": "Verify spinner active during initial boot scan and stops correctly.",
+    "status": "PASSED",
+    "duration": 17.018217099946924,
+    "error": null
+  },
+  {
+    "id": "ui_loadout_activation_latency",
+    "name": "Verify immediate UI response when activating a loadout.",
+    "status": "PASSED",
+    "duration": 13.529523000004701,
+    "error": null
+  },
+  {
+    "id": "ui_loadout_deactivation",
+    "name": "Verify immediate UI teardown when selecting NONE loadout.",
+    "status": "PASSED",
+    "duration": 13.520366300013848,
+    "error": null
+  },
+  {
+    "id": "ui_loadout_idempotency02s",
+    "name": "Verify that selecting loadout is reasonably responsive.",
+    "status": "FAILED",
+    "duration": 3.0670787000562996,
+    "error": "System State Condition 'all_models_active' failed. Health: {-1: 'STARTUP', -2: 'STARTUP', -3: 'STARTUP'}"
+  },
+  {
+    "id": "ui_loadout_idempotency5s",
+    "name": "Verify that selecting loadout is reasonably responsive.",
+    "status": "FAILED",
+    "duration": 6.0148896999889985,
+    "error": "System State Condition 'all_models_active' failed. Health: {}"
+  },
+  {
+    "id": "ui_loadout_idempotency15s",
+    "name": "Verify that selecting loadout is reasonably responsive.",
+    "status": "PASSED",
+    "duration": 16.10339369997382,
+    "error": null
+  },
+  {
+    "id": "ui_graph_mapping_status",
+    "name": "Verify Graph nodes update color based on loadout bindings.",
+    "status": "PASSED",
+    "duration": 8.020598600036465,
+    "error": null
+  },
+  {
+    "id": "ui_ux_persistence_maximize_stage1",
+    "name": "Verify window maximization state capture.",
+    "status": "PASSED",
+    "duration": 5.95532920002006,
+    "error": null
+  },
+  {
+    "id": "ui_ux_persistence_maximize_stage2",
+    "name": "Verify window remains maximized after restart.",
+    "status": "PASSED",
+    "duration": 5.646134899929166,
+    "error": null
+  }
+]

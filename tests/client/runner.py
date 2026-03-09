@@ -190,16 +190,18 @@ class ClientTestRunner:
         self.results: List[TestResult] = []
         self.orch_log = logger.bind(domain="ORCHESTRATOR")
 
-    async def run_scenario(self, scenario_id: str, scenario_data: Dict[str, Any], domain_id: str) -> bool:
-        self.orch_log.info(f"🎬 Starting Scenario: {scenario_id}")
+    async def run_scenario(self, sid, scenario_data, domain_id):
+        self.orch_log.info(f"🎬 Starting Scenario: {sid}")
         if self.dashboard:
             self.dashboard.update_phase(domain_id, "UI_SUITE", "execution", status="wip")
-            self.dashboard.current_loadout = scenario_id
+            self.dashboard.current_loadout = sid
             
         self.is_running = True
 
         # Initialize Scenario Directory (Temporary name)
-        temp_scenario_dir = os.path.join(self.session_dir, f"{domain_id}__{scenario_id}")
+        # Use sanitized ID for filesystem (replace / with --)
+        safe_sid = sid.replace("/", "--")
+        temp_scenario_dir = os.path.join(self.session_dir, f"{domain_id}__{safe_sid}")
         os.makedirs(temp_scenario_dir, exist_ok=True)
 
         self.app = JarvisApp()
@@ -257,15 +259,15 @@ class ClientTestRunner:
             duration = time.perf_counter() - self.start_time
             status = "PASSED" if scenario_success else "FAILED"
             self.results.append(TestResult(
-                id=scenario_id,
-                name=scenario_data.get('name', scenario_id),
+                id=sid,
+                name=scenario_data.get('name', sid),
                 status=status,
                 duration=duration,
                 error=error_msg
             ))
             
             # RENAME Scenario Directory with Status Prefix
-            final_scenario_dir = os.path.join(self.session_dir, f"{status}__{domain_id}__{scenario_id}")
+            final_scenario_dir = os.path.join(self.session_dir, f"{status}__{domain_id}__{safe_sid}")
             try:
                 if os.path.exists(temp_scenario_dir):
                     os.rename(temp_scenario_dir, final_scenario_dir)
@@ -276,7 +278,7 @@ class ClientTestRunner:
                 self.dashboard.update_scenario(
                     domain_id, 
                     "UI_SUITE", 
-                    scenario_id, 
+                    sid, 
                     status, 
                     result=error_msg or "",
                     duration=duration,
@@ -417,6 +419,14 @@ async def main():
     if 'execution' not in plan_data:
         raise ValueError(f"Invalid Client Plan: '{plan_path}' missing 'execution' block.")
 
+    # 1. Resolve ALL scenarios across all domains
+    all_patterns = []
+    for block in plan_data['execution']:
+        all_patterns.extend(block.get('scenarios', []))
+    
+    from test_utils.scenarios import resolve_plan_scenarios
+    resolved_scenarios = resolve_plan_scenarios(project_root, "client", all_patterns)
+
     # Initialize Unified Session
     session_dir = init_session("test_ui")
     session_id = os.path.basename(session_dir)
@@ -425,21 +435,39 @@ async def main():
     dashboard = RichDashboard("Jarvis UI Test", session_id=session_id)
     dashboard.active_log_path = os.path.join(session_dir, "timeline.log")
     
-    # Build the dashboard structure
+    # Build the dashboard structure using RESOLVED scenarios
     structure = {}
     for block in plan_data['execution']:
         d_id = block.get('domain', 'UI_TESTS').lower()
-        scenarios = block.get('scenarios', [])
-        structure[d_id] = {
-            "status": "pending", "done": 0, "total": len(scenarios),
-            "models_done": 0, "start_time": None, "duration": 0,
-            "loadouts": {
-                "UI_SUITE": {
-                    "status": "pending", "done": 0, "total": len(scenarios),
-                    "duration": 0, "errors": 0, "phase": None, "models": ["UI Automation Controller"]
+        patterns = block.get('scenarios', [])
+        
+        # Find which resolved IDs belong to this block's patterns
+        import fnmatch
+        block_scen_ids = []
+        for p in patterns:
+            source, scen_p = p.split("/", 1) if "/" in p else ("client_ui", p)
+            for rid in resolved_scenarios:
+                r_source, r_id = rid.split("/", 1)
+                if r_source == source and fnmatch.fnmatch(r_id, scen_p):
+                    block_scen_ids.append(rid)
+        
+        if d_id not in structure:
+            structure[d_id] = {
+                "status": "pending", "done": 0, "total": 0,
+                "models_done": 0, "start_time": None, "duration": 0,
+                "loadouts": {
+                    "UI_SUITE": {
+                        "status": "pending", "done": 0, "total": 0,
+                        "duration": 0, "errors": 0, "phase": None, "models": ["UI Automation Controller"]
+                    }
                 }
             }
-        }
+        
+        structure[d_id]["total"] += len(block_scen_ids)
+        structure[d_id]["loadouts"]["UI_SUITE"]["total"] += len(block_scen_ids)
+        # Store the resolved IDs for this block for the execution loop
+        block['resolved_ids'] = block_scen_ids
+
     dashboard.init_plan_structure(structure)
     
     # Load system info for dashboard
@@ -509,23 +537,19 @@ async def main():
 
         runner = ClientTestRunner(args, session_dir, dashboard=dashboard)
         
-        # Resolve Scenarios from sources
-        sources = plan_data.get('scenario_sources', ["client_ui.yaml"])
-        all_scenarios = load_scenarios_from_sources(project_root, "client", sources)
-
-        # Execute
+        # Execute using PRE-RESOLVED IDs from the initialization phase
         for block in plan_data['execution']:
             domain_id = block.get('domain', 'UI_TESTS').upper()
-            scen_ids = block.get('scenarios', [])
+            resolved_ids = block.get('resolved_ids', [])
             
-            for sid in scen_ids:
-                if sid in all_scenarios:
-                    sdata = all_scenarios[sid]
+            for sid in resolved_ids:
+                if sid in resolved_scenarios:
+                    sdata = resolved_scenarios[sid]
                     success = await runner.run_scenario(sid, sdata, domain_id)
                     if not success and args.fail_fast:
                         break
                 else:
-                    logger.error(f"Scenario '{sid}' not found in sources {sources}")
+                    logger.error(f"Scenario '{sid}' not found in resolved map.")
             
             dashboard.finalize_loadout(domain_id, "UI_SUITE", 0, status="passed")
             dashboard.finalize_domain(domain_id)

@@ -4,16 +4,13 @@ settings:
   purge_on_entry: true
   purge_on_exit: true
 
-scenario_sources:
-  - "core.yaml"
-
 execution:
   - domain: "sts_voice"
     pipeline: "speech_to_speech"
     loadouts: [["native://faster-whisper-tiny", "native://chatterbox-turbo", "ollama://qwen2.5:0.5b"]]
-    scenarios: [speech_to_speech]
+    scenarios: ["core/speech_to_speech"]
 
   - domain: "hybrid_chat"
     pipeline: "hybrid_chat"
     loadouts: [["native://faster-whisper-tiny", "ollama://qwen2.5:0.5b"]]
-    scenarios: [super_whisper_action]
+    scenarios: ["core/super_whisper_action"]

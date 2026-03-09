@@ -1,6 +1,48 @@
 {
-  "timestamp": 1773039724.3210077,
-  "loadout": "NONE",
+  "timestamp": 1773044795.3603961,
+  "loadout": "Speech-to-Speech, heavy",
   "external": 0.0,
-  "models": []
+  "models": [
+    {
+      "id": "faster-whisper-base",
+      "engine": "native",
+      "port": 8101,
+      "role": "stt",
+      "log_path": "C:\\Users\\chojn\\projects\\jarvis\\logs\\sessions\\RUN_20260309_092622\\svc_stt_faster-whisper-base.log",
+      "capabilities": [
+        "audio_in",
+        "text_out"
+      ],
+      "state": "OFF",
+      "info": null
+    },
+    {
+      "id": "chatterbox-multilingual",
+      "engine": "native",
+      "port": 8201,
+      "role": "tts",
+      "log_path": "C:\\Users\\chojn\\projects\\jarvis\\logs\\sessions\\RUN_20260309_092622\\svc_tts_chatterbox-multilingual.log",
+      "capabilities": [
+        "text_in",
+        "audio_out"
+      ],
+      "state": "ON",
+      "info": "llm_stub"
+    },
+    {
+      "id": "QuantTrio/Qwen3-VL-30B-A3B-Instruct-AWQ",
+      "engine": "vllm",
+      "port": 8300,
+      "role": "llm",
+      "log_path": "C:\\Users\\chojn\\projects\\jarvis\\logs\\sessions\\RUN_20260309_092622\\svc_llm_QuantTrio--Qwen3-VL-30B-A3B-Instruct-AWQ.log",
+      "capabilities": [
+        "text_in",
+        "text_out",
+        "image_in",
+        "video_in"
+      ],
+      "state": "ON",
+      "info": "Stub"
+    }
+  ]
 }

@@ -4,9 +4,6 @@ settings:
   purge_on_entry: true
   purge_on_exit: true
 
-scenario_sources:
-  - "core.yaml"
-
 execution:
   - domain: "stt"
     pipeline: "atomic_stt"
@@ -14,18 +11,18 @@ execution:
       - ["native://faster-whisper-tiny"]
       - ["native://faster-whisper-base"]
       - ["native://faster-whisper-large-v3"]
-    scenarios: [stt_polish_std, stt_french_std, stt_chinese_std, stt_english_std]
+    scenarios: ["core/stt_*_std"]
 
   - domain: "llm"
     pipeline: "atomic_llm"
     loadouts:
       - ["ollama://qwen2.5:0.5b"]
       - ["ollama://gpt-oss-20b"]
-    scenarios: [llm_basic_chat, llm_short2long, llm_long_story]
+    scenarios: ["core/llm_*"]
 
   - domain: "tts"
     pipeline: "atomic_tts"
     loadouts:
       - ["native://chatterbox-turbo"]
       - ["native://chatterbox-multilingual"]
-    scenarios: [tts_standard, tts_polish, tts_implicit_excited]
+    scenarios: ["core/tts_*"]

@@ -1,0 +1,31 @@
+[
+    {
+        "loadout": "native------chatterbox-turbo",
+        "scenarios": [
+            {
+                "name": "tts_standard",
+                "status": "PASSED",
+                "duration": 0.043659200076945126,
+                "pipeline": "atomic_tts",
+                "domain": "tts",
+                "loadout_id": "native------chatterbox-turbo",
+                "node_metrics": {
+                    "proc_tts": {
+                        "status": "INCOMPLETE_DATA"
+                    }
+                },
+                "vram_external": 0.0,
+                "vram_static": 0.0,
+                "vram_peak": 1.4931640625,
+                "stt_text": "",
+                "llm_text": "",
+                "input_file": "",
+                "output_file": "",
+                "detailed_model": "CHATTERBOX-TURBO",
+                "setup_time": 4.087170499959029,
+                "cleanup_time": 1.914776600082405
+            }
+        ],
+        "status": "PASSED"
+    }
+]

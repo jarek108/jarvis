@@ -73,7 +73,16 @@ class PipelineTestRunner:
         ]
         self.resolver = PipelineResolver(self.project_root, search_paths=search_paths)
         self.executor = PipelineExecutor(self.project_root, dashboard=dashboard, session_dir=self.session_dir)
-        self.integration_scenarios = self.load_scenarios()
+        
+        # 1. Gather ALL scenario patterns from the plan
+        all_patterns = []
+        for block in self.plan['execution']:
+            all_patterns.extend(block.get('scenarios', []))
+            
+        # 2. Resolve them once at startup
+        from test_utils.scenarios import resolve_plan_scenarios
+        self.resolved_scenarios = resolve_plan_scenarios(self.project_root, "backend", all_patterns)
+        
         self.dashboard = dashboard
         self.reporter = reporter
         self.e2e_orchestrator = E2EOrchestrator(self.project_root)
@@ -82,20 +91,18 @@ class PipelineTestRunner:
         self.cfg = utils.load_config()
         self.max_scenario_time = self.cfg.get('system', {}).get('maximum_scenario_length', 500.0)
 
-    def load_scenarios(self):
-        sources = self.plan.get('scenario_sources', ["core.yaml"])
-        return load_scenarios_from_sources(self.project_root, "backend", sources)
-
     def run_scenario(self, sid, pid, mid, domain, l_id, v_ext=0.0, v_static=0.0, overrides=None, remaining_timeout=None):
         self.orch_log.info(f"🎬 Starting Scenario: {sid}")
         # Initialize Scenario Directory (Temporary name)
-        temp_scenario_dir = os.path.join(self.session_dir, f"{domain.upper()}__{sid}")
+        # Use sanitized ID for filesystem (replace / with --)
+        safe_sid = sid.replace("/", "--")
+        temp_scenario_dir = os.path.join(self.session_dir, f"{domain.upper()}__{safe_sid}")
         os.makedirs(temp_scenario_dir, exist_ok=True)
 
         inputs = {}
-        scen_def = self.integration_scenarios.get(sid)
+        scen_def = self.resolved_scenarios.get(sid)
         if not scen_def:
-            self.log(f"Scenario '{sid}' not found in sources {self.plan.get('scenario_sources')}", level="error")
+            self.log(f"Scenario '{sid}' not found in resolved plan.", level="error")
             return False
 
         for turn in scen_def.get('turns', []):
