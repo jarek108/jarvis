@@ -5,6 +5,7 @@ import yaml
 import json
 import subprocess
 from contextlib import redirect_stdout
+from loguru import logger
 import utils
 from utils.console import ensure_utf8_output, BOLD, CYAN, RESET, LINE_LEN
 from .ui import LiveFilter

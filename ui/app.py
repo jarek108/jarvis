@@ -189,7 +189,10 @@ class JarvisApp(ctk.CTk):
 
     def on_loadout_change(self, val):
         self._ui_log("USER_ACTION", f"Requested loadout: {val}")
-        if val != "NONE" and val == self.controller.current_loadout: return
+        if val == self.controller.current_loadout: 
+            self._ui_log("USER_ACTION", "Loadout already active. Ignoring.")
+            return
+        
         self.transition_lock = True; self.selected_mid = None; self.switch_to_terminal()
         for widget in self.health_frame.winfo_children(): widget.destroy()
         self.service_widgets.clear()

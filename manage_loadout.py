@@ -95,6 +95,18 @@ def apply_loadout(name, project_root=None, soft=False, external_vram=0.0):
     config = load_config()
     is_ui_test = os.environ.get('JARVIS_UI_TEST') == "1"
     
+    # Pre-check health for smart reuse
+    from utils.infra.status import get_system_health
+    all_ports = []
+    for s_data in required_services:
+        sid = s_data['id']
+        engine = s_data['engine']
+        role = "stt" if "whisper" in sid.lower() else "tts" if "chatterbox" in sid.lower() or "piper" in sid.lower() else "llm"
+        port = config.get(f"{role}_loadout", {}).get(sid) or config.get("ports", {}).get(engine)
+        if port: all_ports.append(port)
+    
+    current_health = get_system_health(ports=all_ports)
+
     for s_data in required_services:
         sid = s_data['id']
         engine = s_data['engine']
@@ -112,12 +124,31 @@ def apply_loadout(name, project_root=None, soft=False, external_vram=0.0):
             logger.error(f"Could not determine port for {sid}. Skipping.")
             continue
 
+        # SMART REUSE: If service is already ON/BUSY on this port, skip launch
+        if port in current_health and current_health[port]['status'] in ["ON", "BUSY"]:
+            logger.info(f"Service {sid} already active on port {port}. Reusing.")
+            registry_entries.append({
+                "id": sid,
+                "engine": engine,
+                "port": port,
+                "role": role,
+                "log_path": os.path.join(session_dir, f"svc_{role}_{sid.replace('/', '--').replace(':', '--')}.log")
+            })
+            continue
+
         logger.info(f"Setting up service: {sid} ({engine})")
-        log_file = os.path.join(session_dir, f"svc_{role}_{sid}.log")
+        safe_sid = sid.replace("/", "--").replace(":", "--")
+        log_file = os.path.join(session_dir, f"svc_{role}_{safe_sid}.log")
         
         if is_ui_test:
-            # Fast-path for UI tests: don't actually spawn heavy processes
-            with open(log_file, "w") as lf: lf.write("MOCK PROCESS STARTED\n")
+            # Spawn a lightweight stub server for UI/Mock testing
+            venv_python = config.get('paths', {}).get('venv_python', 'python')
+            stub_script = os.path.join(project_root, "tests", "test_utils", "stubs.py")
+            cmd = [venv_python, stub_script, "--port", str(port)]
+            logger.info(f"Starting MOCK Server [{sid}] on port {port}...")
+            
+            lf = open(log_file, "w")
+            subprocess.Popen(cmd, stdout=lf, stderr=lf, creationflags=subprocess.CREATE_NEW_CONSOLE if os.name == 'nt' else 0)
         elif engine == "ollama":
             # Ollama is usually a persistent background service
             # We just need to make sure the model is pulled and serve is ready
@@ -200,21 +231,41 @@ def kill_loadout(name, project_root=None):
     """Kills all Jarvis-managed Docker containers and Python server processes."""
     if name == "all":
         is_mock = os.environ.get('JARVIS_MOCK_ALL') == "1"
+        from utils import load_config
+        cfg = load_config()
+        
+        # 1. Port-First Kill (Fast) - Target only our known ports
+        import psutil
+        jarvis_ports = set()
+        jarvis_ports.update(cfg.get('stt_loadout', {}).values())
+        jarvis_ports.update(cfg.get('tts_loadout', {}).values())
+        jarvis_ports.update(cfg.get('ports', {}).values())
+        
+        try:
+            for conn in psutil.net_connections(kind='inet'):
+                if conn.laddr.port in jarvis_ports and conn.pid:
+                    try:
+                        proc = psutil.Process(conn.pid)
+                        cmd = " ".join(proc.cmdline()).lower()
+                        # Safety check: Only kill if it looks like a Jarvis component or engine
+                        if any(x in cmd for x in ["stubs.py", "stt_server.py", "tts_server.py", "ollama", "vllm", "python"]):
+                            if "jarvis_daemon.py" not in cmd and "runner.py" not in cmd:
+                                for child in proc.children(recursive=True):
+                                    try: child.kill()
+                                    except: pass
+                                proc.kill()
+                                logger.info(f"Killed orphan on port {conn.laddr.port}")
+                    except (psutil.NoSuchProcess, psutil.AccessDenied): pass
+        except Exception as e:
+            logger.warning(f"Port-first cleanup had issues: {e}")
+
         if not is_mock:
-            # 1. Docker
+            # 2. Docker (Only kill Docker in real environments)
             try:
                 res = subprocess.run(["docker", "ps", "--filter", "name=jarvis-", "--format", "{{.Names}}"], capture_output=True, text=True)
                 for container in res.stdout.split():
                     subprocess.run(["docker", "stop", container])
             except: pass
-
-            # 2. Python Processes (search by script name)
-            for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
-                try:
-                    cmd = proc.info['cmdline']
-                    if cmd and any(s in " ".join(cmd) for s in ["stt_server.py", "tts_server.py", "ollama serve"]):
-                        proc.kill()
-                except: pass
             
     # 3. Registry Reset
     save_runtime_registry([], project_root, loadout_id="NONE")
@@ -227,13 +278,39 @@ def restart_service(sid, loadout_id, project_root=None):
     logger.info(f"Service {sid} restart requested. (Stub Implementation)")
 
 def kill_service(sid, project_root=None):
-    """Targeted kill of a specific model service."""
-    if os.environ.get('JARVIS_UI_TEST') == "1":
-        return
-    # Docker
+    """Surgically kill a specific model service by identifying the process on its port."""
+    from utils import load_config
+    cfg = load_config()
+    
+    # 1. Map SID to Port
+    port = None
+    for role in ['stt_loadout', 'tts_loadout']:
+        if sid in cfg.get(role, {}):
+            port = cfg[role][sid]
+            break
+    if not port and sid in cfg.get('ports', {}):
+        port = cfg['ports'][sid]
+    
+    # 2. Port-First Kill (Fast)
+    if port:
+        import psutil
+        for conn in psutil.net_connections(kind='inet'):
+            if conn.laddr.port == port and conn.pid:
+                try:
+                    proc = psutil.Process(conn.pid)
+                    # Verify it's actually a Jarvis service before killing
+                    cmd = " ".join(proc.cmdline()).lower()
+                    if any(x in cmd for x in ["stubs.py", "stt_server.py", "tts_server.py", "ollama", "vllm"]):
+                        for child in proc.children(recursive=True):
+                            try: child.kill()
+                            except: pass
+                        proc.kill()
+                        logger.info(f"Surgically killed {sid} on port {port}")
+                except (psutil.NoSuchProcess, psutil.AccessDenied): pass
+
+    # 3. Docker Fallback (Fast)
     subprocess.run(["docker", "stop", f"jarvis-{sid}"], capture_output=True)
-    # Python - would need PID tracking in registry for precision
-    logger.info(f"Killed service: {sid}")
+    logger.info(f"Cleanup finished for service: {sid}")
 
 if __name__ == "__main__":
     import argparse

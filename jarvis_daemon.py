@@ -80,6 +80,8 @@ class StateManager:
                 save_runtime_registry(self.models, project_root=script_dir, external_vram=self.external_vram, loadout_id=self.loadout_id)
             else:
                 self.global_state = "IDLE"
+                # Call with empty ports to ensure mock state trackers are cleared
+                await get_system_health_async(ports=[])
             
             await asyncio.sleep(poll_interval)
 
@@ -139,15 +141,41 @@ async def apply_loadout_endpoint(req: LoadoutRequest, background_tasks: Backgrou
         state.global_state = "IDLE"
         return {"status": "cleared"}
     
+    try:
+        # Pre-populate state instantly so UI immediately sees STARTUP
+        import yaml
+        loadouts_file = os.path.join(script_dir, "system_config", "loadouts.yaml")
+        with open(loadouts_file, "r") as f:
+            all_loadouts = yaml.safe_load(f)
+        target = all_loadouts.get(req.name, {})
+        raw_models = target.get('models', []) if isinstance(target, dict) else target
+        
+        from utils.config import parse_model_string, load_config
+        cfg = load_config()
+        
+        pre_models = []
+        for m_str in raw_models:
+            m_data = parse_model_string(m_str)
+            if not m_data: continue
+            sid = m_data['id']
+            engine = m_data['engine']
+            role = "stt" if "whisper" in sid.lower() else "tts" if "chatterbox" in sid.lower() or "piper" in sid.lower() else "llm"
+            port = cfg.get(f"{role}_loadout", {}).get(sid) or cfg.get("ports", {}).get(engine)
+            if port:
+                pre_models.append({"id": sid, "port": port, "state": "STARTING", "engine": engine})
+        
+        state.loadout_id = req.name
+        state.models = pre_models
+        state.global_state = "STARTING"
+    except Exception as e:
+        logger.error(f"Failed to pre-parse loadout: {e}")
+
     def task():
         try:
-            state.loadout_id = req.name
-            state.global_state = "STARTING"
-            
             # apply_loadout is synchronous and writes to runtime_registry.json
             apply_loadout(req.name, soft=req.soft)
             
-            # Read the generated registry
+            # Read the generated registry to get accurate log paths and final metadata
             resolver = PipelineResolver(script_dir)
             res = resolver.get_live_models()
             state.external_vram = res.get('external', 0.0)
@@ -167,12 +195,13 @@ async def apply_loadout_endpoint(req: LoadoutRequest, background_tasks: Backgrou
     return {"status": "starting", "loadout": req.name}
 
 @app.delete("/loadout")
-async def clear_loadout():
-    kill_loadout("all")
+async def clear_loadout(background_tasks: BackgroundTasks):
+    def task(): kill_loadout("all")
+    background_tasks.add_task(task)
     state.loadout_id = "NONE"
     state.models = []
     state.global_state = "IDLE"
-    return {"status": "cleared"}
+    return {"status": "clearing"}
 
 @app.post("/service/{sid}/restart")
 async def restart_svc(sid: str, background_tasks: BackgroundTasks):
@@ -181,10 +210,14 @@ async def restart_svc(sid: str, background_tasks: BackgroundTasks):
     return {"status": "restarting"}
 
 @app.delete("/service/{sid}")
-async def kill_svc(sid: str):
-    kill_service(sid)
+async def kill_svc(sid: str, background_tasks: BackgroundTasks):
+    def task(): kill_service(sid)
+    background_tasks.add_task(task)
     state.models = [m for m in state.models if m['id'] != sid]
-    return {"status": "killed"}
+    return {"status": "killing"}
 
 if __name__ == "__main__":
-    uvicorn.run(app, host="127.0.0.1", port=5555)
+    from utils import load_config
+    cfg = load_config()
+    daemon_port = cfg.get('ports', {}).get('daemon', 5555)
+    uvicorn.run(app, host="127.0.0.1", port=daemon_port)

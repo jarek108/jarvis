@@ -1,0 +1,115 @@
+[
+  {
+    "t": 944961.0350387,
+    "node": "input_history",
+    "type": "START"
+  },
+  {
+    "t": 944961.0655336,
+    "node": "input_history",
+    "type": "FINISH"
+  },
+  {
+    "t": 944961.0655567,
+    "node": "input_instruction",
+    "type": "START"
+  },
+  {
+    "t": 944961.0963661,
+    "node": "input_instruction",
+    "dir": "OUT",
+    "type": "data_path",
+    "seq": 0,
+    "content": null,
+    "data_len": 43
+  },
+  {
+    "t": 944961.0963789,
+    "node": "input_instruction",
+    "type": "FINISH"
+  },
+  {
+    "t": 944961.0963964,
+    "node": "proc_memory",
+    "type": "START"
+  },
+  {
+    "t": 944961.1278313,
+    "node": "proc_memory",
+    "dir": "IN",
+    "type": "data_path",
+    "seq": 0,
+    "content": null,
+    "data_len": 43
+  },
+  {
+    "t": 944961.1284777,
+    "node": "proc_llm",
+    "type": "START"
+  },
+  {
+    "t": 944961.1607301,
+    "node": "output_ui",
+    "type": "START"
+  },
+  {
+    "t": 944961.192711,
+    "node": "proc_memory",
+    "dir": "OUT",
+    "type": "text_final",
+    "seq": 0,
+    "content": "Stub response to: Wait, what did I say was my favorite color?",
+    "data_len": 61
+  },
+  {
+    "t": 944961.1927366,
+    "node": "proc_memory",
+    "type": "FINISH"
+  },
+  {
+    "t": 944961.1927481,
+    "node": "proc_llm",
+    "dir": "IN",
+    "type": "text_final",
+    "seq": 0,
+    "content": "Stub response to: Wait, what did I say was my favorite color?",
+    "data_len": 61
+  },
+  {
+    "t": 944961.1933782,
+    "node": "proc_llm",
+    "dir": "OUT",
+    "type": "text_final",
+    "seq": 0,
+    "content": "Stub response to: [CONVERSATION_HISTORY]\n{{ proc_memory }}\n\n[CURRENT_INSTRUCTION]\n{{ input_instruction }}\n",
+    "data_len": 106
+  },
+  {
+    "t": 944961.19339,
+    "node": "proc_llm",
+    "type": "FINISH"
+  },
+  {
+    "t": 944961.1933972,
+    "node": "output_ui",
+    "dir": "IN",
+    "type": "text_final",
+    "seq": 0,
+    "content": "Stub response to: [CONVERSATION_HISTORY]\n{{ proc_memory }}\n\n[CURRENT_INSTRUCTION]\n{{ input_instruction }}\n",
+    "data_len": 106
+  },
+  {
+    "t": 944961.1933992,
+    "node": "output_ui",
+    "dir": "OUT",
+    "type": "text_final",
+    "seq": 0,
+    "content": "Stub response to: [CONVERSATION_HISTORY]\n{{ proc_memory }}\n\n[CURRENT_INSTRUCTION]\n{{ input_instruction }}\n",
+    "data_len": 106
+  },
+  {
+    "t": 944961.1934031,
+    "node": "output_ui",
+    "type": "FINISH"
+  }
+]

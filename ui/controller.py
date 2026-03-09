@@ -44,18 +44,23 @@ class JarvisController:
         self.is_maximized = False
         self.load_checkpoint()
         
-        # 3.1 IMMEDIATE SYNC: Clear runtime registry to prevent stale UI
-        try:
-            from manage_loadout import save_runtime_registry
-            save_runtime_registry([], project_root=self.project_root, loadout_id="NONE")
-        except: pass
+        # 3.1 IMMEDIATE SYNC: Clear runtime registry only if we think we are starting fresh
+        if self.current_loadout == "NONE":
+            try:
+                from manage_loadout import save_runtime_registry
+                save_runtime_registry([], project_root=self.project_root, loadout_id="NONE")
+            except: pass
 
-        # Force system state to match UI "NONE" state
-        def init_cleanup():
+            # Force system state to match UI "NONE" state
             logger.info("🧹 Cleaning up previous session state...")
-            kill_loadout("all")
-        threading.Thread(target=init_cleanup, daemon=True).start()
-        
+            import requests
+            try:
+                requests.delete("http://127.0.0.1:5555/loadout", timeout=2.0)
+            except Exception as e:
+                logger.warning(f"Daemon unreachable during init_cleanup: {e}")
+        else:
+            logger.info(f"🔄 Restoring session with active loadout: {self.current_loadout}")
+
         self.is_recording = False
         self.is_polling = True
         self.health_state = {}
@@ -80,7 +85,7 @@ class JarvisController:
                     self.node_positions = data.get("node_positions", {})
                     self.geometry = data.get("geometry")
                     self.is_maximized = data.get("is_maximized", False)
-                    self.current_loadout = "NONE"
+                    self.current_loadout = data.get("loadout", "NONE")
             except: pass
 
     def save_checkpoint(self):
@@ -164,14 +169,19 @@ class JarvisController:
             try:
                 if loadout_id == "NONE":
                     logger.info("☢️ KILLING ALL SERVICES VIA DAEMON...")
-                    requests.delete("http://127.0.0.1:5555/loadout", timeout=2.0)
+                    requests.delete("http://127.0.0.1:5555/loadout", timeout=20.0)
                 else:
                     logger.info(f"⚙️ APPLYING LOADOUT VIA DAEMON: {loadout_id}")
-                    r = requests.post("http://127.0.0.1:5555/loadout", json={"name": loadout_id, "soft": True}, timeout=2.0)
-                    if r.status_code == 200:
-                        logger.info("✅ LOADOUT DELEGATED TO DAEMON")
-                    else:
-                        logger.error(f"❌ DAEMON ERROR: {r.text}")
+                    try:
+                        r = requests.post("http://127.0.0.1:5555/loadout", json={"name": loadout_id, "soft": True}, timeout=20.0)
+                        logger.info(f"Daemon POST returned status: {r.status_code}")
+                        if r.status_code == 200:
+                            logger.info("✅ LOADOUT DELEGATED TO DAEMON")
+                        else:
+                            logger.error(f"❌ DAEMON ERROR: {r.text}")
+                    except Exception as req_e:
+                        logger.error(f"HTTP Request to Daemon literally threw: {repr(req_e)}")
+                        raise req_e
             except Exception as e:
                 logger.warning(f"Daemon unreachable, falling back to local execution: {e}")
                 if loadout_id == "NONE":

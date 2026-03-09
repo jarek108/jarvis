@@ -88,31 +88,39 @@ def get_system_health(ports=None, log_paths=None):
     is_mock = os.environ.get('JARVIS_MOCK_ALL') == "1" or os.environ.get('JARVIS_UI_TEST') == "1"
     if is_mock:
         global _mock_state_tracker
-        # If UI explicitly asks for an empty list of ports, return empty health.
-        if ports is not None and len(ports) == 0:
-            _mock_state_tracker.clear() # Reset tracker on NONE loadout
-            return {}
-
+        
         target_ports = ports if ports is not None else get_jarvis_ports()
 
-        # Clean up tracker for ports no longer requested
-        _mock_state_tracker = {p: t for p, t in _mock_state_tracker.items() if p in target_ports}
+        # Update tracker for any new ports seen
+        now = time.time()
+        for p in target_ports:
+            if p not in _mock_state_tracker:
+                _mock_state_tracker[p] = now
 
         cfg = load_config()
         delay_range = cfg.get('system', {}).get('mock_startup_range', [1.5, 3.0])
 
+        # Pre-build port metadata map for mock info
+        port_meta = {}
+        if 'ollama' in cfg['ports']: port_meta[cfg['ports']['ollama']] = {"label": "Ollama", "type": "llm"}
+        if 'vllm' in cfg['ports']: port_meta[cfg['ports']['vllm']] = {"label": "vLLM", "type": "llm"}
+        for name, port in cfg['stt_loadout'].items(): port_meta[port] = {"label": name, "type": "stt"}
+        for name, port in cfg['tts_loadout'].items(): port_meta[port] = {"label": name, "type": "tts"}
+
         result = {}
         for p in target_ports:
-            # Initialize port tracking if new
-            if p not in _mock_state_tracker:
-                _mock_state_tracker[p] = time.time()
-
-            elapsed = time.time() - _mock_state_tracker[p]
+            elapsed = now - _mock_state_tracker[p]
             # Use deterministic delay based on port number to avoid flicker
             target_delay = (p % (delay_range[1] - delay_range[0])) + delay_range[0]
 
             status = "STARTUP" if elapsed < target_delay else "ON"
-            result[p] = {"status": status, "info": "MOCKED", "label": f"MOCK_{p}", "type": "stub"}
+            meta = port_meta.get(p, {"label": f"MOCK_{p}", "type": "unknown"})
+            result[p] = {
+                "status": status, 
+                "info": "MOCKED", 
+                "label": meta['label'], 
+                "type": meta['type']
+            }
 
         return result
 

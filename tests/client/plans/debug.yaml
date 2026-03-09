@@ -1,0 +1,13 @@
+name: "Client UI Automation Debug"
+description: "Isolating the idempotency test."
+
+scenario_sources:
+  - "client_ui.yaml"
+
+execution:
+  - domain: "DEBUG"
+    scenarios:
+      - ui_loadout_idempotency25s
+      - ui_loadout_idempotency15s
+      - ui_loadout_idempotency5s
+      

@@ -1,0 +1,9 @@
+[
+  {
+    "id": "ui_loadout_idempotency",
+    "name": "Verify that selecting the already active loadout does nothing.",
+    "status": "PASSED",
+    "duration": 26.023032999946736,
+    "error": null
+  }
+]

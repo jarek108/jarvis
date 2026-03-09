@@ -1,0 +1,22 @@
+[
+  {
+    "t": 944935.4106618,
+    "node": "input_text",
+    "type": "START"
+  },
+  {
+    "t": 944935.4484041,
+    "node": "input_text",
+    "type": "FINISH"
+  },
+  {
+    "t": 944935.4484351,
+    "node": "proc_tts",
+    "type": "START"
+  },
+  {
+    "t": 944935.4788782,
+    "node": "proc_tts",
+    "type": "FINISH"
+  }
+]

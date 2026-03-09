@@ -7,6 +7,7 @@ import threading
 import yaml
 import json
 import shutil
+import subprocess
 from loguru import logger
 from typing import Any, Optional, Dict, List
 from dataclasses import dataclass, asdict
@@ -262,13 +263,7 @@ class ClientTestRunner:
                 duration=duration,
                 error=error_msg
             ))
-            if self.dashboard:
-                self.dashboard.update_scenario(domain_id, "UI_SUITE", scenario_id, status, result=error_msg or "")
-                # Increment models task
-                self.dashboard.finalize_loadout(domain_id, "UI_SUITE", duration, status=status.lower())
-
-            self.cleanup()
-
+            
             # RENAME Scenario Directory with Status Prefix
             final_scenario_dir = os.path.join(self.session_dir, f"{status}__{domain_id}__{scenario_id}")
             try:
@@ -276,6 +271,19 @@ class ClientTestRunner:
                     os.rename(temp_scenario_dir, final_scenario_dir)
             except Exception as e:
                 self.orch_log.error(f"Failed to rename scenario folder: {e}")
+
+            if self.dashboard:
+                self.dashboard.update_scenario(
+                    domain_id, 
+                    "UI_SUITE", 
+                    scenario_id, 
+                    status, 
+                    result=error_msg or "",
+                    duration=duration,
+                    scenario_dir=final_scenario_dir if status == "FAILED" else None
+                )
+                # Increment models task
+                self.dashboard.finalize_loadout(domain_id, "UI_SUITE", duration, status=status.lower())
             
         return scenario_success
 
@@ -313,9 +321,9 @@ class ClientTestRunner:
                 if cond == "all_models_active":
                     success = all(s == "ON" or s == "BUSY" for s in h.values()) and len(h) > 0
                 elif cond == "no_models_active":
-                    success = len(h) == 0
+                    success = len(h) == 0 or all(s == "OFF" for s in h.values())
                 elif cond == "models_loading":
-                    success = any(s == "STARTUP" for s in h.values())
+                    success = any(s in ["STARTUP", "STARTING"] for s in h.values())
                 elif cond == "any_models_active":
                     success = len(h) > 0
 
@@ -441,18 +449,65 @@ async def main():
     dashboard.finalize_boot(session_id, system_info, session_dir=session_dir)
     dashboard.start()
 
+    daemon_proc = None
     try:
+        # Clear checkpoint cache
+        cache_path = os.path.join(project_root, "system_config", ".system_cache.yaml")
+        ui_checkpoint = os.path.join(project_root, ".cache", "checkpoint-client.json")
+        for cp in [cache_path, ui_checkpoint]:
+            if os.path.exists(cp):
+                try: os.remove(cp)
+                except: pass
+        
+        if args.mock_all: 
+            os.environ['JARVIS_UI_TEST'] = "1"
+            os.environ['JARVIS_MOCK_MODELS'] = "1"
+            os.environ['JARVIS_MOCK_EDGE'] = "1"
+
         # Pre-test backend cleanup
         if not args.keep_alive:
             from manage_loadout import kill_loadout
             kill_loadout("all")
+            # Kill any existing daemon on config port
+            try:
+                import psutil
+                from utils import load_config
+                cfg = load_config()
+                daemon_port = cfg.get('ports', {}).get('daemon', 5555)
+                for proc in psutil.process_iter(['pid', 'name']):
+                    try:
+                        for conn in proc.connections(kind='inet'):
+                            if conn.laddr.port == daemon_port:
+                                proc.kill()
+                    except: pass
+            except: pass
+
+        # Start the Daemon
+        logger.info("Starting Jarvis Daemon for UI tests...")
+        daemon_log = open(os.path.join(session_dir, "daemon.log"), "w")
+        daemon_proc = subprocess.Popen(
+            [sys.executable, os.path.join(project_root, "jarvis_daemon.py")],
+            env=os.environ.copy(),
+            stdout=daemon_log,
+            stderr=subprocess.STDOUT
+        )
         
-        if args.mock_all: 
-            os.environ['JARVIS_UI_TEST'] = "1"
-            # We purposely do NOT set JARVIS_MOCK_ALL here. 
-            # We want the UI resolver to bind to the external (mocked) ports in the registry.
-        if args.mock_models: os.environ['JARVIS_MOCK_MODELS'] = "1"
-        if args.mock_edge: os.environ['JARVIS_MOCK_EDGE'] = "1"
+        # Wait for Daemon to be fully alive
+        import requests
+        daemon_alive = False
+        daemon_port = cfg.get('ports', {}).get('daemon', 5555)
+        for _ in range(30):
+            try:
+                r = requests.get(f"http://127.0.0.1:{daemon_port}/status", timeout=1.0)
+                if r.status_code == 200:
+                    daemon_alive = True
+                    break
+            except: pass
+            time.sleep(0.5)
+            
+        if not daemon_alive:
+            raise RuntimeError(f"Jarvis Daemon failed to bind to port {daemon_port} within 15 seconds.")
+        logger.info("Jarvis Daemon is online and ready.")
 
         runner = ClientTestRunner(args, session_dir, dashboard=dashboard)
         
@@ -483,6 +538,9 @@ async def main():
 
     finally:
         dashboard.stop()
+        if daemon_proc:
+            try: daemon_proc.terminate()
+            except: pass
         print(f"\n✅ UI Test Session Complete\n📂 Session: {session_dir}")
 
 if __name__ == "__main__":

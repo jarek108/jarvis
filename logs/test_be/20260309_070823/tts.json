@@ -1,0 +1,26 @@
+[
+    {
+        "loadout": "native------chatterbox-turbo",
+        "scenarios": [
+            {
+                "name": "LIFECYCLE",
+                "status": "FAILED",
+                "duration": 0,
+                "result": "name 'logger' is not defined",
+                "mode": "TTS",
+                "vram_prior": 0.0,
+                "vram_external": 0.0,
+                "vram_static": 0.0,
+                "llm_model": "CHATTERBOX-TURBO",
+                "stt_model": "CHATTERBOX-TURBO",
+                "tts_model": "CHATTERBOX-TURBO",
+                "domain": "tts",
+                "loadout_id": "native------chatterbox-turbo",
+                "detailed_model": "CHATTERBOX-TURBO",
+                "setup_time": 0,
+                "cleanup_time": 1.8810163999442011
+            }
+        ],
+        "status": "FAILED"
+    }
+]

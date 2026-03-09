@@ -245,7 +245,7 @@ class RichDashboard:
         if d_data['status'] != "failed":
             d_data['status'] = status
 
-    def update_scenario(self, domain, loadout, scenario_name, status, result="", duration=0.0):
+    def update_scenario(self, domain, loadout, scenario_name, status, result="", duration=0.0, scenario_dir=None):
         d_data = self.test_data.get(domain.lower())
         if not d_data: return
         l_data = d_data['loadouts'].get(loadout)
@@ -264,6 +264,15 @@ class RichDashboard:
             l_data['errors'] += 1
             l_data['status'] = "failed"
             d_data['status'] = "failed"
+            
+            if 'failed_scenarios' not in l_data:
+                l_data['failed_scenarios'] = []
+            l_data['failed_scenarios'].append({
+                "name": scenario_name,
+                "dir": scenario_dir,
+                "error": result
+            })
+
             if not l_data.get('error_message'):
                 l_data['error_message'] = result
         elif l_data['status'] in ["pending", "wip"]:
@@ -389,6 +398,15 @@ class RichDashboard:
                 elif l_status == "failed" or l_data.get('errors', 0) > 0:
                     l_text.append(f" [{l_data['errors']} FAILED]", style="bold red")
                 table.add_row(l_text)
+
+                # Add failed scenarios as sub-items
+                if 'failed_scenarios' in l_data:
+                    for scen in l_data['failed_scenarios']:
+                        scen_text = Text("      ⚠ ")
+                        scen_url = f"file:///{scen['dir'].replace(os.sep, '/')}" if scen.get('dir') else session_path
+                        scen_text.append(scen['name'], style=f"red link {scen_url}")
+                        scen_text.append(f": {scen['error']}", style="gray50")
+                        table.add_row(scen_text)
         return table
 
     def make_layout(self):

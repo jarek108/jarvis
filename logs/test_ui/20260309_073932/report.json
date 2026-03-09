@@ -1,0 +1,23 @@
+[
+  {
+    "id": "ui_loadout_idempotency25s",
+    "name": "Verify that selecting loadout is reasonably responsive.",
+    "status": "PASSED",
+    "duration": 26.027680299943313,
+    "error": null
+  },
+  {
+    "id": "ui_loadout_idempotency15s",
+    "name": "Verify that selecting loadout is reasonably responsive.",
+    "status": "PASSED",
+    "duration": 16.01861930009909,
+    "error": null
+  },
+  {
+    "id": "ui_loadout_idempotency5s",
+    "name": "Verify that selecting loadout is reasonably responsive.",
+    "status": "PASSED",
+    "duration": 6.024390500038862,
+    "error": null
+  }
+]

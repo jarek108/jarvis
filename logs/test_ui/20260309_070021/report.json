@@ -1,0 +1,9 @@
+[
+  {
+    "id": "ui_loadout_idempotency",
+    "name": "Verify that selecting the already active loadout does nothing.",
+    "status": "FAILED",
+    "duration": 16.02734670008067,
+    "error": "System State Condition 'all_models_active' failed. Health: {}"
+  }
+]
