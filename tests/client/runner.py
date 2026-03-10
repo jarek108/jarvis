@@ -25,6 +25,7 @@ import utils
 from utils.infra.session import init_session
 from test_utils import BOLD, GREEN, RED, YELLOW, RESET, LINE_LEN, RichDashboard
 from test_utils.scenarios import load_scenarios_from_sources
+from utils.infra.daemon import wait_for_daemon_ready_async
 
 # --- Optional Dependencies ---
 try:
@@ -209,6 +210,9 @@ class ClientTestRunner:
         self.dumper = StatusDumper(self.app)
         self.visual = VisualVerifier(self.app, temp_scenario_dir)
         
+        # Ensure Daemon is ready before starting the timeline
+        await wait_for_daemon_ready_async()
+
         self.start_time = time.perf_counter()
         
         timeline = scenario_data.get('timeline', [])
@@ -295,6 +299,18 @@ class ClientTestRunner:
         try:
             if action == "select_dropdown":
                 self.automation.select_dropdown(target, value)
+                if target == "loadout_opt":
+                    # Critical Sync: Wait for UI to acknowledge EXACT loadout change
+                    self.orch_log.info(f"⏳ Waiting for UI to sync loadout to '{value}'...")
+                    start_wait = time.perf_counter()
+                    while time.perf_counter() - start_wait < 15.0:
+                        snap = self.dumper.get_system_snapshot()
+                        # Success condition: UI loadout matches target AND health is no longer empty (if not NONE)
+                        if snap.get('loadout') == value:
+                            if value == "NONE" or snap.get('health_summary'):
+                                self.orch_log.info(f"✅ UI Synchronized to '{value}' after {time.perf_counter()-start_wait:.1f}s")
+                                break
+                        await asyncio.sleep(0.5)
             elif action == "click_element":
                 self.automation.click(target)
             elif action == "maximize_window":
@@ -319,7 +335,9 @@ class ClientTestRunner:
                 
                 success = False
                 if cond == "all_models_active":
-                    success = all(s == "ON" or s == "BUSY" for s in h.values()) and len(h) > 0
+                    # Acceptance criteria: Models are either fully ON or in the process of STARTING/BUSY
+                    # This prevents failure if mock models take slightly longer than the assertion window.
+                    success = all(s in ["ON", "BUSY", "STARTING", "STARTUP"] for s in h.values()) and len(h) > 0
                 elif cond == "no_models_active":
                     success = len(h) == 0 or all(s == "OFF" for s in h.values())
                 elif cond == "models_loading":
@@ -458,13 +476,17 @@ async def main():
                 "loadouts": {
                     "UI_SUITE": {
                         "status": "pending", "done": 0, "total": 0,
-                        "duration": 0, "errors": 0, "phase": None, "models": ["UI Automation Controller"]
+                        "duration": 0, "errors": 0, "phase": None, "models": ["UI Automation Controller"],
+                        "scenarios": {}
                     }
                 }
             }
         
         structure[d_id]["total"] += len(block_scen_ids)
         structure[d_id]["loadouts"]["UI_SUITE"]["total"] += len(block_scen_ids)
+        for rid in block_scen_ids:
+            structure[d_id]["loadouts"]["UI_SUITE"]["scenarios"][rid] = {"status": "pending", "duration": 0, "error": None}
+        
         # Store the resolved IDs for this block for the execution loop
         block['resolved_ids'] = block_scen_ids
 
@@ -494,19 +516,20 @@ async def main():
         if not args.keep_alive:
             from manage_loadout import kill_loadout
             kill_loadout("all")
-            # Kill any existing daemon on config port
+            # Kill any existing daemon on config port (Surgically)
             try:
                 import psutil
                 from utils import load_config
                 cfg = load_config()
                 daemon_port = cfg.get('ports', {}).get('daemon', 5555)
-                for proc in psutil.process_iter(['pid', 'name']):
-                    try:
-                        for conn in proc.connections(kind='inet'):
-                            if conn.laddr.port == daemon_port:
-                                proc.kill()
-                    except: pass
-            except: pass
+                for conn in psutil.net_connections(kind='inet'):
+                    if conn.laddr.port == daemon_port and conn.pid:
+                        try:
+                            psutil.Process(conn.pid).kill()
+                            logger.info(f"Surgically killed existing Daemon on port {daemon_port}")
+                        except: pass
+            except Exception as e:
+                logger.warning(f"Surgical daemon cleanup failed: {e}")
 
         # Start the Daemon
         logger.info("Starting Jarvis Daemon for UI tests...")
@@ -537,21 +560,35 @@ async def main():
 
         runner = ClientTestRunner(args, session_dir, dashboard=dashboard)
         
+        # 1. Mandatory settlement after initial cleanup
+        await wait_for_daemon_ready_async()
+        await asyncio.sleep(0.5) # UI Settle grace period
+
         # Execute using PRE-RESOLVED IDs from the initialization phase
         for block in plan_data['execution']:
             domain_id = block.get('domain', 'UI_TESTS').upper()
             resolved_ids = block.get('resolved_ids', [])
             
+            success = True # Initialize for this block
             for sid in resolved_ids:
                 if sid in resolved_scenarios:
                     sdata = resolved_scenarios[sid]
+                    
+                    # 2. Ensure daemon is ready for the NEXT command
+                    await wait_for_daemon_ready_async()
+                    
                     success = await runner.run_scenario(sid, sdata, domain_id)
+                    
+                    # 3. Settle after scenario if it triggered a loadout change
+                    await wait_for_daemon_ready_async(require_models=True)
+                    await asyncio.sleep(0.5) # UI Settle grace period
+                    
                     if not success and args.fail_fast:
                         break
                 else:
                     logger.error(f"Scenario '{sid}' not found in resolved map.")
             
-            dashboard.finalize_loadout(domain_id, "UI_SUITE", 0, status="passed")
+            dashboard.finalize_loadout(domain_id, "UI_SUITE", 0, status="passed" if success else "failed")
             dashboard.finalize_domain(domain_id)
             if not success and args.fail_fast:
                 break

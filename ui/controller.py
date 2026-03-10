@@ -50,14 +50,6 @@ class JarvisController:
                 from manage_loadout import save_runtime_registry
                 save_runtime_registry([], project_root=self.project_root, loadout_id="NONE")
             except: pass
-
-            # Force system state to match UI "NONE" state
-            logger.info("🧹 Cleaning up previous session state...")
-            import requests
-            try:
-                requests.delete("http://127.0.0.1:5555/loadout", timeout=2.0)
-            except Exception as e:
-                logger.warning(f"Daemon unreachable during init_cleanup: {e}")
         else:
             logger.info(f"🔄 Restoring session with active loadout: {self.current_loadout}")
 
@@ -85,7 +77,8 @@ class JarvisController:
                     self.node_positions = data.get("node_positions", {})
                     self.geometry = data.get("geometry")
                     self.is_maximized = data.get("is_maximized", False)
-                    self.current_loadout = data.get("loadout", "NONE")
+                    # We EXPLICITLY do not restore the loadout here to ensure clean boot
+                    self.current_loadout = "NONE"
             except: pass
 
     def save_checkpoint(self):
@@ -166,54 +159,39 @@ class JarvisController:
         self.save_checkpoint()
         def task():
             import requests
-            try:
-                if loadout_id == "NONE":
-                    logger.info("☢️ KILLING ALL SERVICES VIA DAEMON...")
-                    requests.delete("http://127.0.0.1:5555/loadout", timeout=20.0)
-                else:
-                    logger.info(f"⚙️ APPLYING LOADOUT VIA DAEMON: {loadout_id}")
-                    try:
+            # Retry loop for 409 Conflict (Busy Daemon)
+            max_retries = 15
+            for attempt in range(max_retries):
+                try:
+                    if loadout_id == "NONE":
+                        logger.info(f"☢️ KILLING ALL SERVICES (Attempt {attempt+1})...")
+                        r = requests.delete("http://127.0.0.1:5555/loadout", timeout=20.0)
+                    else:
+                        logger.info(f"⚙️ APPLYING LOADOUT (Attempt {attempt+1}): {loadout_id}")
                         r = requests.post("http://127.0.0.1:5555/loadout", json={"name": loadout_id, "soft": True}, timeout=20.0)
-                        logger.info(f"Daemon POST returned status: {r.status_code}")
-                        if r.status_code == 200:
-                            logger.info("✅ LOADOUT DELEGATED TO DAEMON")
-                        else:
-                            logger.error(f"❌ DAEMON ERROR: {r.text}")
-                    except Exception as req_e:
-                        logger.error(f"HTTP Request to Daemon literally threw: {repr(req_e)}")
-                        raise req_e
-            except Exception as e:
-                logger.warning(f"Daemon unreachable, falling back to local execution: {e}")
-                if loadout_id == "NONE":
-                    logger.info("☢️ KILLING ALL SERVICES...")
-                    kill_loadout("all")
-                else:
-                    logger.info(f"⚙️ APPLYING LOADOUT: {loadout_id}")
-                    try:
-                        apply_loadout(loadout_id, soft=True)
-                        logger.info("✅ LOADOUT APPLIED")
-                    except Exception as e2:
-                        logger.error(f"❌ LOADOUT ERROR: {e2}")
-        threading.Thread(target=task, daemon=True).start()
-
-    def trigger_service_restart(self, sid):
-        def task():
-            logger.info(f"🔄 RESTARTING SERVICE: {sid}")
-            try:
-                restart_service(sid, self.current_loadout)
-                logger.info(f"✅ RESTARTED: {sid}")
-            except Exception as e:
-                logger.error(f"❌ RESTART ERROR [{sid}]: {e}")
-        threading.Thread(target=task, daemon=True).start()
-
-    def trigger_service_kill(self, sid):
-        def task():
-            logger.info(f"🔪 CLOSING SERVICE: {sid}")
-            try:
-                kill_service(sid)
-                logger.info(f"✅ CLOSED: {sid}")
-            except Exception as e:
-                logger.error(f"❌ CLOSE ERROR [{sid}]: {e}")
+                    
+                    if r.status_code in [200, 202]:
+                        logger.info("✅ LOADOUT DELEGATED TO DAEMON")
+                        try:
+                            data = r.json()
+                            if 'models' in data:
+                                self.health_state = {m['port']: {"status": "STARTING", "info": "Initiating..."} for m in data['models'] if m.get('port')}
+                                logger.info(f"🚀 UI State updated instantly with {len(self.health_state)} models.")
+                        except: pass
+                        return # Success!
+                    
+                    if r.status_code == 409:
+                        logger.warning(f"⚠️ SYSTEM BUSY (409): {r.text}. Retrying in 1s...")
+                        time.sleep(1.0)
+                        continue
+                    
+                    logger.error(f"❌ DAEMON ERROR {r.status_code}: {r.text}")
+                    break # Fatal error
+                except Exception as e:
+                    logger.warning(f"Daemon communication attempt {attempt+1} failed: {e}")
+                    time.sleep(1.0)
+            
+            logger.error("❌ Failed to change loadout after multiple retries.")
         threading.Thread(target=task, daemon=True).start()
 
     def start_recording(self):

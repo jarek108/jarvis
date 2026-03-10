@@ -92,3 +92,57 @@ Performs the pipeline with streaming. Returns a custom binary stream of mixed ev
     - **Type 'T' (Text):** JSON payload `{role, text, start, end}`.
     - **Type 'A' (Audio):** Raw WAV bytes (chunk).
     - **Type 'M' (Metrics):** JSON payload (Final metrics).
+
+---
+
+## 4. Loadout Daemon
+**Default Port:** `5555`
+
+The Daemon manages the lifecycle of model engine processes (Whisper, Ollama, etc.) and provides centralized health monitoring.
+
+### `GET /status`
+Returns the current system health and daemon activity state.
+
+- **Response (JSON):**
+    ```json
+    {
+      "loadout_id": "Speech-to-Speech, light",
+      "global_state": "READY",
+      "ready": true,
+      "active_task": null,
+      "models": [
+        {
+          "id": "faster-whisper-base",
+          "port": 8101,
+          "state": "ON"
+        }
+      ],
+      "vram": {
+        "used": 1.2,
+        "total": 31.8,
+        "external": 0.0
+      }
+    }
+    ```
+- **Fields:**
+    - `ready`: (Boolean) True if the Daemon is idle and can accept new lifecycle commands.
+    - `active_task`: (String|null) "APPLYING" or "KILLING" if a background operation is ongoing.
+
+### `POST /loadout`
+Requests the activation of a named model suite.
+
+- **Status Code:** `202 Accepted` (Success), `409 Conflict` (Busy)
+- **Body:**
+    ```json
+    {
+      "name": "Speech-to-Speech, light",
+      "soft": true
+    }
+    ```
+
+### `DELETE /loadout`
+Shuts down all managed model processes.
+
+- **Status Code:** `202 Accepted` (Success), `409 Conflict` (Busy)
+- **Parameters:**
+    - `force` (Boolean, default `false`): If true, ignores the busy lock and attempts an immediate cleanup.

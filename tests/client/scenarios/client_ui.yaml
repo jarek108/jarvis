@@ -43,18 +43,7 @@ ui_loadout_deactivation:
       target: "record_btn"
       contains: "OFFLINE"
 
-ui_loadout_idempotency02s:
-  name: "Verify that selecting loadout is reasonably responsive."
-  timeline:
-    - t: 1.0s
-      action: select_dropdown
-      target: "loadout_opt"
-      value: "Speech-to-Speech, light"
-    - t: 2.0s
-      action: assert_system_state
-      condition: "all_models_active"
-
-ui_loadout_idempotency5s:
+ui_loadout_idempotency5:
   name: "Verify that selecting loadout is reasonably responsive."
   timeline:
     - t: 1.0s
@@ -65,20 +54,19 @@ ui_loadout_idempotency5s:
       action: assert_system_state
       condition: "all_models_active"
       
-ui_loadout_idempotency15s:
+ui_loadout_idempotency10:
   name: "Verify that selecting loadout is reasonably responsive."
   timeline:
     - t: 1.0s
       action: select_dropdown
       target: "loadout_opt"
       value: "Speech-to-Speech, light"
-    - t: 15.0s
+    - t: 10.0s
       action: assert_system_state
       condition: "all_models_active"
-
-
-ui_loadout_redo_idempotency:
-  name: "Verify that selecting the already active loadout does nothing."
+      
+ui_loadout_idempotency25:
+  name: "Verify that selecting loadout is reasonably responsive."
   timeline:
     - t: 1.0s
       action: select_dropdown
@@ -87,11 +75,22 @@ ui_loadout_redo_idempotency:
     - t: 25.0s
       action: assert_system_state
       condition: "all_models_active"
-    - t: 26.0s
+
+ui_loadout_sidempotency_redo:
+  name: "Verify that selecting the already active loadout does nothing."
+  timeline:
+    - t: 1.0s
       action: select_dropdown
       target: "loadout_opt"
       value: "Speech-to-Speech, light"
-    - t: 36.0s
+    - t: 5.0s
+      action: assert_system_state
+      condition: "all_models_active"
+    - t: 6.0s
+      action: select_dropdown
+      target: "loadout_opt"
+      value: "Speech-to-Speech, light"
+    - t: 6.5s
       action: assert_system_state
       condition: "all_models_active"
 

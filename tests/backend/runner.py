@@ -25,6 +25,7 @@ from test_utils import (
 from test_utils.mocks import get_mock_implementation
 from test_utils.env_simulators import AudioFeeder, ScreenFeeder, KeyboardSandbox
 from test_utils.scenarios import load_scenarios_from_sources
+from utils.infra.daemon import wait_for_daemon_ready
 from utils.engine import PipelineResolver, PipelineExecutor
 
 class E2EOrchestrator:
@@ -211,27 +212,54 @@ class PipelineTestRunner:
     def run_all(self, args):
         structure = {}
         execution_blocks = self.plan.get('execution', [])
+        
+        # 1. First pass: Resolve patterns and build dashboard structure
+        import fnmatch
         for block in execution_blocks:
             domain = block.get('domain', 'core').lower()
-            scenarios = block.get('scenarios', [])
+            patterns = block.get('scenarios', [])
             loadouts = block.get('loadouts', [None])
+            
+            # Expand patterns into resolved IDs
+            resolved_ids = []
+            for p in patterns:
+                source, scen_p = p.split("/", 1) if "/" in p else ("core", p)
+                for rid in self.resolved_scenarios:
+                    r_source, r_id = rid.split("/", 1)
+                    if r_source == source and fnmatch.fnmatch(r_id, scen_p):
+                        resolved_ids.append(rid)
+            
+            block['resolved_ids'] = resolved_ids
+            
             if domain not in structure:
                 structure[domain] = {"status": "pending", "done": 0, "total": 0, "models_done": 0, "start_time": None, "duration": 0, "loadouts": {}}
-            structure[domain]['total'] += len(scenarios) * len(loadouts)
+            
+            structure[domain]['total'] += len(resolved_ids) * len(loadouts)
             for l in loadouts:
                 from utils.config import safe_filename
                 l_id = "_".join([safe_filename(m) for m in l]) if isinstance(l, list) else (safe_filename(str(l)) if l else "Live")
                 if l_id not in structure[domain]['loadouts']:
-                    structure[domain]['loadouts'][l_id] = {"status": "pending", "done": 0, "total": len(scenarios), "duration": 0, "errors": 0, "phase": None, "models": l if isinstance(l, list) else ([str(l)] if l else ["Default"])}
+                    structure[domain]['loadouts'][l_id] = {
+                        "status": "pending", 
+                        "done": 0, 
+                        "total": len(resolved_ids), 
+                        "duration": 0, 
+                        "errors": 0, 
+                        "phase": None, 
+                        "models": l if isinstance(l, list) else ([str(l)] if l else ["Default"]),
+                        "scenarios": {sid: {"status": "pending", "duration": 0, "error": None} for sid in resolved_ids}
+                    }
 
         if self.dashboard: self.dashboard.init_plan_structure(structure)
 
+        # 2. Second pass: Execution
         for block in execution_blocks:
             domain = block.get('domain', 'core').lower()
             pipeline = block.get('pipeline')
             loadouts = block.get('loadouts', [None])
-            scenarios = block.get('scenarios', [])
+            resolved_ids = block.get('resolved_ids', [])
             mapping = block.get('mapping')
+            
             if self.dashboard: self.dashboard.current_domain = domain.upper()
             for l in loadouts:
                 from utils.config import safe_filename
@@ -264,12 +292,17 @@ class PipelineTestRunner:
                             if isinstance(m_def, str) and m_def.startswith("mock:"):
                                 role = "llm" if "llm" in nid else ("stt" if "stt" in nid else "unknown")
                                 overrides[nid] = get_mock_implementation(m_def, role, mock_text=m_def.replace("mock:", ""))
-                    for s_id in scenarios:
+                    
+                    for s_id in resolved_ids:
                         elapsed = time.perf_counter() - block_start
                         rem = max(1.0, self.max_scenario_time - elapsed)
                         self.run_scenario(sid=s_id, pid=pipeline, mid=mapping, domain=domain, l_id=l_id, v_ext=v_ext, v_static=v_static, overrides=overrides, remaining_timeout=rem)
 
                 v_ext_start = utils.get_gpu_vram_usage()
+                
+                # Ensure daemon is ready before starting lifecycle
+                self.wait_for_daemon_ready()
+                
                 setup_time, cleanup_time, prior_vram, model_display, v_ext_actual, v_static_actual = run_test_lifecycle(
                     domain=domain, setup_name=l_id, models=models,
                     purge_on_entry=True if l else False, purge_on_exit=True if l else False,

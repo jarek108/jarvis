@@ -9,9 +9,7 @@ execution:
 
   - domain: "LOADOUT_MGMT"
     scenarios:
-      - "client_ui/ui_loadout_activation_latency"
-      - "client_ui/ui_loadout_deactivation"
-      - "client_ui/ui_loadout_redo_idempotency"
+      - "client_ui/ui_loadout*"
 
   - domain: "GRAPH_SYNC"
     scenarios:

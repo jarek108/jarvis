@@ -2,7 +2,7 @@ import os
 import sys
 import time
 import asyncio
-from fastapi import FastAPI, BackgroundTasks, Request
+from fastapi import FastAPI, BackgroundTasks, Request, HTTPException
 from pydantic import BaseModel
 import uvicorn
 from loguru import logger
@@ -12,8 +12,8 @@ if script_dir not in sys.path:
     sys.path.append(script_dir)
 
 from utils.infra.status import get_system_health_async
-from manage_loadout import apply_loadout, kill_loadout, kill_service, restart_service
-from utils import get_gpu_vram_usage, get_gpu_total_vram
+from manage_loadout import apply_loadout, kill_loadout
+from utils import get_gpu_vram_usage, get_gpu_total_vram, load_config
 from utils.engine import PipelineResolver
 
 app = FastAPI(title="Jarvis Loadout Daemon")
@@ -26,6 +26,7 @@ class StateManager:
         self.external_vram = 0.0
         self.is_polling = False
         self.poll_task = None
+        self.active_task = None # None, "APPLYING", or "KILLING"
 
     async def start_polling(self):
         if self.is_polling: return
@@ -77,7 +78,7 @@ class StateManager:
                     logger.info(f"==> Global Loadout State: {self.global_state}")
                 
                 from manage_loadout import save_runtime_registry
-                save_runtime_registry(self.models, project_root=script_dir, external_vram=self.external_vram, loadout_id=self.loadout_id)
+                save_runtime_registry(self.models, project_root=script_dir, external_vram=self.external_vram, loadout_id=self.loadout_id, active_task=self.active_task)
             else:
                 self.global_state = "IDLE"
                 # Call with empty ports to ensure mock state trackers are cleared
@@ -101,6 +102,8 @@ async def get_status():
     return {
         "loadout_id": state.loadout_id,
         "global_state": state.global_state,
+        "ready": state.active_task is None,
+        "active_task": state.active_task,
         "models": state.models,
         "vram": {
             "used": get_gpu_vram_usage(),
@@ -132,14 +135,14 @@ class LoadoutRequest(BaseModel):
     name: str
     soft: bool = True
 
-@app.post("/loadout")
+@app.post("/loadout", status_code=202)
 async def apply_loadout_endpoint(req: LoadoutRequest, background_tasks: BackgroundTasks):
+    if state.active_task:
+        raise HTTPException(status_code=409, detail=f"Daemon is busy with task: {state.active_task}")
+
     if req.name == "NONE":
-        kill_loadout("all")
-        state.loadout_id = "NONE"
-        state.models = []
-        state.global_state = "IDLE"
-        return {"status": "cleared"}
+        # Redirect to delete path logic
+        return await clear_loadout(background_tasks)
     
     try:
         # Pre-populate state instantly so UI immediately sees STARTUP
@@ -167,8 +170,10 @@ async def apply_loadout_endpoint(req: LoadoutRequest, background_tasks: Backgrou
         state.loadout_id = req.name
         state.models = pre_models
         state.global_state = "STARTING"
+        state.active_task = "APPLYING"
     except Exception as e:
         logger.error(f"Failed to pre-parse loadout: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
 
     def task():
         try:
@@ -186,35 +191,33 @@ async def apply_loadout_endpoint(req: LoadoutRequest, background_tasks: Backgrou
                 new_models.append(m)
                 
             state.models = new_models
-            
         except Exception as e:
             logger.error(f"Failed to apply loadout: {e}")
             state.global_state = "ERROR"
+        finally:
+            state.active_task = None
             
     background_tasks.add_task(task)
-    return {"status": "starting", "loadout": req.name}
+    return {"status": "starting", "loadout": req.name, "models": pre_models}
 
-@app.delete("/loadout")
-async def clear_loadout(background_tasks: BackgroundTasks):
-    def task(): kill_loadout("all")
+@app.delete("/loadout", status_code=202)
+async def clear_loadout(background_tasks: BackgroundTasks, force: bool = False):
+    if state.active_task and not force:
+        raise HTTPException(status_code=409, detail=f"Daemon is busy with task: {state.active_task}. Use ?force=true to override.")
+
+    state.active_task = "KILLING"
+    state.global_state = "IDLE" # Immediate visual feedback
+
+    def task():
+        try:
+            kill_loadout("all")
+            state.loadout_id = "NONE"
+            state.models = []
+        finally:
+            state.active_task = None
+            
     background_tasks.add_task(task)
-    state.loadout_id = "NONE"
-    state.models = []
-    state.global_state = "IDLE"
     return {"status": "clearing"}
-
-@app.post("/service/{sid}/restart")
-async def restart_svc(sid: str, background_tasks: BackgroundTasks):
-    def task(): restart_service(sid, state.loadout_id)
-    background_tasks.add_task(task)
-    return {"status": "restarting"}
-
-@app.delete("/service/{sid}")
-async def kill_svc(sid: str, background_tasks: BackgroundTasks):
-    def task(): kill_service(sid)
-    background_tasks.add_task(task)
-    state.models = [m for m in state.models if m['id'] != sid]
-    return {"status": "killing"}
 
 if __name__ == "__main__":
     from utils import load_config

@@ -253,6 +253,15 @@ class RichDashboard:
         l_data['done'] += 1
         d_data['done'] += 1
         
+        # Update the specific scenario entry
+        if 'scenarios' not in l_data: l_data['scenarios'] = {}
+        l_data['scenarios'][scenario_name] = {
+            "status": status,
+            "duration": duration,
+            "error": result,
+            "dir": scenario_dir
+        }
+        
         # Accumulate duration for flat UI suites that don't use strict phase timers
         if 'timers' not in l_data: l_data['timers'] = {"stp": 0, "exec": 0, "cln": 0}
         l_data['timers']['exec'] += duration
@@ -262,18 +271,9 @@ class RichDashboard:
             l_data['status'] = "failed"
             d_data['status'] = "failed"
             
-            if 'failed_scenarios' not in l_data:
-                l_data['failed_scenarios'] = []
-            l_data['failed_scenarios'].append({
-                "name": scenario_name,
-                "dir": scenario_dir,
-                "error": result
-            })
-
             if not l_data.get('error_message'):
                 l_data['error_message'] = result
         elif l_data['status'] in ["pending", "wip"]:
-            # Don't set to passed yet, just keep it wip if it hasn't failed
             l_data['status'] = "wip"
             d_data['status'] = "wip"
 
@@ -346,11 +346,6 @@ class RichDashboard:
                 (f" - {d_dur:.1f}s", d_color)
             )
             
-            # Only show models count if there's more than one distinct loadout
-            models_total = len(d_data['loadouts'])
-            if models_total > 1 or (models_total == 1 and "UI_SUITE" not in d_data['loadouts']):
-                d_text.append(f" ({d_data['models_done']}/{models_total} models)", "white")
-            
             d_text.append(f" ({d_data['done']}/{d_data['total']} scenarios)", "white")
             d_text.append(f" - stp: {d_stp:.1f}s, exec: {d_exe:.1f}s, cln: {d_cln:.1f}s", "gray50")
             table.add_row(d_text)
@@ -395,13 +390,26 @@ class RichDashboard:
                     l_text.append(f" [{l_data['errors']} FAILED]", style="bold red")
                 table.add_row(l_text)
 
-                # Add failed scenarios as sub-items
-                if 'failed_scenarios' in l_data:
-                    for scen in l_data['failed_scenarios']:
-                        scen_text = Text("      ⚠ ")
-                        scen_url = f"file:///{scen['dir'].replace(os.sep, '/')}" if scen.get('dir') else session_path
-                        scen_text.append(scen['name'], style=f"red link {scen_url}")
-                        scen_text.append(f": {scen['error']}", style="gray50")
+                # Add ALL scenarios as sub-items
+                if 'scenarios' in l_data:
+                    for s_id, s_data in l_data['scenarios'].items():
+                        s_status = s_data.get('status', 'pending').lower()
+                        s_color = "green" if s_status == "passed" else ("red" if s_status == "failed" else ("blue" if s_status == "wip" else "bright_black"))
+                        
+                        scen_text = Text("      • ")
+                        scen_url = f"file:///{s_data['dir'].replace(os.sep, '/')}" if s_data.get('dir') else session_path
+                        
+                        # Just show the scenario ID part
+                        display_id = s_id.split("/")[-1] if "/" in s_id else s_id
+                        
+                        if s_status == "failed":
+                            scen_text.append(display_id, style=f"{s_color} link {scen_url}")
+                            scen_text.append(f": {s_data.get('error', 'FAILED')}", style="gray50")
+                        else:
+                            scen_text.append(display_id, style=s_color)
+                            if s_status == "passed":
+                                scen_text.append(f" ({s_data.get('duration', 0):.1f}s)", style="gray50")
+                        
                         table.add_row(scen_text)
         return table
 
