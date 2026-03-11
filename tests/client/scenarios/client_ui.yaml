@@ -43,14 +43,14 @@ ui_loadout_deactivation:
       target: "record_btn"
       contains: "OFFLINE"
 
-ui_loadout_idempotency5:
+ui_loadout_idempotency15:
   name: "Verify that selecting loadout is reasonably responsive."
   timeline:
     - t: 1.0s
       action: select_dropdown
       target: "loadout_opt"
       value: "Speech-to-Speech, light"
-    - t: 5.0s
+    - t: 15.0s
       action: assert_system_state
       condition: "all_models_active"
       

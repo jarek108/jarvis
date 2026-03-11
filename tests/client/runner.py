@@ -299,18 +299,6 @@ class ClientTestRunner:
         try:
             if action == "select_dropdown":
                 self.automation.select_dropdown(target, value)
-                if target == "loadout_opt":
-                    # Critical Sync: Wait for UI to acknowledge EXACT loadout change
-                    self.orch_log.info(f"⏳ Waiting for UI to sync loadout to '{value}'...")
-                    start_wait = time.perf_counter()
-                    while time.perf_counter() - start_wait < 15.0:
-                        snap = self.dumper.get_system_snapshot()
-                        # Success condition: UI loadout matches target AND health is no longer empty (if not NONE)
-                        if snap.get('loadout') == value:
-                            if value == "NONE" or snap.get('health_summary'):
-                                self.orch_log.info(f"✅ UI Synchronized to '{value}' after {time.perf_counter()-start_wait:.1f}s")
-                                break
-                        await asyncio.sleep(0.5)
             elif action == "click_element":
                 self.automation.click(target)
             elif action == "maximize_window":
