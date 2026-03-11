@@ -1,0 +1,60 @@
+[
+    {
+        "loadout": "ollama------qwen2.5--0.5b",
+        "scenarios": [
+            {
+                "name": "core/llm_basic_chat",
+                "status": "PASSED",
+                "duration": 0.06999099999666214,
+                "pipeline": "atomic_llm",
+                "domain": "llm",
+                "loadout_id": "ollama------qwen2.5--0.5b",
+                "node_metrics": {
+                    "proc_llm": {
+                        "ttft": 0.032240599975921214,
+                        "tps": 31.016792514619663,
+                        "tokens": 1,
+                        "duration": 0.032240599975921214
+                    }
+                },
+                "vram_external": 0.0,
+                "vram_static": 0.0,
+                "vram_peak": 5.359375,
+                "stt_text": "",
+                "llm_text": "Stub response to: Hello",
+                "input_file": "",
+                "output_file": "",
+                "detailed_model": "STUB-ollama://qwen2.5:0.5b",
+                "setup_time": 3.0706406000535935,
+                "cleanup_time": 1.9491222000215203
+            },
+            {
+                "name": "core/memory_recall",
+                "status": "PASSED",
+                "duration": 0.17879649996757507,
+                "pipeline": "memory_verification",
+                "domain": "memory",
+                "loadout_id": "ollama------qwen2.5--0.5b",
+                "node_metrics": {
+                    "proc_llm": {
+                        "ttft": 0.06550030002836138,
+                        "tps": 15.267105640233767,
+                        "tokens": 1,
+                        "duration": 0.06550030002836138
+                    }
+                },
+                "vram_external": 0.0,
+                "vram_static": 0.0,
+                "vram_peak": 5.0576171875,
+                "stt_text": "",
+                "llm_text": "Stub response to: [CONVERSATION_HISTORY]\n{{ proc_memory }}\n\n[CURRENT_INSTRUCTION]\n{{ input_instruction }}\n",
+                "input_file": "",
+                "output_file": "",
+                "detailed_model": "STUB-ollama://qwen2.5:0.5b",
+                "setup_time": 3.0706406000535935,
+                "cleanup_time": 1.9491222000215203
+            }
+        ],
+        "status": "PASSED"
+    }
+]

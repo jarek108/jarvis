@@ -5,6 +5,8 @@ import yaml
 import json
 from loguru import logger
 
+SESSION_START_TIME = time.perf_counter()
+
 class StreamToLogger:
     """
     Fake file-like object that redirects writes to a loguru logger.
@@ -46,6 +48,21 @@ class StreamToLogger:
     def closed(self):
         return False
 
+def relative_formatter(record):
+    """Custom formatter to show timestamps relative to session/scenario start."""
+    # Use context-provided relative_start if available (for tests), else global SESSION_START_TIME
+    start_t = record["extra"].get("relative_start", SESSION_START_TIME)
+    elapsed = time.perf_counter() - start_t
+    
+    # Format: [+0.123s]
+    rel_time = f"[+{elapsed:07.3f}s]"
+    
+    # Check for domain to add prefix
+    domain = record["extra"].get("domain", "")
+    domain_str = f" | {domain: <12}" if domain else ""
+    
+    return f"<green>{rel_time}</green>{domain_str} | <level>{record['level']: <8}</level> | <level>{record['message']}</level>\n"
+
 def init_session(domain: str) -> str:
     """
     Initializes a unified Jarvis session.
@@ -70,11 +87,11 @@ def init_session(domain: str) -> str:
         return not getattr(sys, "dashboard_active", False)
 
     # Simple format for console to stay readable with RichDashboard
-    logger.add(sys.stderr, level=log_level, format="<green>{time:HH:mm:ss.SSS}</green> | <level>{level: <8}</level> | <level>{message}</level>", filter=console_filter)
+    logger.add(sys.stderr, level=log_level, format=relative_formatter, filter=console_filter)
 
     # timeline.log (The Forensic Heartbeat)
     # Includes all domains (UI, ORCHESTRATOR, SYSTEM) in one chronological file
-    logger.add(os.path.join(session_dir, "timeline.log"), level="DEBUG", rotation="10 MB")
+    logger.add(os.path.join(session_dir, "timeline.log"), level="DEBUG", format=relative_formatter, rotation="10 MB")
 
     # 2. Crash Resilience & Raw Stream Redirection
     def exception_handler(exctype, value, tb):

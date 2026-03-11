@@ -1,0 +1,72 @@
+[
+  {
+    "t": 953667.3227309,
+    "node": "input_history",
+    "type": "START"
+  },
+  {
+    "t": 953667.3627448,
+    "node": "input_history",
+    "type": "FINISH"
+  },
+  {
+    "t": 953667.3627775,
+    "node": "input_instruction",
+    "type": "START"
+  },
+  {
+    "t": 953667.3932963,
+    "node": "input_instruction",
+    "dir": "OUT",
+    "type": "data_path",
+    "seq": 0,
+    "content": null,
+    "data_len": 43
+  },
+  {
+    "t": 953667.3933138,
+    "node": "input_instruction",
+    "type": "FINISH"
+  },
+  {
+    "t": 953667.3933364,
+    "node": "proc_memory",
+    "type": "START"
+  },
+  {
+    "t": 953667.425366,
+    "node": "proc_memory",
+    "dir": "IN",
+    "type": "data_path",
+    "seq": 0,
+    "content": null,
+    "data_len": 43
+  },
+  {
+    "t": 953667.4260811,
+    "node": "proc_llm",
+    "type": "START"
+  },
+  {
+    "t": 953667.4557238,
+    "node": "output_ui",
+    "type": "START"
+  },
+  {
+    "t": 953669.4634809,
+    "node": "proc_memory",
+    "type": "ERROR",
+    "msg": "Cannot connect to host 127.0.0.1:8300 ssl:default [The remote computer refused the network connection]"
+  },
+  {
+    "t": 953671.5210561,
+    "node": "proc_llm",
+    "type": "ERROR",
+    "msg": "Cannot connect to host 127.0.0.1:8300 ssl:default [The remote computer refused the network connection]"
+  },
+  {
+    "t": 953671.5210988,
+    "node": "output_ui",
+    "type": "FINISH"
+  }
+]

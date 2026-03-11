@@ -2,12 +2,12 @@ import asyncio
 import aiohttp
 import requests
 from ..config import load_config
-from .ports import is_port_in_use, get_jarvis_ports
+from .ports import is_port_in_use, get_jarvis_ports, is_port_in_use_async
 from .logs import check_log_for_errors
 
 async def get_service_status_async(session, port: int):
     """Asynchronous version of get_service_status."""
-    if not is_port_in_use(port): return port, "OFF", None
+    if not await is_port_in_use_async(port): return port, "OFF", None
     cfg = load_config()
     url = f"http://127.0.0.1:{port}/health"
     if port == cfg['ports']['ollama']: url = f"http://127.0.0.1:{port}/api/tags"
@@ -64,7 +64,10 @@ def get_service_status(port: int):
 
 async def get_system_health_async(ports=None, log_paths=None):
     """Polls specified or all Jarvis services in parallel, including log error checks."""
-    target_ports = ports if ports else get_jarvis_ports()
+    # Explicitly check for None so that empty list [] is honored (idle scan avoidance)
+    target_ports = ports if ports is not None else get_jarvis_ports()
+    if not target_ports: return {} # Handle empty scan immediately
+    
     async with aiohttp.ClientSession() as session:
         tasks = [get_service_status_async(session, p) for p in target_ports]
         results = await asyncio.gather(*tasks)

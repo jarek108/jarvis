@@ -1,0 +1,22 @@
+[
+  {
+    "t": 989017.8481923,
+    "node": "input_mic",
+    "type": "START"
+  },
+  {
+    "t": 989017.891557,
+    "node": "input_mic",
+    "type": "FINISH"
+  },
+  {
+    "t": 989017.8915998,
+    "node": "proc_stt",
+    "type": "START"
+  },
+  {
+    "t": 989017.9224758,
+    "node": "proc_stt",
+    "type": "FINISH"
+  }
+]

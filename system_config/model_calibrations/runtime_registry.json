@@ -1,6 +1,6 @@
 {
-  "timestamp": 1773135824.5700862,
-  "loadout": "Speech-to-Speech, light",
+  "timestamp": 1773230489.9678962,
+  "loadout": "Speech-to-Speech, heavy",
   "external": 0.0,
   "active_task": null,
   "models": [
@@ -10,21 +10,21 @@
       "port": 8101,
       "role": "stt",
       "pid": null,
-      "log_path": "C:\\Users\\chojn\\projects\\jarvis\\logs\\sessions\\RUN_20260310_104320\\svc_stt_faster-whisper-base.log",
+      "log_path": "C:\\Users\\chojn\\projects\\jarvis\\logs\\sessions\\RUN_20260311_130110\\svc_stt_faster-whisper-base.log",
       "capabilities": [
         "audio_in",
         "text_out"
       ],
-      "state": "ON",
-      "info": "llm_stub"
+      "state": "OFF",
+      "info": null
     },
     {
-      "id": "chatterbox-turbo",
+      "id": "chatterbox-multilingual",
       "engine": "native",
-      "port": 8202,
+      "port": 8201,
       "role": "tts",
-      "pid": null,
-      "log_path": "C:\\Users\\chojn\\projects\\jarvis\\logs\\sessions\\RUN_20260310_104320\\svc_tts_chatterbox-turbo.log",
+      "pid": 19912,
+      "log_path": "C:\\Users\\chojn\\projects\\jarvis\\logs\\sessions\\RUN_20260311_130110\\svc_tts_chatterbox-multilingual.log",
       "capabilities": [
         "text_in",
         "audio_out"
@@ -33,15 +33,17 @@
       "info": "llm_stub"
     },
     {
-      "id": "qwen2.5:0.5b",
-      "engine": "ollama",
-      "port": 11434,
+      "id": "QuantTrio/Qwen3-VL-30B-A3B-Instruct-AWQ",
+      "engine": "vllm",
+      "port": 8300,
       "role": "llm",
-      "pid": null,
-      "log_path": "C:\\Users\\chojn\\projects\\jarvis\\logs\\sessions\\RUN_20260310_104320\\svc_llm_qwen2.5--0.5b.log",
+      "pid": 22012,
+      "log_path": "C:\\Users\\chojn\\projects\\jarvis\\logs\\sessions\\RUN_20260311_130110\\svc_llm_QuantTrio--Qwen3-VL-30B-A3B-Instruct-AWQ.log",
       "capabilities": [
         "text_in",
-        "text_out"
+        "text_out",
+        "image_in",
+        "video_in"
       ],
       "state": "ON",
       "info": "Stub"

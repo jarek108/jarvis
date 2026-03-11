@@ -20,11 +20,11 @@ if script_dir not in sys.path:
 class JarvisApp(ctk.CTk):
     def __init__(self):
         self._boot_time = time.perf_counter()
-        
+        self.ui_logger = logger.bind(domain="UI", relative_start=self._boot_time)
+
         super().__init__()
         self.title("JARVIS CORE CONSOLE")
         self._ui_log("APP_BOOT", "Initializing JarvisApp")
-        
         self.queue = queue.Queue()
         self.controller = JarvisController(self.queue)
 
@@ -67,8 +67,7 @@ class JarvisApp(ctk.CTk):
         self.after(500, self._restore_window_state)
 
     def _ui_log(self, event: str, details: str = ""):
-        delta = time.perf_counter() - self._boot_time
-        logger.bind(domain="UI").debug(f"[+{delta:.3f}s] [{event}] {details}")
+        self.ui_logger.debug(f"[{event}] {details}")
 
     def _restore_window_state(self):
         """Final window state application after initial layout stabilization."""

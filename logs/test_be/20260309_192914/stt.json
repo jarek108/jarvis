@@ -1,0 +1,100 @@
+[
+    {
+        "loadout": "native------faster-whisper-tiny",
+        "scenarios": [
+            {
+                "name": "core/stt_polish_std",
+                "status": "PASSED",
+                "duration": 0.07307590008713305,
+                "pipeline": "atomic_stt",
+                "domain": "stt",
+                "loadout_id": "native------faster-whisper-tiny",
+                "node_metrics": {
+                    "proc_stt": {
+                        "status": "INCOMPLETE_DATA"
+                    }
+                },
+                "vram_external": 0.0,
+                "vram_static": 0.0,
+                "vram_peak": 1.7822265625,
+                "stt_text": "",
+                "llm_text": "",
+                "input_file": "tests/data/polish.wav",
+                "output_file": "",
+                "detailed_model": "FASTER-WHISPER-TINY",
+                "setup_time": 5.0745511000277475,
+                "cleanup_time": 1.9467687999131158
+            },
+            {
+                "name": "core/stt_french_std",
+                "status": "PASSED",
+                "duration": 0.07459869992453605,
+                "pipeline": "atomic_stt",
+                "domain": "stt",
+                "loadout_id": "native------faster-whisper-tiny",
+                "node_metrics": {
+                    "proc_stt": {
+                        "status": "INCOMPLETE_DATA"
+                    }
+                },
+                "vram_external": 0.0,
+                "vram_static": 0.0,
+                "vram_peak": 1.7822265625,
+                "stt_text": "",
+                "llm_text": "",
+                "input_file": "tests/data/french.wav",
+                "output_file": "",
+                "detailed_model": "FASTER-WHISPER-TINY",
+                "setup_time": 5.0745511000277475,
+                "cleanup_time": 1.9467687999131158
+            },
+            {
+                "name": "core/stt_chinese_std",
+                "status": "PASSED",
+                "duration": 0.09077860007528216,
+                "pipeline": "atomic_stt",
+                "domain": "stt",
+                "loadout_id": "native------faster-whisper-tiny",
+                "node_metrics": {
+                    "proc_stt": {
+                        "status": "INCOMPLETE_DATA"
+                    }
+                },
+                "vram_external": 0.0,
+                "vram_static": 0.0,
+                "vram_peak": 1.7822265625,
+                "stt_text": "",
+                "llm_text": "",
+                "input_file": "tests/data/chinese.wav",
+                "output_file": "",
+                "detailed_model": "FASTER-WHISPER-TINY",
+                "setup_time": 5.0745511000277475,
+                "cleanup_time": 1.9467687999131158
+            },
+            {
+                "name": "core/stt_english_std",
+                "status": "PASSED",
+                "duration": 0.07520429999567568,
+                "pipeline": "atomic_stt",
+                "domain": "stt",
+                "loadout_id": "native------faster-whisper-tiny",
+                "node_metrics": {
+                    "proc_stt": {
+                        "status": "INCOMPLETE_DATA"
+                    }
+                },
+                "vram_external": 0.0,
+                "vram_static": 0.0,
+                "vram_peak": 1.7822265625,
+                "stt_text": "",
+                "llm_text": "",
+                "input_file": "tests/data/input.wav",
+                "output_file": "",
+                "detailed_model": "FASTER-WHISPER-TINY",
+                "setup_time": 5.0745511000277475,
+                "cleanup_time": 1.9467687999131158
+            }
+        ],
+        "status": "PASSED"
+    }
+]

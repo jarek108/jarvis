@@ -1,0 +1,72 @@
+[
+  {
+    "id": "client_ui/ui_startup_state",
+    "name": "Verify initial UI state on startup.",
+    "status": "PASSED",
+    "duration": 4.528338500000245,
+    "error": null
+  },
+  {
+    "id": "client_ui/ui_ux_initial_vram_boot",
+    "name": "Verify spinner active during initial boot scan and stops correctly.",
+    "status": "PASSED",
+    "duration": 17.020742799999425,
+    "error": null
+  },
+  {
+    "id": "client_ui/ui_loadout_activation_latency",
+    "name": "Verify immediate UI response when activating a loadout.",
+    "status": "PASSED",
+    "duration": 13.515494500003115,
+    "error": null
+  },
+  {
+    "id": "client_ui/ui_loadout_deactivation",
+    "name": "Verify immediate UI teardown when selecting NONE loadout.",
+    "status": "PASSED",
+    "duration": 13.524881500001356,
+    "error": null
+  },
+  {
+    "id": "client_ui/ui_loadout_idempotency",
+    "name": "Verify that selecting loadout is reasonably responsive.",
+    "status": "FAILED",
+    "duration": 3.935418999993999,
+    "error": "System State Condition 'all_models_active' failed. Health: {8101: 'OFF', 8202: 'OFF', 11434: 'ON'}"
+  },
+  {
+    "id": "client_ui/ui_loadout_sidempotency_redo",
+    "name": "Verify that selecting the already active loadout does nothing.",
+    "status": "FAILED",
+    "duration": 7.569007700003567,
+    "error": "System State Condition 'all_models_active' failed. Health: {8101: 'OFF', 8202: 'OFF', 11434: 'ON'}"
+  },
+  {
+    "id": "client_ui/ui_loadout_switch_latency",
+    "name": "Verify UI responsiveness and visual state during loadout transitions.",
+    "status": "FAILED",
+    "duration": 14.028171900004963,
+    "error": "Assertion Failed: 'terminal' (Actual: Runtime registry updated at C:\\Users\\chojn\\projects\\jarvis\\system_config\\model_calibrations\\runtime_registry.json (Task: None)\n\u2699\ufe0f APPLYING LOADOUT (Attempt 1): Speech-to-Speech, light\n\u2705 LOADOUT DELEGATED TO DAEMON\n\ud83d\ude80 UI State updated instantly with 3 models.) does not contain 'LOADOUT APPLIED'"
+  },
+  {
+    "id": "client_ui/ui_graph_mapping_status",
+    "name": "Verify Graph nodes update color based on loadout bindings.",
+    "status": "PASSED",
+    "duration": 8.029251399995701,
+    "error": null
+  },
+  {
+    "id": "client_ui/ui_ux_persistence_maximize_stage1",
+    "name": "Verify window maximization state capture.",
+    "status": "PASSED",
+    "duration": 3.3140656999967177,
+    "error": null
+  },
+  {
+    "id": "client_ui/ui_ux_persistence_maximize_stage2",
+    "name": "Verify window remains maximized after restart.",
+    "status": "PASSED",
+    "duration": 5.220306000002893,
+    "error": null
+  }
+]

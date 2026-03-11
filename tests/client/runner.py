@@ -214,6 +214,7 @@ class ClientTestRunner:
         await wait_for_daemon_ready_async()
 
         self.start_time = time.perf_counter()
+        self.orch_log = self.orch_log.bind(relative_start=self.start_time)
         
         timeline = scenario_data.get('timeline', [])
         # Normalize timestamps
