@@ -4,13 +4,151 @@ import time
 import yaml
 import json
 import subprocess
+import threading
+import queue
 from contextlib import redirect_stdout
 from loguru import logger
 import utils
 from utils.console import ensure_utf8_output, BOLD, CYAN, RESET, LINE_LEN
-from .ui import LiveFilter
+from .reporting import LiveFilter
 
 import asyncio
+
+# ... (rest of imports and LifecycleManager)
+
+class UIWorker:
+    """Manages a single pre-warmed UI process."""
+    _id_counter = 0
+    def __init__(self, session_dir, initial_state_file=None, project_root=None):
+        self.session_dir = session_dir
+        self.initial_state_file = initial_state_file
+        self.project_root = project_root or os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        self.proc = None
+        self.orch_log = logger.bind(domain="ORCHESTRATOR")
+        self.worker_id = UIWorker._id_counter
+        UIWorker._id_counter += 1
+        self.ready_file = os.path.join(session_dir, f"worker_{self.worker_id}.ready")
+        self.port = None
+        self._spawn()
+
+    def _spawn(self):
+        if os.path.exists(self.ready_file):
+            os.remove(self.ready_file)
+
+        cmd = [sys.executable, os.path.join(self.project_root, "tests", "client", "harness.py"), 
+               "--mock-all", "--hold-for-signal", "--ready-file", self.ready_file]
+        if self.initial_state_file:
+            cmd.extend(["--initial-state", self.initial_state_file])
+        
+        # On Windows, we must avoid blocking on PIPE. Use a log file for each worker.
+        self.log_path = os.path.join(self.session_dir, f"worker_{self.worker_id}.log")
+        self.log_file = open(self.log_path, "w")
+
+        env = os.environ.copy()
+        if self.session_dir:
+            env['JARVIS_SESSION_DIR'] = self.session_dir
+
+        self.proc = subprocess.Popen(
+            cmd,
+            stdin=subprocess.PIPE,
+            stdout=self.log_file,
+            stderr=subprocess.STDOUT,
+            text=True,
+            bufsize=1,
+            env=env
+        )
+        
+        # Wait for the "READY_PORT" to appear in the log file
+        start_t = time.time()
+        while time.time() - start_t < 20:
+            if self.proc.poll() is not None:
+                raise RuntimeError(f"UI Worker {self.worker_id} died prematurely. Check {self.log_path}")
+            
+            # Read from log file to find READY_PORT
+            if os.path.exists(self.log_path):
+                try:
+                    with open(self.log_path, "r") as f:
+                        content = f.read()
+                        if "READY_PORT:" in content:
+                            parts = content.split("READY_PORT:")
+                            # Take the last occurrence and get the first integer-looking thing after it
+                            last_part = parts[-1].split()[0]
+                            # Remove any trailing non-digits (like if there was a comma or period)
+                            import re
+                            match = re.search(r"\d+", last_part)
+                            if match:
+                                self.port = int(match.group())
+                except: pass
+            
+            if self.port:
+                break
+            time.sleep(0.5)
+        
+        if not self.port:
+            self.proc.terminate()
+            raise RuntimeError(f"UI Worker {self.worker_id} timed out waiting for READY_PORT signal.")
+        self.orch_log.debug(f"🟢 UI Worker {self.worker_id} pre-warmed on port {self.port}.")
+
+    def trigger_go(self, config_json=None):
+        """Sends the signal to the UI to start its mainloop via TCP socket."""
+        if not self.port:
+            self.orch_log.error(f"Cannot trigger GO for worker {self.worker_id}: No port assigned.")
+            return
+
+        import socket
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                s.settimeout(5.0)
+                s.connect(('127.0.0.1', self.port))
+                data = config_json if config_json else "{}"
+                # Append double newline as EOF marker for the harness
+                s.sendall((data + "\n\n").encode('utf-8'))
+        except Exception as e:
+            self.orch_log.error(f"Failed to trigger GO for worker {self.worker_id} via socket: {e}")
+
+    def terminate(self):
+        if self.proc:
+            try:
+                self.proc.terminate()
+                self.proc.wait(timeout=2.0)
+            except: 
+                try: self.proc.kill()
+                except: pass
+
+
+class UIWorkerPool:
+    """Maintains a pool of pre-warmed UI processes."""
+    def __init__(self, session_dir, initial_state_file=None, project_root=None):
+        self.session_dir = session_dir
+        self.initial_state_file = initial_state_file
+        self.project_root = project_root
+        self.pool = queue.Queue()
+        self._refill_thread = threading.Thread(target=self._refill_loop, daemon=True)
+        self._refill_thread.start()
+
+    def _refill_loop(self):
+        while True:
+            # Check how many workers are currently in the pool + how many are being spawned
+            current_count = self.pool.qsize()
+            if current_count < 2:
+                # Spawn worker in a background thread so we don't block the refill loop
+                def spawn_task():
+                    try:
+                        worker = UIWorker(self.session_dir, initial_state_file=self.initial_state_file, project_root=self.project_root)
+                        self.pool.put(worker)
+                    except Exception as e:
+                        logger.error(f"Failed to pre-warm UI worker: {e}")
+                
+                threading.Thread(target=spawn_task, daemon=True).start()
+                # Give it a tiny bit of breathing room before spawning the next one if needed
+                time.sleep(0.1)
+            time.sleep(0.5)
+
+    def get_worker(self) -> UIWorker:
+        try:
+            return self.pool.get(timeout=25.0)
+        except queue.Empty:
+            raise RuntimeError("Timed out waiting for a pre-warmed UI worker from the pool.")
 
 class LifecycleManager:
     def __init__(self, setup_name, models=None, purge_on_entry=True, purge_on_exit=False, full=False, benchmark_mode=False, force_download=False, track_prior_vram=True, session_dir=None, on_phase=None, stub_mode=False, **kwargs):

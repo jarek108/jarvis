@@ -64,6 +64,30 @@ def get_service_status(port: int):
 
 async def get_system_health_async(ports=None, log_paths=None):
     """Polls specified or all Jarvis services in parallel, including log error checks."""
+    import os
+    import time
+    
+    is_mock = os.environ.get('JARVIS_MOCK_ALL') == "1" or os.environ.get('JARVIS_UI_TEST') == "1"
+    if is_mock:
+        global _mock_state_tracker
+        target_ports = ports if ports is not None else get_jarvis_ports()
+        
+        now = time.time()
+        for p in target_ports:
+            if p not in _mock_state_tracker:
+                _mock_state_tracker[p] = now
+
+        cfg = load_config()
+        delay_range = cfg.get('system', {}).get('mock_startup_range', [1.5, 3.0])
+
+        result = {}
+        for p in target_ports:
+            elapsed = now - _mock_state_tracker[p]
+            target_delay = (p % (delay_range[1] - delay_range[0])) + delay_range[0]
+            status = "STARTUP" if elapsed < target_delay else "ON"
+            result[p] = {"status": status, "info": "MOCKED"}
+        return result
+
     # Explicitly check for None so that empty list [] is honored (idle scan avoidance)
     target_ports = ports if ports is not None else get_jarvis_ports()
     if not target_ports: return {} # Handle empty scan immediately

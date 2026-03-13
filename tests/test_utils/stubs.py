@@ -16,13 +16,13 @@ def check_delay():
     return None
 
 @app.get("/api/tags")
-async def tags():
+async def tags(request: Request):
     """Mimics Ollama model listing."""
     if d := check_delay(): return d
     return {"models": [{"name": "stub-model:latest"}], "service": "llm_stub"}
 
 @app.get("/v1/models")
-async def models():
+async def models(request: Request):
     """Mimics vLLM model listing."""
     if d := check_delay(): return d
     return {"data": [{"id": "stub-model:latest"}], "service": "llm_stub"}
@@ -95,9 +95,10 @@ async def chat(request: Request):
     
 
 @app.get("/health")
-async def health():
+@app.get("/")
+async def health(request: Request):
     if d := check_delay(): return d
-    return {"status": "ON", "service": "llm_stub"}
+    return {"status": "ON", "service": "stub", "port": request.url.port}
 
 if __name__ == "__main__":
     import uvicorn

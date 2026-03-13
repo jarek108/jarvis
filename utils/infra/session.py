@@ -61,7 +61,10 @@ def relative_formatter(record):
     domain = record["extra"].get("domain", "")
     domain_str = f" | {domain: <12}" if domain else ""
     
-    return f"<green>{rel_time}</green>{domain_str} | <level>{record['level']: <8}</level> | <level>{record['message']}</level>\n"
+    # Escape curly braces in the message because Loguru treats the return value of a formatter function as a format template
+    msg = record["message"].replace("{", "{{").replace("}", "}}")
+    
+    return f"<green>{rel_time}</green>{domain_str} | <level>{record['level']: <8}</level> | <level>{msg}</level>\n"
 
 def init_session(domain: str) -> str:
     """

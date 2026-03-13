@@ -49,11 +49,11 @@ BOLD = utils.console.BOLD
 LINE_LEN = utils.console.LINE_LEN
 
 # Test-specific utils (Relative imports)
-from .ui import LiveFilter, RichDashboard
 from .reporting import (
-    format_status, fmt_with_chunks, report_llm_result, 
-    report_scenario_result, save_artifact, trigger_report_generation
+    LiveFilter, RichDashboard, format_status, fmt_with_chunks, 
+    report_llm_result, report_scenario_result, save_artifact, 
+    trigger_report_generation
 )
-from .lifecycle import LifecycleManager, run_test_lifecycle
+from .lifecycle import LifecycleManager, run_test_lifecycle, UIWorker, UIWorkerPool
 from .session import init_session
 from .collectors import BaseReporter, StdoutReporter, AccumulatingReporter

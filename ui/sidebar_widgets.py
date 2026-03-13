@@ -149,26 +149,26 @@ class ModelHealthCard(ctk.CTkFrame):
         self.pack(fill="x", pady=6, padx=5)
         
         # Events
-        self.bind("<Button-1>", lambda e: on_click(self.mid))
-        self.bind("<Button-3>", lambda e: on_right_click(e, model_data))
+        self.bind("<Button-1>", lambda e=None: on_click(self.mid))
+        self.bind("<Button-3>", lambda e=None: on_right_click(e, model_data))
         self.bind("<Enter>", self._on_enter)
         self.bind("<Leave>", self._on_leave)
         
         # Header
         self.header = ctk.CTkFrame(self, fg_color="transparent")
         self.header.pack(fill="x", padx=8, pady=(8, 0))
-        self.header.bind("<Button-1>", lambda e: on_click(self.mid))
-        self.header.bind("<Button-3>", lambda e: on_right_click(e, model_data))
+        self.header.bind("<Button-1>", lambda e=None: on_click(self.mid))
+        self.header.bind("<Button-3>", lambda e=None: on_right_click(e, model_data))
 
         self.lamp = ctk.CTkLabel(self.header, text="●", font=("Arial", 18), text_color=self.colors.get('gray'))
         self.lamp.pack(side="left", padx=(0, 5))
-        self.lamp.bind("<Button-1>", lambda e: on_click(self.mid))
+        self.lamp.bind("<Button-1>", lambda e=None: on_click(self.mid))
 
         self.name_box = ctk.CTkTextbox(self.header, font=("Consolas", 12, "bold"), height=25, fg_color="transparent", text_color="#FFFFFF", border_width=0, activate_scrollbars=False)
         self.name_box.insert("1.0", self.mid)
         self.name_box.configure(state="disabled")
         self.name_box.pack(side="left", fill="x", expand=True)
-        self.name_box.bind("<Button-1>", lambda e: on_click(self.mid))
+        self.name_box.bind("<Button-1>", lambda e=None: on_click(self.mid))
 
         # Capabilities
         caps = model_data.get('capabilities', [])

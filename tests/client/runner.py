@@ -8,6 +8,8 @@ import yaml
 import json
 import shutil
 import subprocess
+import queue
+import requests
 from loguru import logger
 from typing import Any, Optional, Dict, List
 from dataclasses import dataclass, asdict
@@ -23,7 +25,11 @@ if tests_dir not in sys.path: sys.path.insert(0, tests_dir)
 from ui import JarvisApp
 import utils
 from utils.infra.session import init_session
-from test_utils import BOLD, GREEN, RED, YELLOW, RESET, LINE_LEN, RichDashboard
+from test_utils import (
+    BOLD, GREEN, RED, YELLOW, RESET, LINE_LEN, 
+    RichDashboard, UIWorker, UIWorkerPool
+)
+from test_utils.mock_context import mock_context
 from test_utils.scenarios import load_scenarios_from_sources
 from utils.infra.daemon import wait_for_daemon_ready_async
 
@@ -178,10 +184,11 @@ class AutomationController:
         return StatusDumper(self.app)._resolve_widget(path)
 
 class ClientTestRunner:
-    def __init__(self, args, session_dir: str, dashboard: Optional[RichDashboard] = None):
+    def __init__(self, args, session_dir: str, dashboard: Optional[RichDashboard] = None, worker_pool: Optional[UIWorkerPool] = None):
         self.args = args
         self.session_dir = session_dir
         self.app = None
+        self.worker_pool = worker_pool
         self.dashboard = dashboard
         self.automation = None
         self.dumper = None
@@ -205,90 +212,115 @@ class ClientTestRunner:
         temp_scenario_dir = os.path.join(self.session_dir, f"{domain_id}__{safe_sid}")
         os.makedirs(temp_scenario_dir, exist_ok=True)
 
-        self.app = JarvisApp()
-        self.automation = AutomationController(self.app)
-        self.dumper = StatusDumper(self.app)
-        self.visual = VisualVerifier(self.app, temp_scenario_dir)
-        
-        # Ensure Daemon is ready before starting the timeline
-        await wait_for_daemon_ready_async()
-
         self.start_time = time.perf_counter()
-        self.orch_log = self.orch_log.bind(relative_start=self.start_time)
-        
-        timeline = scenario_data.get('timeline', [])
-        # Normalize timestamps
-        for step in timeline:
-            if isinstance(step['t'], str): step['t'] = float(step['t'].replace('s', ''))
+        if self.worker_pool and not self.args.no_prewarm:
+            # FAST PATH: Use pre-warmed process and trigger internal runner
+            worker = self.worker_pool.get_worker()
             
-        step_idx = 0
-        scenario_success = True
-        error_msg = None
-        
-        try:
-            while self.is_running:
-                try:
-                    self.app.update_idletasks()
-                    self.app.update()
-                    # Feed system metrics to dashboard
-                    if self.dashboard and step_idx % 10 == 0:
-                        import psutil
-                        self.dashboard.ram_usage = psutil.virtual_memory().used / (1024**3)
-                        self.dashboard.vram_usage = utils.get_gpu_vram_usage()
-                except:
-                    self.orch_log.info("👋 Window closed. Terminating scenario.")
+            # Create a temporary scenario YAML for the internal runner
+            scenario_yaml = os.path.join(temp_scenario_dir, "scenario.yaml")
+            with open(scenario_yaml, "w") as f:
+                yaml.dump(scenario_data, f)
+            
+            command = {
+                "scenario": scenario_yaml,
+                "report_dir": temp_scenario_dir
+            }
+            worker.trigger_go(json.dumps(command))
+            
+            # Wait for the process to finish with timeout
+            wait_start = time.time()
+            while worker.proc.poll() is None:
+                if time.time() - wait_start > 60:
+                    worker.terminate()
+                    scenario_success = False
+                    error_msg = "Scenario timed out (60s)"
                     break
-                
-                elapsed = time.perf_counter() - self.start_time
-                
-                if step_idx < len(timeline):
-                    step = timeline[step_idx]
-                    if elapsed >= step['t']:
-                        step_success, step_error = await self.execute_action(step)
-                        if not step_success:
-                            scenario_success = False
-                            error_msg = step_error
-                            if self.args.fail_fast:
-                                self.is_running = False
-                                break
-                        step_idx += 1
-                elif elapsed > (timeline[-1]['t'] if timeline else 0) + 1.0:
-                    self.is_running = False
-                
-                await asyncio.sleep(0.01)
-        except Exception as e:
-            scenario_success = False
-            error_msg = str(e)
-            self.orch_log.error(f"💥 Scenario execution failed: {e}")
-        finally:
-            duration = time.perf_counter() - self.start_time
-            status = "PASSED" if scenario_success else "FAILED"
-            self.results.append(TestResult(
-                id=sid,
-                name=scenario_data.get('name', sid),
-                status=status,
-                duration=duration,
-                error=error_msg
-            ))
+                await asyncio.sleep(0.5)
+            else:
+                # Collect results
+                scenario_success = worker.proc.returncode == 0
+                error_msg = None if scenario_success else "Internal runner failed"
             
-            # RENAME Scenario Directory with Status Prefix
-            final_scenario_dir = os.path.join(self.session_dir, f"{status}__{domain_id}__{safe_sid}")
-            try:
-                if os.path.exists(temp_scenario_dir):
-                    os.rename(temp_scenario_dir, final_scenario_dir)
-            except Exception as e:
-                self.orch_log.error(f"Failed to rename scenario folder: {e}")
+            duration = time.perf_counter() - self.start_time
+        else:
+            # ORIGINAL PATH: Local execution (Synchronous Tkinter)
+            self.app = JarvisApp()
+            self.automation = AutomationController(self.app)
+            self.dumper = StatusDumper(self.app)
+            self.visual = VisualVerifier(self.app, temp_scenario_dir)
+            
+            # Ensure Daemon is ready before starting the timeline
+            await wait_for_daemon_ready_async()
 
-            if self.dashboard:
-                self.dashboard.update_scenario(
-                    domain_id, 
-                    "UI_SUITE", 
-                    sid, 
-                    status, 
-                    result=error_msg or "",
-                    duration=duration,
-                    scenario_dir=final_scenario_dir if status == "FAILED" else None
-                )
+            self.start_time = time.perf_counter()
+            self.orch_log = self.orch_log.bind(relative_start=self.start_time)
+            
+            timeline = scenario_data.get('timeline', [])
+            # Normalize timestamps
+            for step in timeline:
+                if isinstance(step['t'], str): step['t'] = float(step['t'].replace('s', ''))
+                
+            step_idx = 0
+            scenario_success = True
+            error_msg = None
+            
+            try:
+                while self.is_running:
+                    try:
+                        self.app.update_idletasks()
+                        self.app.update()
+                    except:
+                        break
+                    
+                    elapsed = time.perf_counter() - self.start_time
+                    if step_idx < len(timeline):
+                        step = timeline[step_idx]
+                        if elapsed >= step['t']:
+                            step_success, step_error = await self.execute_action(step)
+                            if not step_success:
+                                scenario_success = False
+                                error_msg = step_error
+                                if self.args.fail_fast:
+                                    self.is_running = False
+                                    break
+                            step_idx += 1
+                    elif elapsed > (timeline[-1]['t'] if timeline else 0) + 1.0:
+                        self.is_running = False
+                    await asyncio.sleep(0.01)
+            except Exception as e:
+                scenario_success = False
+                error_msg = str(e)
+            finally:
+                duration = time.perf_counter() - self.start_time
+
+        status = "PASSED" if scenario_success else "FAILED"
+        self.results.append(TestResult(
+            id=sid,
+            name=scenario_data.get('name', sid),
+            status=status,
+            duration=duration,
+            error=error_msg
+        ))
+        
+        # RENAME Scenario Directory with Status Prefix
+        final_scenario_dir = os.path.join(self.session_dir, f"{status}__{domain_id}__{safe_sid}")
+        try:
+            if os.path.exists(temp_scenario_dir):
+                os.rename(temp_scenario_dir, final_scenario_dir)
+        except Exception as e:
+            self.orch_log.error(f"Failed to rename scenario folder: {e}")
+
+        if self.dashboard:
+            self.dashboard.update_scenario(
+                domain_id, 
+                "UI_SUITE", 
+                sid, 
+                status, 
+                result=error_msg or "",
+                duration=duration,
+                scenario_dir=final_scenario_dir if status == "FAILED" else None
+            )
             
         return scenario_success
 
@@ -314,7 +346,11 @@ class ClientTestRunner:
                 if contains in actual:
                     self.orch_log.info(f"✅ Assertion Passed: '{target}' contains '{contains}'")
                 else:
-                    err = f"Assertion Failed: '{target}' (Actual: {actual or 'EMPTY'}) does not contain '{contains}'"
+                    # Truncate very long text for cleaner error messages
+                    display_actual = actual
+                    if len(display_actual) > 500:
+                        display_actual = "..." + display_actual[-500:]
+                    err = f"Assertion Failed: '{target}' (Actual: {display_actual or 'EMPTY'}) does not contain '{contains}'"
                     self.orch_log.error(f"❌ {err}")
                     return False, err
             elif action == "assert_system_state":
@@ -406,190 +442,183 @@ class ClientTestRunner:
             json.dump([asdict(r) for r in self.results], f, indent=2)
 
 async def main():
-    parser = argparse.ArgumentParser(description="Jarvis Client UI Test Runner")
-    parser.add_argument("plan", type=str, help="Path to a Plan YAML.")
-    parser.add_argument("--mock-all", action="store_true", help="Alias for --mock-models and --mock-edge")
-    parser.add_argument("--mock-models", action="store_true", help="Use fast stub models")
-    parser.add_argument("--mock-edge", action="store_true", help="Bypass physical hardware")
-    parser.add_argument("--fail-fast", action="store_true", help="Stop execution on first failure.")
-    parser.add_argument("--keep-alive", action="store_true", help="Skip initial backend cleanup.")
-    args = parser.parse_args()
-
-    if args.mock_all:
-        args.mock_models = True
-        args.mock_edge = True
-
-    plan_path = utils.resolve_path(args.plan)
-    with open(plan_path, 'r') as f:
-        plan_data = yaml.safe_load(f)
-
-    if 'execution' not in plan_data:
-        raise ValueError(f"Invalid Client Plan: '{plan_path}' missing 'execution' block.")
-
-    # 1. Resolve ALL scenarios across all domains
-    all_patterns = []
-    for block in plan_data['execution']:
-        all_patterns.extend(block.get('scenarios', []))
-    
-    from test_utils.scenarios import resolve_plan_scenarios
-    resolved_scenarios = resolve_plan_scenarios(project_root, "client", all_patterns)
-
-    # Initialize Unified Session
-    session_dir = init_session("test_ui")
-    session_id = os.path.basename(session_dir)
-    
-    # Setup Dashboard
-    dashboard = RichDashboard("Jarvis UI Test", session_id=session_id)
-    dashboard.active_log_path = os.path.join(session_dir, "timeline.log")
-    
-    # Build the dashboard structure using RESOLVED scenarios
-    structure = {}
-    for block in plan_data['execution']:
-        d_id = block.get('domain', 'UI_TESTS').lower()
-        patterns = block.get('scenarios', [])
-        
-        # Find which resolved IDs belong to this block's patterns
-        import fnmatch
-        block_scen_ids = []
-        for p in patterns:
-            source, scen_p = p.split("/", 1) if "/" in p else ("client_ui", p)
-            for rid in resolved_scenarios:
-                r_source, r_id = rid.split("/", 1)
-                if r_source == source and fnmatch.fnmatch(r_id, scen_p):
-                    block_scen_ids.append(rid)
-        
-        if d_id not in structure:
-            structure[d_id] = {
-                "status": "pending", "done": 0, "total": 0,
-                "models_done": 0, "start_time": None, "duration": 0,
-                "loadouts": {
-                    "UI_SUITE": {
-                        "status": "pending", "done": 0, "total": 0,
-                        "duration": 0, "errors": 0, "phase": None, "models": ["UI Automation Controller"],
-                        "scenarios": {}
-                    }
-                }
-            }
-        
-        structure[d_id]["total"] += len(block_scen_ids)
-        structure[d_id]["loadouts"]["UI_SUITE"]["total"] += len(block_scen_ids)
-        for rid in block_scen_ids:
-            structure[d_id]["loadouts"]["UI_SUITE"]["scenarios"][rid] = {"status": "pending", "duration": 0, "error": None}
-        
-        # Store the resolved IDs for this block for the execution loop
-        block['resolved_ids'] = block_scen_ids
-
-    dashboard.init_plan_structure(structure)
-    
-    # Load system info for dashboard
-    with open(os.path.join(session_dir, "system_info.yaml"), "r") as f: system_info = yaml.safe_load(f)
-    dashboard.finalize_boot(session_id, system_info, session_dir=session_dir)
-    dashboard.start()
-
-    daemon_proc = None
     try:
-        # Clear checkpoint cache
-        cache_path = os.path.join(project_root, "system_config", ".system_cache.yaml")
-        ui_checkpoint = os.path.join(project_root, ".cache", "checkpoint-client.json")
-        for cp in [cache_path, ui_checkpoint]:
-            if os.path.exists(cp):
-                try: os.remove(cp)
-                except: pass
-        
-        if args.mock_all: 
-            os.environ['JARVIS_UI_TEST'] = "1"
-            os.environ['JARVIS_MOCK_MODELS'] = "1"
-            os.environ['JARVIS_MOCK_EDGE'] = "1"
+        parser = argparse.ArgumentParser(description="Jarvis Client UI Test Runner")
+        parser.add_argument("plan", type=str, help="Path to a Plan YAML.")
+        parser.add_argument("--mock-all", action="store_true", help="Alias for --mock-models and --mock-edge")
+        parser.add_argument("--fail-fast", action="store_true", help="Stop execution on first failure.")
+        parser.add_argument("--keep-alive", action="store_true", help="Skip initial backend cleanup.")
+        parser.add_argument("--no-persistence", action="store_true", help="Disable plan-level daemon persistence.")
+        parser.add_argument("--no-prewarm", action="store_true", help="Disable UI process pre-warming.")
+        args = parser.parse_args()
 
-        # Pre-test backend cleanup
-        if not args.keep_alive:
-            from manage_loadout import kill_loadout
-            kill_loadout("all")
-            # Kill any existing daemon on config port (Surgically)
-            try:
-                import psutil
-                from utils import load_config
-                cfg = load_config()
-                daemon_port = cfg.get('ports', {}).get('daemon', 5555)
-                for conn in psutil.net_connections(kind='inet'):
-                    if conn.laddr.port == daemon_port and conn.pid:
-                        try:
-                            psutil.Process(conn.pid).kill()
-                            logger.info(f"Surgically killed existing Daemon on port {daemon_port}")
-                        except: pass
-            except Exception as e:
-                logger.warning(f"Surgical daemon cleanup failed: {e}")
+        plan_path = utils.resolve_path(args.plan)
+        with open(plan_path, 'r') as f:
+            plan_data = yaml.safe_load(f)
 
-        # Start the Daemon
-        logger.info("Starting Jarvis Daemon for UI tests...")
-        daemon_log = open(os.path.join(session_dir, "daemon.log"), "w")
-        daemon_proc = subprocess.Popen(
-            [sys.executable, os.path.join(project_root, "jarvis_daemon.py")],
-            env=os.environ.copy(),
-            stdout=daemon_log,
-            stderr=subprocess.STDOUT
-        )
-        
-        # Wait for Daemon to be fully alive
-        import requests
-        daemon_alive = False
-        daemon_port = cfg.get('ports', {}).get('daemon', 5555)
-        for _ in range(30):
-            try:
-                r = requests.get(f"http://127.0.0.1:{daemon_port}/status", timeout=1.0)
-                if r.status_code == 200:
-                    daemon_alive = True
-                    break
-            except: pass
-            time.sleep(0.5)
-            
-        if not daemon_alive:
-            raise RuntimeError(f"Jarvis Daemon failed to bind to port {daemon_port} within 15 seconds.")
-        logger.info("Jarvis Daemon is online and ready.")
-
-        runner = ClientTestRunner(args, session_dir, dashboard=dashboard)
-        
-        # 1. Mandatory settlement after initial cleanup
-        await wait_for_daemon_ready_async()
-        await asyncio.sleep(0.5) # UI Settle grace period
-
-        # Execute using PRE-RESOLVED IDs from the initialization phase
+        # 1. Resolve ALL scenarios across all domains
+        all_patterns = []
         for block in plan_data['execution']:
-            domain_id = block.get('domain', 'UI_TESTS').upper()
-            resolved_ids = block.get('resolved_ids', [])
+            all_patterns.extend(block.get('scenarios', []))
+        
+        from test_utils.scenarios import resolve_plan_scenarios
+        resolved_scenarios = resolve_plan_scenarios(project_root, "client", all_patterns)
+
+        # Wrap in mock_context for session init and env management
+        with mock_context(mock_all=args.mock_all, session_type="test_ui", service_name="Runner") as session_dir:
+            session_id = os.path.basename(session_dir)
             
-            success = True # Initialize for this block
-            for sid in resolved_ids:
-                if sid in resolved_scenarios:
+            # Setup Dashboard
+            dashboard = RichDashboard("Jarvis UI Test", session_id=session_id)
+            dashboard.active_log_path = os.path.join(session_dir, "timeline.log")
+            
+            # Build the dashboard structure using RESOLVED scenarios
+            structure = {}
+            for block in plan_data['execution']:
+                d_id = block.get('domain', 'UI_TESTS').lower()
+                patterns = block.get('scenarios', [])
+                
+                import fnmatch
+                block_scen_ids = []
+                for p in patterns:
+                    source, scen_p = p.split("/", 1) if "/" in p else ("client_ui", p)
+                    for rid in resolved_scenarios:
+                        r_source, r_id = rid.split("/", 1)
+                        if r_source == source and fnmatch.fnmatch(r_id, scen_p):
+                            block_scen_ids.append(rid)
+                
+                if d_id not in structure:
+                    structure[d_id] = {
+                        "status": "pending", "done": 0, "total": 0,
+                        "models_done": 0, "start_time": None, "duration": 0,
+                        "loadouts": {
+                            "UI_SUITE": {
+                                "status": "pending", "done": 0, "total": 0,
+                                "duration": 0, "errors": 0, "phase": None, "models": ["UI Automation Controller"],
+                                "scenarios": {}
+                            }
+                        }
+                    }
+                
+                structure[d_id]["total"] += len(block_scen_ids)
+                structure[d_id]["loadouts"]["UI_SUITE"]["total"] += len(block_scen_ids)
+                for rid in block_scen_ids:
+                    structure[d_id]["loadouts"]["UI_SUITE"]["scenarios"][rid] = {"status": "pending", "duration": 0, "error": None}
+                block['resolved_ids'] = block_scen_ids
+
+            dashboard.init_plan_structure(structure)
+            
+            # Load system info for dashboard
+            with open(os.path.join(session_dir, "system_info.yaml"), "r") as f: system_info = yaml.safe_load(f)
+            dashboard.finalize_boot(session_id, system_info, session_dir=session_dir)
+            dashboard.start()
+
+            # Pre-boot preparation
+            from utils import load_config
+            cfg = load_config()
+            daemon_port = cfg.get('ports', {}).get('daemon', 5555)
+            
+            # Pre-test backend cleanup
+            from manage_loadout import kill_loadout
+            if not args.keep_alive:
+                kill_loadout("all")
+                # Kill any existing daemon on config port (Surgically)
+                try:
+                    import psutil
+                    daemon_port = cfg.get('ports', {}).get('daemon', 5555)
+                    for conn in psutil.net_connections(kind='inet'):
+                        if conn.laddr.port == daemon_port:
+                            try:
+                                psutil.Process(conn.pid).kill()
+                                logger.info(f"Surgically killed existing Daemon on port {daemon_port}")
+                            except: pass
+                except Exception as e:
+                    logger.warning(f"Surgical daemon cleanup failed: {e}")
+
+            # Start Persistent Daemon
+            daemon_proc = None
+            if not args.no_persistence:
+                logger.info("🚀 Starting Persistent Jarvis Daemon...")
+                daemon_log_path = os.path.join(session_dir, "daemon_boot.log")
+                daemon_log = open(daemon_log_path, "w")
+                daemon_proc = subprocess.Popen(
+                    [sys.executable, os.path.join(project_root, "jarvis_daemon.py")],
+                    env=os.environ.copy(),
+                    stdout=daemon_log,
+                    stderr=subprocess.STDOUT
+                )
+                # Wait for daemon
+                import requests
+                for _ in range(30):
+                    try:
+                        if requests.get(f"http://127.0.0.1:{daemon_port}/status", timeout=1.0).status_code == 200: break
+                    except: pass
+                    time.sleep(0.5)
+
+            # Initialize Worker Pool
+            worker_pool = None
+            if not args.no_prewarm:
+                # Create an initial state file for workers to fast-boot
+                init_state_file = os.path.join(session_dir, "initial_state.json")
+                try:
+                    r = requests.get(f"http://127.0.0.1:{daemon_port}/status", timeout=1.0)
+                    with open(init_state_file, "w") as f:
+                        json.dump({"health": {}, "models": [], "loadout": "NONE", "vram": r.json().get('vram', {})}, f)
+                except: pass
+                
+                logger.info("🏭 Initializing UI Worker Pool...")
+                worker_pool = UIWorkerPool(session_dir, initial_state_file=init_state_file, project_root=project_root)
+
+            runner = ClientTestRunner(args, session_dir, dashboard=dashboard, worker_pool=worker_pool)
+
+            for block in plan_data['execution']:
+                domain_id = block.get('domain', 'UI_TESTS').upper()
+                resolved_ids = block.get('resolved_ids', [])
+                
+                success = True
+                for sid in resolved_ids:
                     sdata = resolved_scenarios[sid]
                     
-                    # 2. Ensure daemon is ready for the NEXT command
-                    await wait_for_daemon_ready_async()
-                    
+                    # RESET Daemon before each test if persistent
+                    if not args.no_persistence:
+                        try:
+                            # Use a non-blocking clear
+                            requests.delete(f"http://127.0.0.1:{daemon_port}/loadout", timeout=1.0)
+                        except: pass
+
                     success = await runner.run_scenario(sid, sdata, domain_id)
-                    
-                    # 3. Settle after scenario if it triggered a loadout change
-                    await wait_for_daemon_ready_async(require_models=True)
-                    await asyncio.sleep(0.5) # UI Settle grace period
-                    
-                    if not success and args.fail_fast:
-                        break
-                else:
-                    logger.error(f"Scenario '{sid}' not found in resolved map.")
-            
-            dashboard.finalize_loadout(domain_id, "UI_SUITE", 0, status="passed" if success else "failed")
-            dashboard.finalize_domain(domain_id)
-            if not success and args.fail_fast:
-                break
+                    if not success and args.fail_fast: break
+                
+                dashboard.finalize_loadout(domain_id, "UI_SUITE", 0, status="passed" if success else "failed")
+                dashboard.finalize_domain(domain_id)
+                if not success and args.fail_fast: break
 
-        runner.print_summary()
+            runner.print_summary()
 
+    except Exception as e:
+        import traceback
+        err_details = traceback.format_exc()
+        logger.critical(f"💥 UNCAUGHT EXCEPTION - CRASHING\n{err_details}")
+        # Ensure it's printed to console even if logger is intercepted
+        print(f"\n{RED}CRITICAL ERROR: {e}{RESET}")
+        print(err_details)
+        sys.exit(1)
     finally:
-        dashboard.stop()
-        if daemon_proc:
+        try: dashboard.stop()
+        except: pass
+        if 'daemon_proc' in locals() and daemon_proc: 
             try: daemon_proc.terminate()
             except: pass
-        print(f"\n✅ UI Test Session Complete\n📂 Session: {session_dir}")
+        # Check if worker_pool exists in local scope
+        wp = locals().get('worker_pool')
+        if wp:
+            # Kill all workers
+            while not wp.pool.empty():
+                try: wp.get_worker().terminate()
+                except: pass
+        if 'session_dir' in locals() and session_dir:
+            print(f"\n✅ UI Test Session Complete\n📂 Session: {session_dir}")
+
 
 if __name__ == "__main__":
     try:

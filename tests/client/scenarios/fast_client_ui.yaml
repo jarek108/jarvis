@@ -1,0 +1,144 @@
+# Aggressive UI Automation Scenarios for rapid feedback loops
+
+ui_startup_state:
+  name: "Verify initial UI state on startup."
+  timeline:
+    - t: 1.0s
+      action: assert_system_state
+      condition: "no_models_active"
+    - t: 1.2s
+      action: take_screenshot
+      file: "startup_state.jpg"
+
+ui_ux_initial_vram_boot:
+  name: "Verify spinner stops correctly after boot."
+  timeline:
+    - t: 1.5s
+      action: assert_ux_state
+      condition: "spinner_inactive"
+    - t: 2.0s
+      action: take_screenshot
+      file: "boot_finished.jpg"
+
+ui_loadout_activation_latency:
+  name: "Verify UI response during activation."
+  timeline:
+    - t: 1.0s
+      action: select_dropdown
+      target: "loadout_opt"
+      value: "Speech-to-Speech, light"
+    - t: 1.5s 
+      action: assert_system_state
+      condition: "models_loading"
+    - t: 4.5s
+      action: take_screenshot
+      file: "loadout_loading_state.jpg"
+
+ui_loadout_deactivation:
+  name: "Verify UI teardown responsiveness."
+  timeline:
+    - t: 1.0s
+      action: select_dropdown
+      target: "loadout_opt"
+      value: "Speech-to-Speech, light"
+    - t: 3.5s # Wait for initial load to stabilize
+      action: select_dropdown
+      target: "loadout_opt"
+      value: "NONE"
+    - t: 5.0s
+      action: assert_system_state
+      condition: "no_models_active"
+    - t: 5.5s
+      action: assert_ui_text
+      target: "record_btn"
+      contains: "OFFLINE"
+
+ui_loadout_idempotency:
+  name: "Verify rapid loadout selection."
+  timeline:
+    - t: 1.0s
+      action: select_dropdown
+      target: "loadout_opt"
+      value: "Speech-to-Speech, light"
+    - t: 3.5s # Mock models take ~2.5s to load
+      action: assert_system_state
+      condition: "all_models_active"
+      
+ui_loadout_sidempotency_redo:
+  name: "Verify active loadout re-selection is ignored instantly."
+  timeline:
+    - t: 1.0s
+      action: select_dropdown
+      target: "loadout_opt"
+      value: "Speech-to-Speech, light"
+    - t: 3.5s
+      action: assert_system_state
+      condition: "all_models_active"
+    - t: 4.0s
+      action: select_dropdown
+      target: "loadout_opt"
+      value: "Speech-to-Speech, light"
+    - t: 4.1s
+      action: assert_system_state
+      condition: "all_models_active"
+
+ui_loadout_switch_latency:
+  name: "Verify visual transition performance."
+  timeline:
+    - t: 1.0s
+      action: select_dropdown
+      target: "loadout_opt"
+      value: "Speech-to-Speech, light"
+    - t: 1.2s
+      action: assert_ui_text
+      target: "mode_label"
+      contains: "TERMINAL"
+    - t: 2.0s
+      action: take_screenshot
+      file: "loadout_transition.jpg"
+    - t: 4.0s
+      action: assert_system_state
+      condition: "all_models_active"
+    - t: 4.5s
+      action: assert_ui_text
+      target: "terminal"
+      contains: "LOADOUT APPLIED"
+    - t: 5.0s
+      action: take_screenshot
+      file: "loadout_final.jpg"
+
+ui_graph_mapping_status:
+  name: "Verify Graph sync performance."
+  timeline:
+    - t: 1.0s
+      action: take_screenshot
+      file: "graph_unbound.jpg"
+    - t: 1.2s
+      action: select_dropdown
+      target: "loadout_opt"
+      value: "Speech-to-Speech, heavy"
+    - t: 4.5s
+      action: take_screenshot
+      file: "graph_bound.jpg"
+
+ui_ux_persistence_maximize_stage1:
+  name: "Verify maximization speed."
+  timeline:
+    - t: 0.5s
+      action: maximize_window
+    - t: 1.0s
+      action: assert_ux_state
+      condition: "maximized"
+    - t: 1.5s
+      action: take_screenshot
+      file: "stage1_maximized.jpg"
+
+ui_ux_persistence_maximize_stage2:
+  name: "Verify persistence restoration speed."
+  timeline:
+    - t: 1.0s
+      action: assert_ux_state
+      condition: "stable_maximized"
+    - t: 1.2s
+      action: take_desktop_screenshot
+      file: "stable_final.jpg"

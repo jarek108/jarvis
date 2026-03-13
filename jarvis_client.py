@@ -15,6 +15,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Jarvis Desktop Client")
     parser.add_argument("--mock-all", action="store_true", help="Enable mocking for all models and hardware.")
     parser.add_argument("--debug", action="store_true", help="Enable verbose debug logging to console.")
+    parser.add_argument("--initial-state", type=str, help="Path to initial state JSON (for fast-booting).")
     args = parser.parse_args()
 
     if args.debug:
@@ -27,7 +28,8 @@ if __name__ == "__main__":
         os.environ['JARVIS_MOCK_ALL'] = "1"
         logger.info("🧪 MOCK MODE ENABLED")
 
-    app = JarvisApp()
+    app = JarvisApp(initial_state_path=args.initial_state)
+
     try:
         app.mainloop()
     except KeyboardInterrupt:

@@ -11,7 +11,7 @@ async def is_port_in_use_async(port: int) -> bool:
     try:
         # We only need to see if we can open a connection; we don't need to read/write
         conn = asyncio.open_connection('127.0.0.1', port)
-        reader, writer = await asyncio.wait_for(conn, timeout=0.1)
+        reader, writer = await asyncio.wait_for(conn, timeout=1.5)
         writer.close()
         await writer.wait_closed()
         return True

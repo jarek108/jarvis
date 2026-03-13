@@ -1,0 +1,22 @@
+name: "Ultra Fast Client UI Tests"
+description: "High-performance UI verification using minimized wait states."
+
+execution:
+  - domain: "UI_BOOT"
+    scenarios:
+      - "fast_client_ui/ui_startup_state"
+      - "fast_client_ui/ui_ux_initial_vram_boot"
+  - domain: "LOADOUT_MGMT"
+    scenarios:
+      - "fast_client_ui/ui_loadout_activation_latency"
+      - "fast_client_ui/ui_loadout_deactivation"
+      - "fast_client_ui/ui_loadout_idempotency"
+      - "fast_client_ui/ui_loadout_sidempotency_redo"
+      - "fast_client_ui/ui_loadout_switch_latency"
+  - domain: "GRAPH_SYNC"
+    scenarios:
+      - "fast_client_ui/ui_graph_mapping_status"
+  - domain: "WINDOW_MGMT"
+    scenarios:
+      - "fast_client_ui/ui_ux_persistence_maximize_stage1"
+      - "fast_client_ui/ui_ux_persistence_maximize_stage2"

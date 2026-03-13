@@ -61,12 +61,20 @@ class StateManager:
                         mdata['info'] = health[port]['info']
                         if st not in ["ON", "BUSY"]: all_on = False
                         if st in ["ERROR", "UNHEALTHY"]: any_error = True
+                        mdata['fail_count'] = 0
                     else:
-                        st = "OFF"
+                        # Fail-safe: only drop to OFF after multiple failed polls
+                        mdata['fail_count'] = mdata.get('fail_count', 0) + 1
+                        
+                        if mdata['fail_count'] < 3 or (old_state == "STARTING" and self.active_task == "APPLYING"):
+                            st = old_state # Keep last known state
+                        else:
+                            st = "OFF"
+                            
                         mdata['state'] = st
                         all_on = False
                     
-                    if st != old_state and old_state != "OFF":
+                    if st != old_state:
                         logger.info(f"[State Transition] {mdata['id']} changed from {old_state} to {st}")
                 
                 old_global = self.global_state
@@ -221,6 +229,25 @@ async def clear_loadout(background_tasks: BackgroundTasks, force: bool = False):
 
 if __name__ == "__main__":
     from utils import load_config
+    
+    # Ensure project root is in sys.path so we can find test_utils
+    import os
+    import sys
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    if script_dir not in sys.path:
+        sys.path.insert(0, script_dir)
+    
+    tests_dir = os.path.join(script_dir, "tests")
+    if tests_dir not in sys.path:
+        sys.path.insert(0, tests_dir)
+        
+    from test_utils.mock_context import mock_context
+    
     cfg = load_config()
     daemon_port = cfg.get('ports', {}).get('daemon', 5555)
-    uvicorn.run(app, host="127.0.0.1", port=daemon_port)
+    
+    mock_all = os.environ.get('JARVIS_MOCK_ALL') == "1"
+    session_dir = os.environ.get('JARVIS_SESSION_DIR')
+    
+    with mock_context(mock_all=mock_all, session_type="DAEMON", service_name="Daemon", session_dir=session_dir):
+        uvicorn.run(app, host="127.0.0.1", port=daemon_port)

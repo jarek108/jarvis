@@ -37,7 +37,7 @@ def save_runtime_registry(services, project_root=None, external_vram=0.0, loadou
     }
     with open(registry_path, "w") as f:
         json.dump(data, f, indent=2)
-    logger.info(f"Runtime registry updated at {registry_path} (Task: {active_task})")
+    logger.debug(f"Runtime registry updated at {registry_path} (Task: {active_task})")
 
 def apply_loadout(name, project_root=None, soft=False, external_vram=0.0):
     if not project_root: project_root = script_dir
@@ -86,11 +86,21 @@ def apply_loadout(name, project_root=None, soft=False, external_vram=0.0):
         # Check current VRAM usage before starting
         logger.info(f"System External VRAM: {external_vram:.1f} GB")
         
-        logger.info("Soft switch: Purging only replaced service types...")
-        # Get list of running services (if we can find them)
-        # For now, let's just kill the specific IDs we are about to launch to be safe
-        for s in required_services:
-            kill_service(s['id'], project_root)
+        # Determine what is currently running
+        current_ids = []
+        try:
+            registry_path = get_runtime_registry_path(project_root)
+            if os.path.exists(registry_path):
+                with open(registry_path, "r") as f:
+                    old_reg = json.load(f)
+                    current_ids = [m['id'] for m in old_reg.get('models', [])]
+        except: pass
+
+        logger.info("Soft switch: Purging obsolete services...")
+        # Kill anything currently running that is NOT in our new required list
+        for cid in current_ids:
+            if cid not in required_ids:
+                kill_service(cid, project_root)
 
     # 3. Launching
     config = load_config()

@@ -20,7 +20,7 @@ from manage_loadout import apply_loadout, kill_loadout, restart_service, kill_se
 CHECKPOINT_PATH = os.path.join(script_dir, ".cache", "checkpoint-client.json")
 
 class JarvisController:
-    def __init__(self, ui_queue):
+    def __init__(self, ui_queue, initial_state_path=None):
         self.ui_queue = ui_queue
         self.cfg = load_config()
         self.project_root = script_dir
@@ -29,7 +29,8 @@ class JarvisController:
         # Legacy UI sink - only routes to visual terminal, does not log to disk
         def ui_sink(message):
             self.ui_queue.put({"type": "log", "msg": message.record["message"], "tag": "system"})
-        logger.add(ui_sink, format="{message}", level="INFO", filter=lambda r: "domain" not in r["extra"])
+        # Allow logs that have no domain (Global logs), even if they have other extra metadata
+        logger.add(ui_sink, format="{message}", level="INFO", filter=lambda r: not r["extra"].get("domain"))
 
         # 3. State
         self.current_session_id = f"CLIENT_{time.strftime('%Y%m%d_%H%M%S')}"
@@ -57,6 +58,7 @@ class JarvisController:
         self.is_polling = True
         self.health_state = {}
         self.runnability = {"runnable": False, "errors": ["Initializing..."], "map": {}}
+        self._last_daemon_state = "IDLE"
         
         # 4. Embedded Flow Engine (Session Aware)
         self.resolver = PipelineResolver(self.project_root)
@@ -64,6 +66,30 @@ class JarvisController:
         
         # Edge Hardware (bound via registry)
         self.ptt_signal = threading.Event()
+
+        # 5. Fast-boot from initial state if provided
+        if initial_state_path and os.path.exists(initial_state_path):
+            try:
+                with open(initial_state_path, "r") as f:
+                    init_data = json.load(f)
+                    self.health_state = init_data.get("health", {})
+                    self.current_loadout = init_data.get("loadout", self.current_loadout)
+                    active_models = init_data.get("models", [])
+                    vram = init_data.get("vram", {"used": 0.0, "total": 0.0, "external": 0.0})
+                    self.runnability = self.resolver.check_runnability(
+                        self.current_pipeline, self.current_strategy, 
+                        external_health=self.health_state, silent=True
+                    )
+                    self.ui_queue.put({
+                        "type": "health_update",
+                        "health": self.health_state,
+                        "runnability": self.runnability,
+                        "active_models": active_models,
+                        "vram": vram
+                    })
+                    logger.info(f"🚀 FAST-BOOT: Loaded initial state from {initial_state_path}")
+            except Exception as e:
+                logger.error(f"Failed to load initial state: {e}")
         
         threading.Thread(target=self._status_polling_loop, daemon=True).start()
 
@@ -139,6 +165,16 @@ class JarvisController:
                     )
                     self._last_poll_state = current_state
                 
+                # Logic for "LOADOUT APPLIED" detection
+                try:
+                    daemon_state = daemon_status.get("global_state")
+                    if daemon_state == "READY" and self._last_daemon_state in ["STARTING", "IDLE"]:
+                        msg = "✅ LOADOUT APPLIED"
+                        logger.info(msg)
+                        self.ui_queue.put({"type": "log", "msg": msg, "tag": "system"})
+                    self._last_daemon_state = daemon_state
+                except: pass
+
                 self.ui_queue.put({
                     "type": "health_update", 
                     "health": self.health_state, 

@@ -18,7 +18,7 @@ if script_dir not in sys.path:
     sys.path.append(script_dir)
 
 class JarvisApp(ctk.CTk):
-    def __init__(self):
+    def __init__(self, initial_state_path=None):
         self._boot_time = time.perf_counter()
         self.ui_logger = logger.bind(domain="UI", relative_start=self._boot_time)
 
@@ -26,7 +26,7 @@ class JarvisApp(ctk.CTk):
         self.title("JARVIS CORE CONSOLE")
         self._ui_log("APP_BOOT", "Initializing JarvisApp")
         self.queue = queue.Queue()
-        self.controller = JarvisController(self.queue)
+        self.controller = JarvisController(self.queue, initial_state_path=initial_state_path)
 
         # 1. Set restored geometry first if it exists
         if self.controller.geometry:
