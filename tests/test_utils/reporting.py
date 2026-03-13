@@ -120,6 +120,7 @@ class RichDashboard:
             "•",
             TextColumn("[bold cyan]{task.completed}/{task.total}"),
             "•",
+            TimeElapsedColumn(),
             TextColumn("{task.fields[extra]}"),
         )
         self.boot_task = self.overall_progress.add_task("Booting / Pre-flight", total=5, extra="")
