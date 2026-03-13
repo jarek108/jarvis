@@ -29,6 +29,11 @@ def mock_context(mock_all=True, session_type="APP", service_name=None, session_d
     # If session_dir is provided, we use it directly instead of init_session
     if not session_dir and session_type:
         session_dir = init_session(session_type)
+    elif session_dir and session_type:
+        # We are a sub-process (Daemon or Worker) using the runner's session
+        # We still want to init_session for loguru setup, but SKIP the expensive system info
+        # and SKIP stdout redirection (sub-processes should handle their own streams or uvicorn fails)
+        init_session(session_type, skip_system_info=True, skip_stdout_redirection=True)
         
     if session_dir and service_name:
         # Add a specific sink for this service without removing others

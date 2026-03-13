@@ -3,6 +3,7 @@ import sys
 import os
 import time
 import io
+import threading
 from concurrent.futures import ThreadPoolExecutor
 from rich.console import Console
 from rich.layout import Layout
@@ -17,6 +18,8 @@ from utils.console import (
     ensure_utf8_output,
     CYAN, GREEN, RED, YELLOW, GRAY, RESET, BOLD, LINE_LEN
 )
+
+from utils.infra.session import SESSION_START_TIME
 
 def format_status(status):
     if status == "PASSED": return f"{GREEN}[PASS]{RESET}"
@@ -117,10 +120,10 @@ class RichDashboard:
             "•",
             TextColumn("[bold cyan]{task.completed}/{task.total}"),
             "•",
-            TimeElapsedColumn(),
+            TextColumn("{task.fields[extra]}"),
         )
-        self.boot_task = self.overall_progress.add_task("Booting / Pre-flight", total=5)
-        self.overall_task = self.overall_progress.add_task("Total Scenarios", total=100)
+        self.boot_task = self.overall_progress.add_task("Booting / Pre-flight", total=5, extra="")
+        self.overall_task = self.overall_progress.add_task("Total Scenarios", total=100, extra="")
         
         self.current_loadout = None
         self.active_log_path = None
@@ -132,8 +135,10 @@ class RichDashboard:
         self.recent_logs = []
         
         self._snapshot_path = None
-        self._stop_event = None
+        self._stop_event = threading.Event()
         self._snapshot_thread = None
+        self._boot_start = time.perf_counter()
+        self.boot_duration = 0
 
         # Use screen=False to allow the final frame to persist in the scrollback buffer.
         self.live = Live(self, console=self.console, refresh_per_second=4, screen=False, redirect_stdout=False)
@@ -254,7 +259,8 @@ class RichDashboard:
             self.ram_usage = host.get('ram_used_gb', self.ram_usage)
             self.cpu_info = host.get('cpu', self.cpu_info)
 
-        self.overall_progress.update(self.boot_task, completed=5)
+        self.boot_duration = time.perf_counter() - self._boot_start
+        self.overall_progress.update(self.boot_task, completed=5, extra=f"({self.boot_duration:.1f}s)")
 
     def update_phase(self, domain, loadout, phase, status="wip"):
         d_data = self.test_data.get(domain.lower())

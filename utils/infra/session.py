@@ -50,15 +50,18 @@ class StreamToLogger:
 
 def relative_formatter(record):
     """Custom formatter to show timestamps relative to session/scenario start."""
+    # Loguru records are dict-like but it's safer to treat them as dicts
+    extra = record.get("extra", {})
+    
     # Use context-provided relative_start if available (for tests), else global SESSION_START_TIME
-    start_t = record["extra"].get("relative_start", SESSION_START_TIME)
+    start_t = extra.get("relative_start", SESSION_START_TIME)
     elapsed = time.perf_counter() - start_t
     
     # Format: [+0.123s]
     rel_time = f"[+{elapsed:07.3f}s]"
     
     # Check for domain to add prefix
-    domain = record["extra"].get("domain", "")
+    domain = extra.get("domain", "")
     domain_str = f" | {domain: <12}" if domain else ""
     
     # Escape curly braces in the message because Loguru treats the return value of a formatter function as a format template
@@ -66,7 +69,7 @@ def relative_formatter(record):
     
     return f"<green>{rel_time}</green>{domain_str} | <level>{record['level']: <8}</level> | <level>{msg}</level>\n"
 
-def init_session(domain: str) -> str:
+def init_session(domain: str, skip_system_info: bool = False, skip_stdout_redirection: bool = False) -> str:
     """
     Initializes a unified Jarvis session.
     1. Generates timestamped directory: logs/{domain}/{YYYYMMDD_HHMMSS}/.
@@ -102,18 +105,23 @@ def init_session(domain: str) -> str:
     sys.excepthook = exception_handler
     
     # Redirect raw stdout/stderr to capture non-Python errors (e.g. Tkinter/C++)
-    sys.stdout = StreamToLogger(level="DEBUG")
-    sys.stderr = StreamToLogger(level="ERROR")
+    # Only if not already redirected
+    if not skip_stdout_redirection:
+        if not isinstance(sys.stdout, StreamToLogger):
+            sys.stdout = StreamToLogger(level="DEBUG")
+        if not isinstance(sys.stderr, StreamToLogger):
+            sys.stderr = StreamToLogger(level="ERROR")
 
     # 3. System Info Dump
-    try:
-        from tests.test_utils.session import gather_system_info
-        info = gather_system_info("") 
-        with open(os.path.join(session_dir, "system_info.yaml"), "w", encoding="utf-8") as f:
-            yaml.dump(info, f, sort_keys=False)
-    except Exception as e:
-        # Use direct print since we hijacked logger via sys.stderr
-        print(f"Failed to dump system_info: {e}")
+    if not skip_system_info:
+        try:
+            from tests.test_utils.session import gather_system_info
+            info = gather_system_info("") 
+            with open(os.path.join(session_dir, "system_info.yaml"), "w", encoding="utf-8") as f:
+                yaml.dump(info, f, sort_keys=False)
+        except Exception as e:
+            # Use direct print since we hijacked logger via sys.stderr
+            print(f"Failed to dump system_info: {e}")
 
     # 4. Retention Policy (Categorized by Domain Folder)
     try:

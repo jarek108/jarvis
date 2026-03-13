@@ -15,7 +15,7 @@ if project_root not in sys.path:
 
 from ui import JarvisApp
 from utils.infra.session import init_session
-from tests.client.runner import AutomationController, StatusDumper, VisualVerifier
+from tests.client.automation import AutomationController, StatusDumper, VisualVerifier
 
 def run_internal_step(app, scenario_data, step_idx, start_t, automation, dumper, visual):
     timeline = scenario_data.get('timeline', [])
@@ -63,7 +63,7 @@ def main():
     if args.debug:
         os.environ['JARVIS_DEBUG'] = "1"
 
-    from test_utils.mock_context import mock_context
+    from tests.test_utils.mock_context import mock_context
     session_dir = os.environ.get('JARVIS_SESSION_DIR')
     
     # Wrap in mock_context for session init and env management

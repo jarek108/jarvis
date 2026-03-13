@@ -3,15 +3,12 @@ import sys
 import time
 import asyncio
 import argparse
-import threading
 import yaml
 import json
-import shutil
 import subprocess
-import queue
 import requests
 from loguru import logger
-from typing import Any, Optional, Dict, List
+from typing import Optional, Dict, List
 from dataclasses import dataclass, asdict
 
 # Add project root and tests directory to sys.path
@@ -22,23 +19,13 @@ tests_dir = os.path.join(project_root, "tests")
 if project_root not in sys.path: sys.path.insert(0, project_root)
 if tests_dir not in sys.path: sys.path.insert(0, tests_dir)
 
-from ui import JarvisApp
 import utils
-from utils.infra.session import init_session
 from test_utils import (
     BOLD, GREEN, RED, YELLOW, RESET, LINE_LEN, 
-    RichDashboard, UIWorker, UIWorkerPool
+    RichDashboard
 )
+from tests.infra.process_manager import UIWorkerPool
 from test_utils.mock_context import mock_context
-from test_utils.scenarios import load_scenarios_from_sources
-from utils.infra.daemon import wait_for_daemon_ready_async
-
-# --- Optional Dependencies ---
-try:
-    import mss
-    import PIL.Image
-except ImportError:
-    mss = PIL = None
 
 @dataclass
 class TestResult:
@@ -48,151 +35,12 @@ class TestResult:
     duration: float
     error: Optional[str] = None
 
-class StatusDumper:
-    """Extracts shallow state snapshots from the UI and Backend Controller."""
-    def __init__(self, app: JarvisApp):
-        self.app = app
-
-    def get_ui_text(self, target_path: str) -> str:
-        """Extracts text from a specific widget path."""
-        start_t = time.perf_counter()
-        widget = self._resolve_widget(target_path)
-        if not widget: return "WIDGET_NOT_FOUND"
-        
-        text = ""
-        try:
-            if hasattr(widget, "get") and hasattr(widget, "index"): # Textbox
-                text = widget.get("1.0", "end-1c").strip()
-            elif hasattr(widget, "cget"): # Label / Button / Frame
-                text = str(widget.cget("text"))
-            
-            # Expanded fallback for CustomTkinter widgets with variables
-            if not text:
-                for var_attr in ["_variable", "variable", "_var"]:
-                    if hasattr(widget, var_attr):
-                        var = getattr(widget, var_attr)
-                        if hasattr(var, "get"):
-                            text = str(var.get())
-                            break
-        except: pass
-        
-        latency = (time.perf_counter() - start_t) * 1000
-        if latency > 5.0:
-            logger.bind(domain="ORCHESTRATOR").warning(f"⚠️ Slow UI Dump: {latency:.2f}ms for '{target_path}'")
-        return text
-
-    def get_system_snapshot(self) -> Dict[str, Any]:
-        """Captures the controller's internal health and runnability state."""
-        ctrl = self.app.controller
-        self.app.update_idletasks()
-        self.app.update()
-        return {
-            "loadout": ctrl.current_loadout,
-            "pipeline": ctrl.current_pipeline,
-            "runnable": ctrl.runnability.get("runnable", False),
-            "health_summary": {p: s['status'] for p, s in ctrl.health_state.items()},
-            "is_maximized": self.app.state() == "zoomed",
-            "spinner_active": self.app.loading_spinner.is_running,
-            "geometry": self.app.geometry(),
-            "state": self.app.state(),
-            "x": self.app.winfo_x(),
-            "y": self.app.winfo_y(),
-            "vram_breakdown_visible": self.app.vram_monitor.v_lbl_ext_part.winfo_viewable()
-        }
-
-    def _resolve_widget(self, path: str) -> Optional[Any]:
-        """Maps a string path like 'loadout_opt' to an actual object."""
-        mapping = {
-            "loadout_opt": self.app.loadout_opt,
-            "pipe_opt": self.app.pipe_opt,
-            "record_btn": self.app.record_btn,
-            "terminal": self.app.terminal,
-            "mode_label": self.app.mode_label
-        }
-        return mapping.get(path)
-
-class VisualVerifier:
-    """Handles window-specific screenshot captures within scenario folders."""
-    def __init__(self, app: JarvisApp, scenario_dir: str):
-        self.app = app
-        self.scenario_dir = scenario_dir
-
-    def capture_window(self, filename: str):
-        """Captures the exact bounding box of the app window."""
-        if not mss or not PIL: return
-
-        self.app.update_idletasks()
-        self.app.update()
-
-        x, y = self.app.winfo_rootx(), self.app.winfo_rooty()
-        w, h = self.app.winfo_width(), self.app.winfo_height()
-
-        with mss.mss() as sct:
-            monitor = {"top": y, "left": x, "width": w, "height": h}
-            sct_img = sct.grab(monitor)
-            img = PIL.Image.frombytes("RGB", sct_img.size, sct_img.bgra, "raw", "BGRX")
-            
-            os.makedirs(self.scenario_dir, exist_ok=True)
-            out_path = os.path.join(self.scenario_dir, filename)
-            img.save(out_path, quality=85)
-            logger.bind(domain="ORCHESTRATOR").info(f"📸 Screenshot saved: {out_path}")
-
-    def capture_desktop(self, filename: str):
-        """Captures the entire primary monitor."""
-        if not mss or not PIL: return
-
-        with mss.mss() as sct:
-            monitor = sct.monitors[1]
-            sct_img = sct.grab(monitor)
-            img = PIL.Image.frombytes("RGB", sct_img.size, sct_img.bgra, "raw", "BGRX")
-            
-            os.makedirs(self.scenario_dir, exist_ok=True)
-            out_path = os.path.join(self.scenario_dir, f"desktop_{filename}")
-            img.save(out_path, quality=85)
-            logger.bind(domain="ORCHESTRATOR").info(f"🖥️ Desktop Screenshot saved: {out_path}")
-
-class AutomationController:
-    """Simulates deterministic human actions against UI widgets."""
-    def __init__(self, app: JarvisApp):
-        self.app = app
-
-    def click(self, target_path: str):
-        widget = self._resolve_widget(target_path)
-        if hasattr(widget, "invoke"):
-            logger.bind(domain="ORCHESTRATOR").info(f"🖱️ Invoking click on '{target_path}'")
-            widget.invoke()
-        else:
-            logger.bind(domain="ORCHESTRATOR").error(f"❌ Cannot click non-invocable widget '{target_path}'")
-
-    def maximize(self):
-        logger.bind(domain="ORCHESTRATOR").info("🔲 Maximizing window")
-        self.app.state("zoomed")
-        self.app.update_idletasks()
-        self.app.update()
-
-    def select_dropdown(self, target_path: str, value: str):
-        if target_path == "loadout_opt":
-            logger.bind(domain="ORCHESTRATOR").info(f"🔽 Selecting Loadout: '{value}'")
-            self.app.loadout_var.set(value)
-            self.app.on_loadout_change(value)
-        elif target_path == "pipe_opt":
-            logger.bind(domain="ORCHESTRATOR").info(f"🔽 Selecting Pipeline: '{value}'")
-            self.app.pipe_var.set(value)
-            self.app.on_config_change(value)
-
-    def _resolve_widget(self, path: str) -> Optional[Any]:
-        return StatusDumper(self.app)._resolve_widget(path)
-
 class ClientTestRunner:
     def __init__(self, args, session_dir: str, dashboard: Optional[RichDashboard] = None, worker_pool: Optional[UIWorkerPool] = None):
         self.args = args
         self.session_dir = session_dir
-        self.app = None
         self.worker_pool = worker_pool
         self.dashboard = dashboard
-        self.automation = None
-        self.dumper = None
-        self.visual = None
         self.is_running = True
         self.start_time = 0
         self.results: List[TestResult] = []
@@ -206,93 +54,47 @@ class ClientTestRunner:
             
         self.is_running = True
 
-        # Initialize Scenario Directory (Temporary name)
-        # Use sanitized ID for filesystem (replace / with --)
+        # Initialize Scenario Directory
         safe_sid = sid.replace("/", "--")
         temp_scenario_dir = os.path.join(self.session_dir, f"{domain_id}__{safe_sid}")
         os.makedirs(temp_scenario_dir, exist_ok=True)
 
         self.start_time = time.perf_counter()
-        if self.worker_pool and not self.args.no_prewarm:
-            # FAST PATH: Use pre-warmed process and trigger internal runner
-            worker = self.worker_pool.get_worker()
+        
+        # ALL tests now go through the Worker Pool
+        if not self.worker_pool:
+            raise RuntimeError("Worker pool is required for execution.")
             
-            # Create a temporary scenario YAML for the internal runner
-            scenario_yaml = os.path.join(temp_scenario_dir, "scenario.yaml")
-            with open(scenario_yaml, "w") as f:
-                yaml.dump(scenario_data, f)
-            
-            command = {
-                "scenario": scenario_yaml,
-                "report_dir": temp_scenario_dir
-            }
-            worker.trigger_go(json.dumps(command))
-            
-            # Wait for the process to finish with timeout
-            wait_start = time.time()
-            while worker.proc.poll() is None:
-                if time.time() - wait_start > 60:
-                    worker.terminate()
-                    scenario_success = False
-                    error_msg = "Scenario timed out (60s)"
-                    break
-                await asyncio.sleep(0.5)
-            else:
-                # Collect results
-                scenario_success = worker.proc.returncode == 0
-                error_msg = None if scenario_success else "Internal runner failed"
-            
-            duration = time.perf_counter() - self.start_time
+        worker = self.worker_pool.get_worker()
+        
+        # Create a temporary scenario YAML for the internal runner
+        scenario_yaml = os.path.join(temp_scenario_dir, "scenario.yaml")
+        with open(scenario_yaml, "w") as f:
+            yaml.dump(scenario_data, f)
+        
+        command = {
+            "scenario": scenario_yaml,
+            "report_dir": temp_scenario_dir
+        }
+        worker.trigger_go(json.dumps(command))
+        
+        # Wait for the process to finish with timeout
+        wait_start = time.time()
+        scenario_success = False
+        error_msg = None
+        
+        while worker.proc.poll() is None:
+            if time.time() - wait_start > 90: # Increased timeout for safety
+                worker.terminate()
+                error_msg = "Scenario timed out (90s)"
+                break
+            await asyncio.sleep(0.5)
         else:
-            # ORIGINAL PATH: Local execution (Synchronous Tkinter)
-            self.app = JarvisApp()
-            self.automation = AutomationController(self.app)
-            self.dumper = StatusDumper(self.app)
-            self.visual = VisualVerifier(self.app, temp_scenario_dir)
-            
-            # Ensure Daemon is ready before starting the timeline
-            await wait_for_daemon_ready_async()
-
-            self.start_time = time.perf_counter()
-            self.orch_log = self.orch_log.bind(relative_start=self.start_time)
-            
-            timeline = scenario_data.get('timeline', [])
-            # Normalize timestamps
-            for step in timeline:
-                if isinstance(step['t'], str): step['t'] = float(step['t'].replace('s', ''))
-                
-            step_idx = 0
-            scenario_success = True
-            error_msg = None
-            
-            try:
-                while self.is_running:
-                    try:
-                        self.app.update_idletasks()
-                        self.app.update()
-                    except:
-                        break
-                    
-                    elapsed = time.perf_counter() - self.start_time
-                    if step_idx < len(timeline):
-                        step = timeline[step_idx]
-                        if elapsed >= step['t']:
-                            step_success, step_error = await self.execute_action(step)
-                            if not step_success:
-                                scenario_success = False
-                                error_msg = step_error
-                                if self.args.fail_fast:
-                                    self.is_running = False
-                                    break
-                            step_idx += 1
-                    elif elapsed > (timeline[-1]['t'] if timeline else 0) + 1.0:
-                        self.is_running = False
-                    await asyncio.sleep(0.01)
-            except Exception as e:
-                scenario_success = False
-                error_msg = str(e)
-            finally:
-                duration = time.perf_counter() - self.start_time
+            # Collect results
+            scenario_success = worker.proc.returncode == 0
+            error_msg = None if scenario_success else "Internal runner failed"
+        
+        duration = time.perf_counter() - self.start_time
 
         status = "PASSED" if scenario_success else "FAILED"
         self.results.append(TestResult(
@@ -323,99 +125,6 @@ class ClientTestRunner:
             )
             
         return scenario_success
-
-    async def execute_action(self, step: Dict[str, Any]) -> tuple[bool, Optional[str]]:
-        action = step.get('action')
-        target = step.get('target')
-        value = step.get('value')
-        
-        try:
-            if action == "select_dropdown":
-                self.automation.select_dropdown(target, value)
-            elif action == "click_element":
-                self.automation.click(target)
-            elif action == "maximize_window":
-                self.automation.maximize()
-            elif action == "take_screenshot":
-                self.visual.capture_window(step.get('file', 'test_snap.jpg'))
-            elif action == "take_desktop_screenshot":
-                self.visual.capture_desktop(step.get('file', 'desktop_snap.jpg'))
-            elif action == "assert_ui_text":
-                actual = self.dumper.get_ui_text(target)
-                contains = step.get('contains', '')
-                if contains in actual:
-                    self.orch_log.info(f"✅ Assertion Passed: '{target}' contains '{contains}'")
-                else:
-                    # Truncate very long text for cleaner error messages
-                    display_actual = actual
-                    if len(display_actual) > 500:
-                        display_actual = "..." + display_actual[-500:]
-                    err = f"Assertion Failed: '{target}' (Actual: {display_actual or 'EMPTY'}) does not contain '{contains}'"
-                    self.orch_log.error(f"❌ {err}")
-                    return False, err
-            elif action == "assert_system_state":
-                snap = self.dumper.get_system_snapshot()
-                cond = step.get('condition')
-                h = snap['health_summary']
-                
-                success = False
-                if cond == "all_models_active":
-                    # Acceptance criteria: Models are either fully ON or in the process of STARTING/BUSY
-                    # This prevents failure if mock models take slightly longer than the assertion window.
-                    success = all(s in ["ON", "BUSY", "STARTING", "STARTUP"] for s in h.values()) and len(h) > 0
-                elif cond == "no_models_active":
-                    success = len(h) == 0 or all(s == "OFF" for s in h.values())
-                elif cond == "models_loading":
-                    success = any(s in ["STARTUP", "STARTING"] for s in h.values())
-                elif cond == "any_models_active":
-                    success = len(h) > 0
-
-                if success: 
-                    self.orch_log.info(f"✅ System State: {cond}")
-                else:
-                    err = f"System State Condition '{cond}' failed. Health: {h}"
-                    self.orch_log.error(f"❌ {err}")
-                    return False, err
-            elif action == "assert_ux_state":
-                snap = self.dumper.get_system_snapshot()
-                cond = step.get('condition')
-                
-                success = False
-                if cond == "spinner_active":
-                    success = snap['spinner_active']
-                elif cond == "spinner_inactive":
-                    success = not snap['spinner_active']
-                elif cond == "maximized":
-                    success = snap['is_maximized']
-                elif cond == "stable_maximized":
-                    success = snap['is_maximized'] and snap['x'] <= 0 and snap['y'] <= 0
-                elif cond == "not_maximized":
-                    success = not snap['is_maximized']
-                elif cond == "vram_breakdown_visible":
-                    success = snap['vram_breakdown_visible']
-                elif cond == "vram_breakdown_hidden":
-                    success = not snap['vram_breakdown_visible']
-
-                if success: 
-                    self.orch_log.info(f"✅ UX State: {cond}")
-                else:
-                    err = f"UX State Condition '{cond}' failed. Snapshot: {snap}"
-                    self.orch_log.error(f"❌ {err}")
-                    return False, err
-            return True, None
-        except Exception as e:
-            return False, str(e)
-
-    def cleanup(self):
-        if self.app:
-            try:
-                for call in self.app.tk.call('after', 'info'):
-                    self.app.after_cancel(call)
-                if hasattr(self.app, "on_closing"):
-                    self.app.on_closing()
-                else:
-                    self.app.destroy()
-            except: pass
 
     def print_summary(self):
         if not self.dashboard:
@@ -449,7 +158,6 @@ async def main():
         parser.add_argument("--fail-fast", action="store_true", help="Stop execution on first failure.")
         parser.add_argument("--keep-alive", action="store_true", help="Skip initial backend cleanup.")
         parser.add_argument("--no-persistence", action="store_true", help="Disable plan-level daemon persistence.")
-        parser.add_argument("--no-prewarm", action="store_true", help="Disable UI process pre-warming.")
         args = parser.parse_args()
 
         plan_path = utils.resolve_path(args.plan)
@@ -463,6 +171,9 @@ async def main():
         
         from test_utils.scenarios import resolve_plan_scenarios
         resolved_scenarios = resolve_plan_scenarios(project_root, "client", all_patterns)
+
+        from tests.test_utils.session import gather_system_info
+        system_info = gather_system_info(plan_path)
 
         # Wrap in mock_context for session init and env management
         with mock_context(mock_all=args.mock_all, session_type="test_ui", service_name="Runner") as session_dir:
@@ -507,10 +218,6 @@ async def main():
                 block['resolved_ids'] = block_scen_ids
 
             dashboard.init_plan_structure(structure)
-            
-            # Load system info for dashboard
-            with open(os.path.join(session_dir, "system_info.yaml"), "r") as f: system_info = yaml.safe_load(f)
-            dashboard.finalize_boot(session_id, system_info, session_dir=session_dir)
             dashboard.start()
 
             # Pre-boot preparation
@@ -526,14 +233,19 @@ async def main():
                 try:
                     import psutil
                     daemon_port = cfg.get('ports', {}).get('daemon', 5555)
-                    for conn in psutil.net_connections(kind='inet'):
-                        if conn.laddr.port == daemon_port:
-                            try:
-                                psutil.Process(conn.pid).kill()
-                                logger.info(f"Surgically killed existing Daemon on port {daemon_port}")
-                            except: pass
+                    # Faster way to find processes by port: check all processes
+                    for proc in psutil.process_iter(['pid', 'name']):
+                        try:
+                            # Use net_connections() instead of connections() to avoid deprecation warning
+                            for conn in proc.net_connections(kind='inet'):
+                                if conn.laddr.port == daemon_port:
+                                    proc.kill()
+                                    logger.info(f"Surgically killed existing process on port {daemon_port} (PID {proc.pid})")
+                        except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+                            pass
                 except Exception as e:
                     logger.warning(f"Surgical daemon cleanup failed: {e}")
+                logger.info("🧹 Pre-test cleanup finished.")
 
             # Start Persistent Daemon
             daemon_proc = None
@@ -549,25 +261,34 @@ async def main():
                 )
                 # Wait for daemon
                 import requests
-                for _ in range(30):
+                logger.info(f"⏳ Waiting for Daemon on port {daemon_port}...")
+                for i in range(30):
+                    if daemon_proc.poll() is not None:
+                        logger.error(f"❌ Daemon process died prematurely (Exit code: {daemon_proc.returncode}). Stop waiting.")
+                        break
                     try:
-                        if requests.get(f"http://127.0.0.1:{daemon_port}/status", timeout=1.0).status_code == 200: break
+                        if requests.get(f"http://127.0.0.1:{daemon_port}/status", timeout=0.5).status_code == 200: 
+                            logger.info(f"✅ Daemon ready after {i*0.5:.1f}s")
+                            break
                     except: pass
                     time.sleep(0.5)
+                else:
+                    logger.warning("🕒 Daemon wait timed out (15s). Proceeding anyway...")
 
             # Initialize Worker Pool
-            worker_pool = None
-            if not args.no_prewarm:
-                # Create an initial state file for workers to fast-boot
-                init_state_file = os.path.join(session_dir, "initial_state.json")
-                try:
-                    r = requests.get(f"http://127.0.0.1:{daemon_port}/status", timeout=1.0)
-                    with open(init_state_file, "w") as f:
-                        json.dump({"health": {}, "models": [], "loadout": "NONE", "vram": r.json().get('vram', {})}, f)
-                except: pass
-                
-                logger.info("🏭 Initializing UI Worker Pool...")
-                worker_pool = UIWorkerPool(session_dir, initial_state_file=init_state_file, project_root=project_root)
+            # Create an initial state file for workers to fast-boot
+            init_state_file = os.path.join(session_dir, "initial_state.json")
+            try:
+                r = requests.get(f"http://127.0.0.1:{daemon_port}/status", timeout=1.0)
+                with open(init_state_file, "w") as f:
+                    json.dump({"health": {}, "models": [], "loadout": "NONE", "vram": r.json().get('vram', {})}, f)
+            except: pass
+            
+            # FINALIZE BOOT HERE - To capture all the pre-flight time
+            dashboard.finalize_boot(session_id, system_info, session_dir=session_dir)
+
+            logger.info("🏭 Initializing UI Worker Pool...")
+            worker_pool = UIWorkerPool(session_dir, initial_state_file=init_state_file, project_root=project_root)
 
             runner = ClientTestRunner(args, session_dir, dashboard=dashboard, worker_pool=worker_pool)
 
@@ -599,7 +320,6 @@ async def main():
         import traceback
         err_details = traceback.format_exc()
         logger.critical(f"💥 UNCAUGHT EXCEPTION - CRASHING\n{err_details}")
-        # Ensure it's printed to console even if logger is intercepted
         print(f"\n{RED}CRITICAL ERROR: {e}{RESET}")
         print(err_details)
         sys.exit(1)
@@ -609,13 +329,11 @@ async def main():
         if 'daemon_proc' in locals() and daemon_proc: 
             try: daemon_proc.terminate()
             except: pass
-        # Check if worker_pool exists in local scope
         wp = locals().get('worker_pool')
         if wp:
-            # Kill all workers
-            while not wp.pool.empty():
-                try: wp.get_worker().terminate()
-                except: pass
+            # Shutdown pool cleanly
+            try: wp.shutdown()
+            except: pass
         if 'session_dir' in locals() and session_dir:
             print(f"\n✅ UI Test Session Complete\n📂 Session: {session_dir}")
 

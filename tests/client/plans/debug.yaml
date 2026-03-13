@@ -2,8 +2,8 @@ name: "Client UI Automation Debug"
 description: "Isolating the idempotency test."
 
 execution:
-  - domain: DEBUG
+
+  - domain: "LOADOUT_MGMT"
     scenarios:
-      - client_ui/ui_loadout_idempotency
-      # - client_ui/ui_loadout_idempotency15
-      # - client_ui/ui_loadout_idempotency25
+      - "client_ui/ui_loadout*"
+
