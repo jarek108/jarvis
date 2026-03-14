@@ -1,9 +1,0 @@
-[
-  {
-    "id": "client_ui/ui_loadout_idempotency",
-    "name": "Verify that selecting loadout is reasonably responsive.",
-    "status": "PASSED",
-    "duration": 3.0382278000033693,
-    "error": null
-  }
-]
