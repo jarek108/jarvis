@@ -76,3 +76,7 @@ tests/logs/
 tests/artifacts/*.xlsx
 checkpoint-jarvis.json
 results/
+
+# Logs and Runtime State
+logs/
+system_config/model_calibrations/runtime_registry.json
